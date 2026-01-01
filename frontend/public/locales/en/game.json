@@ -1,0 +1,105 @@
+{
+  "phase": {
+    "night_start": "Night Falls",
+    "night_werewolf_chat": "Werewolf Team Discussion",
+    "night_werewolf": "Werewolf Phase",
+    "night_seer": "Seer Phase",
+    "night_witch": "Witch Phase",
+    "day_announcement": "Dawn Breaks",
+    "day_last_words": "Last Words",
+    "day_speech": "Discussion Phase",
+    "day_vote": "Voting Phase",
+    "day_vote_result": "Vote Results",
+    "hunter_shoot": "Hunter's Shot",
+    "game_over": "Game Over"
+  },
+  "action": {
+    "speak": "Speak",
+    "vote": "Vote",
+    "kill": "Kill",
+    "verify": "Inspect",
+    "save": "Heal",
+    "poison": "Poison",
+    "skill": "Skill",
+    "shoot": "Shoot",
+    "skip": "Skip",
+    "confirm": "Confirm",
+    "send": "Send"
+  },
+  "status": {
+    "alive": "Alive",
+    "dead": "Dead",
+    "players_alive": "Players Alive",
+    "night": "Night",
+    "day": "Day",
+    "day_count": "Day {{count}}",
+    "turn": "Turn"
+  },
+  "message": {
+    "your_turn": "Your turn",
+    "waiting": "Waiting for other players...",
+    "waiting_for_ai": "AI is thinking...",
+    "action_success": "Action successful",
+    "action_failed": "Action failed",
+    "select_player": "Select a player",
+    "select_target": "Select a target",
+    "enter_message": "Enter your message...",
+    "no_action": "No action required this round",
+    "input_label": "Enter your message"
+  },
+  "winner": {
+    "villager": "Village Wins",
+    "werewolf": "Werewolves Win",
+    "none": "Draw"
+  },
+  "game_over": {
+    "title": "Game Over",
+    "winner_announce": "{{winner}} Victory!",
+    "all_wolves_eliminated": "All werewolves have been eliminated",
+    "wolves_win": "Werewolves have achieved victory conditions"
+  },
+  "system_messages": {
+    "night_falls": "Night {{day}} falls. Please close your eyes.",
+    "werewolf_discussion_start": "Werewolf team discussion begins.",
+    "werewolf_select_target": "Werewolf discussion ended. Please select a kill target.",
+    "seer_select_target": "Seer, please select a target to inspect.",
+    "witch_action": "Witch, please choose your action.",
+    "day_peaceful": "Day breaks. It was a peaceful night.",
+    "day_death": "Day breaks. Player {{id}} died last night.",
+    "day_breaks": "Day breaks.",
+    "speech_start": "Please start speaking from Player {{id}}.",
+    "speak_turn": "Player {{id}}, it's your turn to speak.",
+    "your_turn": "It's your turn to speak",
+    "voting_start": "Voting phase begins.",
+    "vote_please": "Please cast your vote.",
+    "player_exiled": "Player {{id}} has been exiled.",
+    "vote_tie": "It's a tie vote. Nobody is exiled today.",
+    "hunter_shoot": "Player {{id}} is the Hunter. Please select a target to shoot.",
+    "hunter_select_target": "Hunter, please select a target to shoot.",
+    "hunter_shot": "Player {{hunterId}} (Hunter) shot Player {{targetId}}.",
+    "game_over_villager": "Game Over. Villagers Win!",
+    "game_over_werewolf": "Game Over. Werewolves Win!",
+    "game_over": "Game Over",
+    "last_words": "Player {{id}}, please leave your last words."
+  },
+  "action_messages": {
+    "werewolf_discuss": "Discuss with your wolf teammates about tonight's kill target (voting starts after speaking)",
+    "werewolf_select_kill": "Please select tonight's kill target",
+    "seer_select_verify": "Please select a player to inspect",
+    "witch_save_prompt": "Player {{id}} was killed tonight. Use antidote?",
+    "witch_no_target": "No one was killed tonight. Click skill button to skip antidote decision",
+    "witch_no_antidote": "You have no antidote. Click skill button to skip antidote decision",
+    "witch_used_antidote": "You already used antidote tonight. Cannot use poison. Click skill button to continue",
+    "witch_poison_prompt": "Use poison? Select target or skip",
+    "witch_no_poison": "You have no poison available. Click skill button to continue",
+    "your_turn_speak": "It's your turn to speak",
+    "vote_prompt": "Please vote to exile a player, or abstain",
+    "hunter_shoot_prompt": "You can shoot to take down a player"
+  },
+  "analysis": {
+    "fallback_mode": "AI Analysis Not Configured",
+    "fallback_hint": "Please configure .env file in project root to enable AI analysis. Recommended:",
+    "generating": "Generating AI analysis...",
+    "may_take_time": "This may take 10-30 seconds, please wait"
+  }
+}

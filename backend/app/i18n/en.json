@@ -1,0 +1,98 @@
+{
+  "roles": {
+    "werewolf": "Werewolf",
+    "villager": "Villager",
+    "seer": "Seer",
+    "witch": "Witch",
+    "hunter": "Hunter",
+    "descriptions": {
+      "werewolf": "Werewolf - You are part of the Werewolf faction. At night, you can coordinate with your wolf teammates to eliminate players. During the day, you must masquerade as a villager.",
+      "villager": "Villager - You are part of the Village faction. You have no special abilities, but you must use logic and deduction to identify the werewolves.",
+      "seer": "Seer - You are a Village role with divine powers. Each night, you can inspect one player to learn their true identity (Villager or Werewolf).",
+      "witch": "Witch - You are a Village role with two potions: a healing potion (to save) and a poison potion (to kill). Each can only be used once per game.",
+      "hunter": "Hunter - You are a Village role. When eliminated, you can shoot and eliminate another player (except when poisoned by the Witch)."
+    }
+  },
+  "personality": {
+    "traits": {
+      "激进": "You are aggressive, direct in speech, and proactive in attacking and questioning others.",
+      "保守": "You are conservative, cautious in speech, and tend to observe and follow the majority opinion.",
+      "逻辑流": "You excel at logical analysis, speak methodically, and prefer to persuade others through reasoning.",
+      "直觉流": "You trust your intuition, speak emotionally, and often make judgments based on first impressions.",
+      "随波逐流": "You dislike standing out and tend to follow the mainstream opinion."
+    },
+    "styles": {
+      "口语化": "Speak colloquially, using casual phrases and filler words.",
+      "严谨": "Speak rigorously and formally, with clear logic.",
+      "幽默": "Speak with humor, occasionally making jokes.",
+      "简短": "Speak concisely, avoiding unnecessary words and getting straight to the point."
+    }
+  },
+  "prompts": {
+    "game_intro": "You are participating in a 9-player Werewolf text-based game.",
+    "your_role": "Your role is: {role}",
+    "your_seat": "Your seat number is: {seat_id}",
+    "your_name": "Your name is: {name}",
+    "personality_trait": "Personality trait: {trait}",
+    "speaking_style": "Speaking style: {style}",
+    "wolf_teammates": "Your wolf teammates are: {teammates}",
+    "wolf_info_note": "**Important**: You have known each other's werewolf identities since the first night. You can discuss kill targets privately at night and must cover for each other during the day.",
+    "language_instruction": "You must respond in English. All your speech and thoughts should be in English.",
+    "seer_verified_header": "\nYour verification results: ",
+    "seer_result_wolf": "Werewolf",
+    "seer_result_villager": "Villager",
+    "witch_potions_header": "\nYour remaining potions: ",
+    "witch_antidote": "Antidote (can save)",
+    "witch_poison": "Poison (can kill)",
+    "witch_no_potions": "\nYou have no potions left",
+    "wolf_strategy_counter_claim": "\n**Counter-Claim Seer Strategy**:\n- Someone has claimed Seer, you may consider counter-claiming\n- Give fake kill result to a villager, or give safe result to a teammate\n- Or stay low profile to avoid exposure\n",
+    "wolf_strategy_first_claim": "\n**First Day Claim Strategy**:\n- There were deaths on first night and no Seer claim - real Seer may be dead\n- **Consider proactively claiming as solo Seer** to control the narrative\n- **Advanced tactics**:\n  * Give kill result to teammate (sacrifice for trust)\n  * Give safe result to villagers (build trust network)\n  * Leverage emotional/aggressive players as proxies to drive mislynches\n- **Risk assessment**: Ensure you can maintain logical consistency for the Seer identity\n",
+    "wolf_strategy_emotional": "\n**Leverage Emotional Players**:\n- Identify aggressive or emotional villagers in the game\n- Follow their anger/suspicion to push wrong votes\n- Maintain composure and evidence-based speech to avoid exposure\n"
+  },
+  "api_responses": {
+    "wolf_chat_sent": "Message sent",
+    "vote_recorded": "Vote recorded",
+    "seer_already_verified": "You already verified someone tonight",
+    "cannot_verify_self": "Cannot verify yourself",
+    "seer_result": "Player {target_id} is {result}",
+    "witch_save_decided": "You already decided on the antidote tonight",
+    "antidote_used": "Antidote used",
+    "cannot_use_antidote": "Cannot use antidote",
+    "decide_save_first": "Please decide on antidote first",
+    "witch_poison_decided": "You already decided on poison tonight",
+    "save_used_cannot_poison": "You used antidote tonight, cannot use poison",
+    "poison_used": "Poison used",
+    "cannot_use_poison": "Cannot use poison",
+    "skip_antidote": "Skip antidote",
+    "skip_poison": "Skip poison",
+    "skip": "Skip",
+    "speech_recorded": "Speech recorded",
+    "vote_abstained": "Abstained from voting",
+    "not_your_turn": "Not your turn",
+    "cannot_shoot": "You cannot shoot anymore",
+    "hunter_shot_player": "Shot Player {target_id}",
+    "hunter_abstain_shoot": "Chose not to shoot",
+    "last_words_recorded": "Last words recorded",
+    "invalid_phase_action": "Cannot perform this action in current phase"
+  },
+  "system_messages": {
+    "night_falls": "Night falls on Day {day}. Please close your eyes.",
+    "werewolf_discussion_end": "Werewolf discussion ended. Please select a kill target.",
+    "day_breaks_deaths": "Day breaks. Last night {deaths} died.",
+    "day_breaks_peaceful": "Day breaks. It was a peaceful night.",
+    "speech_start": "Please start speaking from Player {seat_id}.",
+    "speech_end": "Discussion ended. Please vote.",
+    "vote_result": "Vote result: {summary}",
+    "vote_all_abstain": "All players abstained. No one was eliminated.",
+    "vote_tie": "Vote tied. No one was eliminated.",
+    "player_exiled": "Player {seat_id} was exiled by vote.",
+    "hunter_shot": "Hunter {hunter_id} shot Player {target_id}.",
+    "hunter_abstain": "Hunter {seat_id} chose not to shoot.",
+    "hunter_poisoned": "Hunter {seat_id} was poisoned and cannot shoot.",
+    "game_over": "Game over! {winner} wins!"
+  },
+  "winners": {
+    "villagers": "Village Team",
+    "werewolves": "Werewolf Team"
+  }
+}

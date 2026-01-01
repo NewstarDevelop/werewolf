@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tools
+.claude/
+.spec-workflow/
+.playwright-mcp/
+
+# Environment
+.env
+.env.*
+*.env
+.env.local
+.env.*.local
+*.backup
+*.bak
+*_backup
+*.patch
+temp_*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (runtime generated)
+backend/data/
+*.db
+
+# WL-015 Fix: Windows reserved device names
+# Prevent creation of files with Windows reserved names
+CON
+PRN
+AUX
+NUL
+COM[1-9]
+LPT[1-9]
+con
+prn
+aux
+nul
+com[1-9]
+lpt[1-9]

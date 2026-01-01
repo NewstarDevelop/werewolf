@@ -1,0 +1,19 @@
+{
+  "werewolf": "Werewolf",
+  "villager": "Villager",
+  "seer": "Seer",
+  "witch": "Witch",
+  "hunter": "Hunter",
+  "description": {
+    "werewolf": "Werewolf faction, can eliminate players at night",
+    "villager": "Village faction, no special abilities",
+    "seer": "Village role with divine powers, can inspect identities",
+    "witch": "Village role with potions, has healing and poison abilities",
+    "hunter": "Village role, can shoot when eliminated"
+  },
+  "your_role": "Your Role: {{role}}",
+  "faction": {
+    "werewolf": "Werewolf Faction",
+    "villager": "Village Faction"
+  }
+}

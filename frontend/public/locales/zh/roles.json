@@ -1,0 +1,19 @@
+{
+  "werewolf": "狼人",
+  "villager": "村民",
+  "seer": "预言家",
+  "witch": "女巫",
+  "hunter": "猎人",
+  "description": {
+    "werewolf": "狼人阵营，夜晚可以击杀玩家",
+    "villager": "好人阵营，无特殊技能",
+    "seer": "好人阵营的神职，可以查验身份",
+    "witch": "好人阵营的神职，拥有解药和毒药",
+    "hunter": "好人阵营的神职，死亡时可以开枪"
+  },
+  "your_role": "你的身份：{{role}}",
+  "faction": {
+    "werewolf": "狼人阵营",
+    "villager": "好人阵营"
+  }
+}

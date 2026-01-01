@@ -1,0 +1,77 @@
+services:
+  # Backend API Service
+  # T-STAB-006: IMPORTANT - Single instance only!
+  # Game state is stored in-memory. Do NOT scale replicas or use multiple workers.
+  # For HA/scalability, game state must be externalized to Redis/DB first.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: werewolf-backend
+    restart: unless-stopped
+    deploy:
+      # T-STAB-006: Enforce single replica - game state is in-memory
+      replicas: 1
+    ports:
+      - "8082:8000"
+    env_file:
+      # 自动加载项目根目录的 .env 文件
+      # 包含所有环境变量：AI分析配置、多Provider配置、座位映射等
+      # 配置模板参考：.env.example
+      - .env
+    environment:
+      # ============================================================
+      # 核心配置（显式声明，便于快速了解项目依赖）
+      #
+      # 以下配置由 env_file 自动加载（无需在此重复声明）：
+      # - 第2层：AI对局分析配置（ANALYSIS_PROVIDER, ANALYSIS_MODEL, etc.）
+      # - 第3层：游戏AI个性配置（PLAYER_N_PROVIDER）
+      # - 第4层：多Provider池配置（DEEPSEEK_*, GEMINI_*, ANTHROPIC_*, etc.）
+      # - 第5层：座位映射配置（AI_PLAYER_MAPPING, AI_PLAYER_N_*）
+      # ============================================================
+
+      # Default LLM Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
+      - LLM_USE_MOCK=${LLM_USE_MOCK:-false}
+
+      # Application Settings
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - werewolf-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend Web Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: werewolf-frontend
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - werewolf-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  werewolf-network:
+    driver: bridge

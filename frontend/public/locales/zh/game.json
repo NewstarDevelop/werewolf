@@ -1,0 +1,105 @@
+{
+  "phase": {
+    "night_start": "夜幕降临",
+    "night_werewolf_chat": "狼人队内讨论",
+    "night_werewolf": "狼人行动",
+    "night_seer": "预言家查验",
+    "night_witch": "女巫行动",
+    "day_announcement": "天亮了",
+    "day_last_words": "遗言阶段",
+    "day_speech": "白天发言",
+    "day_vote": "投票环节",
+    "day_vote_result": "投票结果",
+    "hunter_shoot": "猎人开枪",
+    "game_over": "游戏结束"
+  },
+  "action": {
+    "speak": "发言",
+    "vote": "投票",
+    "kill": "击杀",
+    "verify": "查验",
+    "save": "救人",
+    "poison": "毒杀",
+    "skill": "技能",
+    "shoot": "开枪",
+    "skip": "跳过",
+    "confirm": "确认",
+    "send": "发送"
+  },
+  "status": {
+    "alive": "存活",
+    "dead": "死亡",
+    "players_alive": "存活玩家",
+    "night": "夜晚",
+    "day": "白天",
+    "day_count": "第 {{count}} 天",
+    "turn": "回合"
+  },
+  "message": {
+    "your_turn": "轮到你了",
+    "waiting": "等待其他玩家...",
+    "waiting_for_ai": "AI正在思考...",
+    "action_success": "操作成功",
+    "action_failed": "操作失败",
+    "select_player": "请选择玩家",
+    "select_target": "请选择目标",
+    "enter_message": "输入发言内容...",
+    "no_action": "本轮无需操作",
+    "input_label": "输入发言内容"
+  },
+  "winner": {
+    "villager": "好人胜利",
+    "werewolf": "狼人胜利",
+    "none": "平局"
+  },
+  "game_over": {
+    "title": "游戏结束",
+    "winner_announce": "{{winner}}获胜！",
+    "all_wolves_eliminated": "所有狼人已被淘汰",
+    "wolves_win": "狼人数量达到胜利条件"
+  },
+  "system_messages": {
+    "night_falls": "第{{day}}天夜晚降临，请沉睡。",
+    "werewolf_discussion_start": "狼人队内讨论开始。",
+    "werewolf_select_target": "狼人讨论结束，请选择击杀目标。",
+    "seer_select_target": "预言家请选择查验目标。",
+    "witch_action": "女巫请选择行动。",
+    "day_peaceful": "天亮了，昨晚是平安夜。",
+    "day_death": "天亮了，昨晚{{id}}号玩家死了。",
+    "day_breaks": "天亮了。",
+    "speech_start": "请从{{id}}号开始发言。",
+    "speak_turn": "请{{id}}号发言。",
+    "your_turn": "轮到你发言了",
+    "voting_start": "投票环节开始。",
+    "vote_please": "请进行投票。",
+    "player_exiled": "{{id}}号被放逐了。",
+    "vote_tie": "今天是平票，没有人被放逐。",
+    "hunter_shoot": "{{id}}号是猎人，请选择开枪目标。",
+    "hunter_select_target": "猎人请选择开枪目标。",
+    "hunter_shot": "{{hunterId}}号猎人开枪带走{{targetId}}号。",
+    "game_over_villager": "游戏结束，好人胜利！",
+    "game_over_werewolf": "游戏结束，狼人胜利！",
+    "game_over": "游戏结束",
+    "last_words": "{{id}}号请留遗言。"
+  },
+  "action_messages": {
+    "werewolf_discuss": "与狼队友讨论今晚击杀目标（发言后自动进入投票）",
+    "werewolf_select_kill": "请选择今晚要击杀的目标",
+    "seer_select_verify": "请选择要查验的玩家",
+    "witch_save_prompt": "今晚{{id}}号被杀，是否使用解药？",
+    "witch_no_target": "今晚无人被杀，点击技能按钮跳过解药决策",
+    "witch_no_antidote": "你没有解药，点击技能按钮跳过解药决策",
+    "witch_used_antidote": "你今晚已使用解药，无法再使用毒药，点击技能按钮继续",
+    "witch_poison_prompt": "是否使用毒药？选择目标或跳过",
+    "witch_no_poison": "你没有可用的毒药，点击技能按钮继续",
+    "your_turn_speak": "轮到你发言了",
+    "vote_prompt": "请投票选择要放逐的玩家，或弃票",
+    "hunter_shoot_prompt": "你可以开枪带走一名玩家"
+  },
+  "analysis": {
+    "fallback_mode": "AI分析服务未配置",
+    "fallback_hint": "请在项目根目录配置 .env 文件以启用AI分析功能。推荐配置：",
+    "generating": "正在生成AI分析...",
+    "may_take_time": "这可能需要10-30秒，请耐心等待"
+  }
+}

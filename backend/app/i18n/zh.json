@@ -1,0 +1,98 @@
+{
+  "roles": {
+    "werewolf": "狼人",
+    "villager": "村民",
+    "seer": "预言家",
+    "witch": "女巫",
+    "hunter": "猎人",
+    "descriptions": {
+      "werewolf": "狼人 - 你是狼人阵营，夜晚可以和狼队友一起杀人，白天需要伪装成好人",
+      "villager": "村民 - 你是好人阵营，没有特殊技能，需要通过逻辑分析找出狼人",
+      "seer": "预言家 - 你是好人阵营的神职，每晚可以查验一名玩家的身份（好人/狼人）",
+      "witch": "女巫 - 你是好人阵营的神职，拥有一瓶解药（救人）和一瓶毒药（杀人），全场各只能用一次",
+      "hunter": "猎人 - 你是好人阵营的神职，死亡时可以开枪带走一名玩家（被毒死除外）"
+    }
+  },
+  "personality": {
+    "traits": {
+      "激进": "你性格激进，说话直接，喜欢主动发起攻击和质疑他人",
+      "保守": "你性格保守，说话谨慎，倾向于观察和跟随大多数人的意见",
+      "逻辑流": "你擅长逻辑分析，说话有条理，喜欢用推理来说服他人",
+      "直觉流": "你相信直觉，说话感性，经常根据第一印象做判断",
+      "随波逐流": "你不喜欢出头，倾向于跟随场上主流意见"
+    },
+    "styles": {
+      "口语化": "用口语化的方式说话，可以用一些语气词",
+      "严谨": "用严谨正式的方式说话，逻辑清晰",
+      "幽默": "说话带点幽默感，偶尔开玩笑",
+      "简短": "说话简洁，不废话，直奔主题"
+    }
+  },
+  "prompts": {
+    "game_intro": "你正在参与一场9人《狼人杀》文字游戏。",
+    "your_role": "你的身份是：{role}",
+    "your_seat": "你的座位号是：{seat_id}号",
+    "your_name": "你的名字是：{name}",
+    "personality_trait": "性格特征：{trait}",
+    "speaking_style": "说话风格：{style}",
+    "wolf_teammates": "你的狼队友是：{teammates}",
+    "wolf_info_note": "**重要**：你们从游戏开始第一晚就知道彼此的狼人身份，夜间可以私下讨论击杀目标，白天需要互相掩护、配合演戏。",
+    "language_instruction": "你必须用中文回应。你的发言和思考都应该用中文。",
+    "seer_verified_header": "\n你已查验的结果：",
+    "seer_result_wolf": "狼人",
+    "seer_result_villager": "好人",
+    "witch_potions_header": "\n你剩余的药水：",
+    "witch_antidote": "解药（可救人）",
+    "witch_poison": "毒药（可杀人）",
+    "witch_no_potions": "\n你的药水已用完",
+    "wolf_strategy_counter_claim": "\n**对跳预言家策略**：\n- 场上已有人跳预言家，你可以考虑悍跳对抗\n- 给某个好人发假查杀，或给队友发金水\n- 或者保持低调，避免暴露\n",
+    "wolf_strategy_first_claim": "\n**首日抢跳策略**：\n- 首夜有倒牌且无人跳预言家，真预言家可能已死\n- **可以考虑主动抢跳单边预言家**，抢占叙事高地\n- **高级战术选项**：\n  * 给队友发查杀（卖队友换取全场信任）\n  * 给好人发金水（建立信任网络）\n  * 利用场上情绪化/激进玩家作为带节奏的代理人\n- **风险评估**：确保后续能维持预言家身份的逻辑自洽\n",
+    "wolf_strategy_emotional": "\n**利用情绪化玩家**：\n- 识别场上发言激进、情绪化的好人\n- 顺着他们的愤怒/怀疑，推动错误归票\n- 自己保持克制与证据化表达，避免暴露\n"
+  },
+  "api_responses": {
+    "wolf_chat_sent": "消息已发送",
+    "vote_recorded": "投票已记录",
+    "seer_already_verified": "你今晚已经验过人了",
+    "cannot_verify_self": "不能验证自己",
+    "seer_result": "{target_id}号是{result}",
+    "witch_save_decided": "你今晚已经决策过解药了",
+    "antidote_used": "已使用解药",
+    "cannot_use_antidote": "无法使用解药",
+    "decide_save_first": "请先决策解药",
+    "witch_poison_decided": "你今晚已经决策过毒药了",
+    "save_used_cannot_poison": "你今晚已使用解药，无法再使用毒药",
+    "poison_used": "已使用毒药",
+    "cannot_use_poison": "无法使用毒药",
+    "skip_antidote": "跳过解药",
+    "skip_poison": "跳过毒药",
+    "skip": "跳过",
+    "speech_recorded": "发言已记录",
+    "vote_abstained": "已弃票",
+    "not_your_turn": "不是你的回合",
+    "cannot_shoot": "你已无法开枪",
+    "hunter_shot_player": "开枪击中{target_id}号",
+    "hunter_abstain_shoot": "放弃开枪",
+    "last_words_recorded": "遗言已记录",
+    "invalid_phase_action": "当前阶段无法执行该操作"
+  },
+  "system_messages": {
+    "night_falls": "第{day}天夜晚降临，请闭眼。",
+    "werewolf_discussion_end": "狼人讨论结束，请选择击杀目标。",
+    "day_breaks_deaths": "天亮了，昨晚{deaths}死亡。",
+    "day_breaks_peaceful": "天亮了，昨晚是平安夜。",
+    "speech_start": "请从{seat_id}开始发言。",
+    "speech_end": "发言结束，请投票。",
+    "vote_result": "投票结果：{summary}",
+    "vote_all_abstain": "全员弃票，无人出局。",
+    "vote_tie": "平票，无人出局。",
+    "player_exiled": "{seat_id}被投票出局。",
+    "hunter_shot": "{hunter_id}猎人开枪带走{target_id}。",
+    "hunter_abstain": "{seat_id}猎人放弃开枪。",
+    "hunter_poisoned": "{seat_id}猎人被毒死，无法开枪。",
+    "game_over": "游戏结束！{winner}获胜！"
+  },
+  "winners": {
+    "villagers": "好人阵营",
+    "werewolves": "狼人阵营"
+  }
+}
