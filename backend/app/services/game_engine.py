@@ -61,7 +61,8 @@ def validate_target(
         ActionType.POISON,
         ActionType.VOTE,
         ActionType.SHOOT,
-        ActionType.VERIFY
+        ActionType.VERIFY,
+        ActionType.PROTECT
     ]
 
     if action_type in no_self_target_actions and target_id == actor_seat:
@@ -70,7 +71,8 @@ def validate_target(
             ActionType.POISON: "毒",
             ActionType.VOTE: "投票给",
             ActionType.SHOOT: "射击",
-            ActionType.VERIFY: "验证"
+            ActionType.VERIFY: "验证",
+            ActionType.PROTECT: "守护"
         }
         action_name = action_names.get(action_type, "选择")
         raise ValueError(f"不能{action_name}自己")
@@ -111,6 +113,7 @@ class GameEngine:
             GamePhase.NIGHT_START: self._handle_night_start,
             GamePhase.NIGHT_WEREWOLF_CHAT: self._handle_night_werewolf_chat,
             GamePhase.NIGHT_WEREWOLF: self._handle_night_werewolf,
+            GamePhase.NIGHT_GUARD: self._handle_night_guard,
             GamePhase.NIGHT_SEER: self._handle_night_seer,
             GamePhase.NIGHT_WITCH: self._handle_night_witch,
             GamePhase.DAY_ANNOUNCEMENT: self._handle_day_announcement,
@@ -119,6 +122,7 @@ class GameEngine:
             GamePhase.DAY_VOTE: self._handle_day_vote,
             GamePhase.DAY_VOTE_RESULT: self._handle_day_vote_result,
             GamePhase.HUNTER_SHOOT: self._handle_hunter_shoot,
+            GamePhase.DEATH_SHOOT: self._handle_death_shoot,
             GamePhase.GAME_OVER: self._handle_game_over,
         }
 
@@ -227,6 +231,63 @@ class GameEngine:
                 game.add_action(player.seat_id, ActionType.KILL, target_id)
                 return {"success": True, "message": t("api_responses.vote_recorded", language=game.language)}
 
+        # Night werewolf phase - White wolf king can self-destruct
+        elif phase == GamePhase.NIGHT_WEREWOLF and player.role == Role.WHITE_WOLF_KING:
+            # White wolf king can either KILL (vote for normal wolf kill) or SELF_DESTRUCT
+            if action_type == ActionType.KILL and target_id:
+                # Normal wolf kill vote
+                try:
+                    validate_target(game, target_id, ActionType.KILL, player.seat_id)
+                except ValueError as e:
+                    return {"success": False, "message": str(e)}
+                game.wolf_votes[player.seat_id] = target_id
+                game.add_action(player.seat_id, ActionType.KILL, target_id)
+                return {"success": True, "message": t("api_responses.vote_recorded", language=game.language)}
+
+            elif action_type == ActionType.SELF_DESTRUCT and target_id:
+                # White wolf king self-destruct
+                if game.white_wolf_king_used_explode:
+                    return {"success": False, "message": "你已使用过自爆技能"}
+
+                # Validate target (cannot self-destruct self, that makes no sense)
+                if target_id == player.seat_id:
+                    return {"success": False, "message": "不能自爆自己"}
+
+                try:
+                    validate_target(game, target_id, ActionType.SELF_DESTRUCT, player.seat_id, allow_abstain=False)
+                except ValueError as e:
+                    return {"success": False, "message": str(e)}
+
+                # Record self-destruct
+                game.white_wolf_king_explode_target = target_id
+                game.white_wolf_king_used_explode = True
+                # White wolf king "votes" for self-destruct (to mark as voted)
+                game.wolf_votes[player.seat_id] = -1  # Special marker: -1 means self-destruct
+                game.add_action(player.seat_id, ActionType.SELF_DESTRUCT, target_id)
+                return {"success": True, "message": f"白狼王自爆，带走{target_id}号玩家！今晚无狼刀。"}
+
+        # Night guard phase
+        elif phase == GamePhase.NIGHT_GUARD and player.role == Role.GUARD:
+            if action_type == ActionType.PROTECT:
+                # Guard can skip by choosing target_id = 0
+                if target_id == 0:
+                    game.guard_target = None
+                    return {"success": True, "message": "已跳过守护"}
+
+                # Validate target
+                try:
+                    validate_target(game, target_id, ActionType.PROTECT, player.seat_id, allow_abstain=False)
+                except ValueError as e:
+                    return {"success": False, "message": str(e)}
+
+                # Check consecutive guard rule
+                if target_id == game.guard_last_target:
+                    return {"success": False, "message": "不能连续两夜守护同一人"}
+
+                game.guard_target = target_id
+                game.add_action(player.seat_id, ActionType.PROTECT, target_id)
+                return {"success": True, "message": f"已守护{target_id}号玩家"}
+
         # Night seer phase
         elif phase == GamePhase.NIGHT_SEER and player.role == Role.SEER:
             if action_type == ActionType.VERIFY and target_id:
@@ -240,7 +301,8 @@ class GameEngine:
 
                 target = game.get_player(target_id)
                 if target:
-                    is_wolf = target.role == Role.WEREWOLF
+                    from app.models.game import WOLF_ROLES
+                    is_wolf = target.role in WOLF_ROLES  # Includes wolf king and white wolf king
                     player.verified_players[target_id] = is_wolf
                     game.seer_verified_this_night = True  # Mark as verified
                     game.add_action(player.seat_id, ActionType.VERIFY, target_id)
@@ -347,7 +409,37 @@ class GameEngine:
                 game.add_action(player.seat_id, ActionType.VOTE, 0)
                 return {"success": True, "message": t("api_responses.vote_abstained", language=game.language)}
 
-        # Hunter shoot phase
+        # Death shoot phase (hunter or wolf king)
+        elif phase == GamePhase.DEATH_SHOOT:
+            if action_type == ActionType.SHOOT:
+                # Only hunter or wolf king can shoot in this phase
+                if player.role not in [Role.HUNTER, Role.WOLF_KING]:
+                    return {"success": False, "message": "只有猎人或狼王可以在此阶段开枪"}
+
+                # Skip shooting (target_id = 0)
+                if target_id == 0:
+                    seat_suffix = "号" if game.language == "zh" else ""
+                    shooter_name = "猎人" if player.role == Role.HUNTER else "狼王"
+                    abstain_message = f"{shooter_name}{player.seat_id}{seat_suffix}放弃开枪"
+                    game.add_message(0, abstain_message, MessageType.SYSTEM)
+                    return {"success": True, "message": "已放弃开枪"}
+
+                # Validate target
+                try:
+                    validate_target(game, target_id, ActionType.SHOOT, player.seat_id, allow_abstain=False)
+                except ValueError as e:
+                    return {"success": False, "message": str(e)}
+
+                # Execute shoot
+                seat_suffix = "号" if game.language == "zh" else ""
+                shooter_name = "猎人" if player.role == Role.HUNTER else "狼王"
+                shoot_message = f"{shooter_name}{player.seat_id}{seat_suffix}开枪带走了{target_id}{seat_suffix}"
+                game.add_message(0, shoot_message, MessageType.SYSTEM)
+                game.kill_player(target_id)
+                game.add_action(player.seat_id, ActionType.SHOOT, target_id)
+                return {"success": True, "message": f"已射击{target_id}号玩家"}
+
+        # Hunter shoot phase (legacy, backward compatibility)
         elif phase == GamePhase.HUNTER_SHOOT and player.role == Role.HUNTER:
             if game.current_actor_seat != player.seat_id:
                 return {"success": False, "message": t("api_responses.not_your_turn", language=game.language)}
@@ -389,6 +481,8 @@ class GameEngine:
         game.wolf_chat_completed = set()  # Reset wolf chat tracker
         game.wolf_votes = {}
         game.pending_deaths = []
+        game.pending_deaths_unblockable = []  # Reset unblockable deaths
+        game.white_wolf_king_explode_target = None  # Reset white wolf king explode target
         game.seer_verified_this_night = False  # Reset seer verification tracker
         game.witch_save_decided = False
         game.witch_poison_decided = False
@@ -443,15 +537,52 @@ class GameEngine:
                     game.wolf_votes[wolf.seat_id] = target
                     game.add_action(wolf.seat_id, ActionType.KILL, target)
 
-        # Determine kill target (majority or random from votes)
-        if game.wolf_votes:
-            vote_counts: dict[int, int] = {}
-            for target in game.wolf_votes.values():
-                vote_counts[target] = vote_counts.get(target, 0) + 1
-            max_votes = max(vote_counts.values())
-            top_targets = [t for t, v in vote_counts.items() if v == max_votes]
-            game.night_kill_target = random.choice(top_targets)
-            game.pending_deaths.append(game.night_kill_target)
+        # Check if white wolf king used self-destruct
+        if game.white_wolf_king_explode_target:
+            # White wolf king self-destruct replaces normal wolf kill
+            # Add explode target to unblockable deaths (cannot be saved by guard/witch)
+            game.pending_deaths_unblockable.append(game.white_wolf_king_explode_target)
+            # No night_kill_target (self-destruct replaces wolf kill)
+            game.night_kill_target = None
+        else:
+            # Determine kill target (majority or random from votes)
+            # Filter out white wolf king's special vote marker (-1)
+            valid_votes = {seat: target for seat, target in game.wolf_votes.items() if target > 0}
+            if valid_votes:
+                vote_counts: dict[int, int] = {}
+                for target in valid_votes.values():
+                    vote_counts[target] = vote_counts.get(target, 0) + 1
+                max_votes = max(vote_counts.values())
+                top_targets = [t for t, v in vote_counts.items() if v == max_votes]
+                game.night_kill_target = random.choice(top_targets)
+                game.pending_deaths.append(game.night_kill_target)
+
+        game.phase = GamePhase.NIGHT_GUARD if game.get_player_by_role(Role.GUARD) else GamePhase.NIGHT_SEER
+        return {"status": "updated", "new_phase": game.phase}
+
+    async def _handle_night_guard(self, game: Game) -> dict:
+        """Handle guard protection phase."""
+        guard = game.get_player_by_role(Role.GUARD)
+
+        if guard and guard.is_alive:
+            if guard.is_human:
+                # Human guard hasn't made decision yet
+                if game.guard_target is None:
+                    return {"status": "waiting_for_human", "phase": game.phase}
+            else:
+                # AI guard chooses protection target
+                protect_choices = [p.seat_id for p in game.get_alive_players()]
+                # Cannot guard same person consecutively
+                if game.guard_last_target and game.guard_last_target in protect_choices:
+                    protect_choices.remove(game.guard_last_target)
+
+                if protect_choices:
+                    # TODO: Implement AI guard decision via LLM
+                    # For now, random choice or skip
+                    target = random.choice(protect_choices + [0])  # 0 = skip
+                    game.guard_target = target if target != 0 else None
+                    if game.guard_target:
+                        game.add_action(guard.seat_id, ActionType.PROTECT, game.guard_target)
 
         game.phase = GamePhase.NIGHT_SEER
         return {"status": "updated", "new_phase": game.phase}
@@ -486,7 +617,8 @@ class GameEngine:
                     target = await self.llm.decide_verify_target(seer, game, targets)  # WL-010: await
                     target_player = game.get_player(target)
                     if target_player:
-                        is_wolf = target_player.role == Role.WEREWOLF
+                        from app.models.game import WOLF_ROLES
+                        is_wolf = target_player.role in WOLF_ROLES  # Includes wolf king and white wolf king
                         seer.verified_players[target] = is_wolf
                         game.add_action(seer.seat_id, ActionType.VERIFY, target)
 
@@ -554,7 +686,20 @@ class GameEngine:
                 game.witch_poison_decided = True
 
         # Process deaths
-        game.last_night_deaths = list(set(game.pending_deaths))
+        # Apply guard protection (blocks wolf kill only, not poison or white wolf king explode)
+        # Guard protection happens BEFORE calculating last_night_deaths
+        if game.guard_target and game.guard_target == game.night_kill_target:
+            if game.night_kill_target in game.pending_deaths:
+                game.pending_deaths.remove(game.night_kill_target)
+                # Optional: Add system message about successful protection (visible only in debug)
+
+        # Update guard's last target for next night's consecutive guard rule
+        game.guard_last_target = game.guard_target
+
+        # Calculate final deaths for this night
+        # Merge blockable deaths (pending_deaths) and unblockable deaths (pending_deaths_unblockable)
+        all_deaths = list(set(game.pending_deaths + game.pending_deaths_unblockable))
+        game.last_night_deaths = all_deaths
         for seat_id in game.last_night_deaths:
             # Check if poisoned (for hunter)
             was_poisoned = any(
@@ -712,12 +857,19 @@ class GameEngine:
                 game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM)
                 game.kill_player(eliminated)
 
-                # Check for hunter
+                # Check for hunter or wolf king death shoot
                 player = game.get_player(eliminated)
-                if player and player.role == Role.HUNTER and player.can_shoot:
-                    game.current_actor_seat = eliminated
-                    game.phase = GamePhase.HUNTER_SHOOT
-                    return {"status": "updated", "new_phase": game.phase}
+                if player:
+                    # Hunter can shoot if not poisoned
+                    if player.role == Role.HUNTER and player.can_shoot:
+                        game.current_actor_seat = eliminated
+                        game.phase = GamePhase.DEATH_SHOOT
+                        return {"status": "updated", "new_phase": game.phase}
+                    # Wolf king can shoot when voted out (only during day, not when poisoned)
+                    elif player.role == Role.WOLF_KING:
+                        game.current_actor_seat = eliminated
+                        game.phase = GamePhase.DEATH_SHOOT
+                        return {"status": "updated", "new_phase": game.phase}
 
         # Check win condition
         winner = game.check_winner()
@@ -730,6 +882,89 @@ class GameEngine:
         # Next night
         game.day += 1
         game.phase = GamePhase.NIGHT_START
+        return {"status": "updated", "new_phase": game.phase}
+
+    async def _handle_death_shoot(self, game: Game) -> dict:
+        """Handle death shoot phase (for hunter and wolf king)."""
+        shooter = game.get_player(game.current_actor_seat)
+        if not shooter:
+            return self._continue_after_death_shoot(game)
+
+        # Determine shooter type and eligibility
+        can_shoot = False
+        shooter_name = ""
+        if shooter.role == Role.HUNTER:
+            can_shoot = shooter.can_shoot  # Hunter can't shoot if poisoned
+            shooter_name = "猎人" if game.language == "zh" else "Hunter"
+        elif shooter.role == Role.WOLF_KING:
+            can_shoot = True  # Wolf king can always shoot when voted out
+            shooter_name = "狼王" if game.language == "zh" else "Wolf King"
+
+        if not can_shoot:
+            seat_suffix = "号" if game.language == "zh" else ""
+            if shooter.role == Role.HUNTER:
+                game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+            return self._continue_after_death_shoot(game)
+
+        if shooter.is_human:
+            return {"status": "waiting_for_human", "phase": game.phase}
+
+        # AI shooter decides
+        targets = [p.seat_id for p in game.get_alive_players()]
+        if targets:
+            target = await self.llm.decide_shoot_target(shooter, game, targets)
+            if target:
+                seat_suffix = "号" if game.language == "zh" else ""
+                shoot_message = f"{shooter_name}{shooter.seat_id}{seat_suffix}开枪带走了{target}{seat_suffix}"
+                game.add_message(0, shoot_message, MessageType.SYSTEM)
+                game.kill_player(target)
+                game.add_action(shooter.seat_id, ActionType.SHOOT, target)
+            else:
+                seat_suffix = "号" if game.language == "zh" else ""
+                abstain_message = f"{shooter_name}{shooter.seat_id}{seat_suffix}放弃开枪"
+                game.add_message(0, abstain_message, MessageType.SYSTEM)
+
+        return self._continue_after_death_shoot(game)
+
+    def _continue_after_death_shoot(self, game: Game) -> dict:
+        """Continue game flow after death shoot action."""
+        # Check win condition
+        winner = game.check_winner()
+        if winner:
+            game.winner = winner
+            game.status = GameStatus.FINISHED
+            game.phase = GamePhase.GAME_OVER
+            return {"status": "game_over", "winner": winner}
+
+        # Determine next phase based on when shooter died
+        if game.phase == GamePhase.DEATH_SHOOT:
+            if game.current_actor_seat is None:
+                logger.warning("DEATH_SHOOT phase but current_actor_seat is None, skipping to next phase")
+                game.day += 1
+                game.phase = GamePhase.NIGHT_START
+                return {"status": "updated", "new_phase": game.phase}
+
+            # Check if shooter died during night or day
+            died_at_night = game.current_actor_seat in game.last_night_deaths
+
+            if died_at_night:
+                # Died at night - continue to day speech phase
+                alive_seats = game.get_alive_seats()
+                if alive_seats:
+                    start_seat = random.choice(alive_seats)
+                    start_idx = alive_seats.index(start_seat)
+                    game.speech_order = alive_seats[start_idx:] + alive_seats[:start_idx]
+                    game.current_speech_index = 0
+                    game.current_actor_seat = game.speech_order[0]
+                    game.phase = GamePhase.DAY_SPEECH
+                    game._spoken_seats_this_round.clear()
+                    seat_suffix = "号" if game.language == "zh" else ""
+                    game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
+            else:
+                # Died during day vote - go to next night
+                game.day += 1
+                game.phase = GamePhase.NIGHT_START
+
         return {"status": "updated", "new_phase": game.phase}
 
     async def _handle_hunter_shoot(self, game: Game) -> dict:

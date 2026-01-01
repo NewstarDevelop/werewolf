@@ -76,7 +76,7 @@ async def verify_admin(
     # Method 1: Try JWT admin token first
     if authorization:
         try:
-            player = await get_current_player(authorization)
+            player = await get_current_player(authorization, user_access_token=None)
             if player.get("is_admin", False):
                 return player
         except HTTPException:

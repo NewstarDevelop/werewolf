@@ -24,6 +24,71 @@ AI_PERSONALITIES = [
 ]
 
 
+# Role alignment sets for win condition and game logic
+WOLF_ROLES = {Role.WEREWOLF, Role.WOLF_KING, Role.WHITE_WOLF_KING}
+VILLAGER_ROLES = {Role.VILLAGER}
+GOD_ROLES = {Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD}
+
+
+@dataclass
+class GameConfig:
+    """Game configuration for different game modes."""
+    player_count: int  # 9 or 12
+    roles: list[Role]
+    night_order: list[GamePhase]
+    wolf_king_variant: Optional[str] = None  # "wolf_king" or "white_wolf_king" (only for 12-player)
+
+
+# Classic 9-player configuration
+CLASSIC_9_CONFIG = GameConfig(
+    player_count=9,
+    roles=[
+        Role.WEREWOLF, Role.WEREWOLF, Role.WEREWOLF,
+        Role.VILLAGER, Role.VILLAGER, Role.VILLAGER,
+        Role.SEER, Role.WITCH, Role.HUNTER
+    ],
+    night_order=[
+        GamePhase.NIGHT_WEREWOLF_CHAT,
+        GamePhase.NIGHT_WEREWOLF,
+        GamePhase.NIGHT_SEER,
+        GamePhase.NIGHT_WITCH
+    ]
+)
+
+
+def get_classic_12_config(wolf_king_variant: str) -> GameConfig:
+    """Get classic 12-player configuration with specified wolf king variant.
+
+    Args:
+        wolf_king_variant: Either "wolf_king" or "white_wolf_king"
+
+    Returns:
+        GameConfig for 12-player mode
+    """
+    if wolf_king_variant not in ["wolf_king", "white_wolf_king"]:
+        raise ValueError(f"Invalid wolf_king_variant: {wolf_king_variant}")
+
+    wolf_king_role = Role.WOLF_KING if wolf_king_variant == "wolf_king" else Role.WHITE_WOLF_KING
+
+    return GameConfig(
+        player_count=12,
+        roles=[
+            Role.WEREWOLF, Role.WEREWOLF, Role.WEREWOLF,
+            wolf_king_role,
+            Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD,
+            Role.VILLAGER, Role.VILLAGER, Role.VILLAGER, Role.VILLAGER
+        ],
+        night_order=[
+            GamePhase.NIGHT_WEREWOLF_CHAT,
+            GamePhase.NIGHT_WEREWOLF,
+            GamePhase.NIGHT_GUARD,
+            GamePhase.NIGHT_SEER,
+            GamePhase.NIGHT_WITCH
+        ],
+        wolf_king_variant=wolf_king_variant
+    )
+
+
 @dataclass
 class Player:
     """Player model."""
@@ -93,6 +158,10 @@ class Game:
     night_kill_target: Optional[int] = None
     wolf_votes: dict[int, int] = field(default_factory=dict)  # wolf_seat -> target_seat
     wolf_chat_completed: set[int] = field(default_factory=set)  # Seats that completed wolf chat
+    guard_target: Optional[int] = None  # Guard's protection target this night
+    guard_last_target: Optional[int] = None  # Last night's protection target (for consecutive guard rule)
+    white_wolf_king_used_explode: bool = False  # Whether white wolf king has used self-destruct
+    white_wolf_king_explode_target: Optional[int] = None  # Target of white wolf king's self-destruct this night
     seer_verified_this_night: bool = False  # Track if seer verified this night
     witch_save_decided: bool = False  # Track if witch save decision made this night
     witch_poison_decided: bool = False  # Track if witch poison decision made this night
@@ -102,7 +171,8 @@ class Game:
     current_speech_index: int = 0
     _spoken_seats_this_round: set[int] = field(default_factory=set)  # P0 Fix: Track who spoke
     # Death tracking
-    pending_deaths: list[int] = field(default_factory=list)  # Seats to die
+    pending_deaths: list[int] = field(default_factory=list)  # Seats to die (can be blocked by guard/witch)
+    pending_deaths_unblockable: list[int] = field(default_factory=list)  # Deaths that cannot be blocked (white wolf king explode)
     last_night_deaths: list[int] = field(default_factory=list)
     # Message counter
     _message_counter: int = 0
@@ -121,11 +191,11 @@ class Game:
         return sorted([p.seat_id for p in self.get_alive_players()])
 
     def get_werewolves(self) -> list[Player]:
-        """Get all werewolf players."""
-        return [p for p in self.players.values() if p.role == Role.WEREWOLF]
+        """Get all werewolf players (includes wolf king and white wolf king)."""
+        return [p for p in self.players.values() if p.role in WOLF_ROLES]
 
     def get_alive_werewolves(self) -> list[Player]:
-        """Get alive werewolves."""
+        """Get alive werewolves (includes wolf king and white wolf king)."""
         return [p for p in self.get_werewolves() if p.is_alive]
 
     def get_player_by_role(self, role: Role) -> Optional[Player]:
@@ -186,33 +256,33 @@ class Game:
         """
         Check if game has a winner.
 
-        Standard werewolf game rules:
-        - Villagers win if: all werewolves are dead
+        Win conditions for 12-player mode:
+        - Villagers win if: all werewolves are dead (includes wolf king/white wolf king)
         - Werewolves win if:
-          1. alive_wolves >= alive_non_wolves (屠边)
+          1. alive_wolves >= alive_villagers (屠边，按村民数判断，不含神职)
           2. all villagers are dead (屠民)
           3. all gods are dead (屠神)
         """
         alive_players = self.get_alive_players()
-        alive_wolves = [p for p in alive_players if p.role == Role.WEREWOLF]
-        alive_non_wolves = [p for p in alive_players if p.role != Role.WEREWOLF]
+
+        # Count by alignment
+        alive_wolves = [p for p in alive_players if p.role in WOLF_ROLES]
+        alive_villagers = [p for p in alive_players if p.role in VILLAGER_ROLES]
+        alive_gods = [p for p in alive_players if p.role in GOD_ROLES]
 
         # Villagers win if all werewolves are dead
         if len(alive_wolves) == 0:
             return Winner.VILLAGER
 
-        # Werewolves win condition 1: 屠边 (wolves >= non-wolves)
-        if len(alive_wolves) >= len(alive_non_wolves):
+        # Werewolves win condition 1: 屠边 (wolves >= villagers, not counting gods)
+        if len(alive_wolves) >= len(alive_villagers):
             return Winner.WEREWOLF
 
         # Werewolves win condition 2: 屠民 (all villagers dead)
-        alive_villagers = [p for p in alive_players if p.role == Role.VILLAGER]
         if len(alive_villagers) == 0:
             return Winner.WEREWOLF
 
         # Werewolves win condition 3: 屠神 (all gods dead)
-        god_roles = [Role.SEER, Role.WITCH, Role.HUNTER]
-        alive_gods = [p for p in alive_players if p.role in god_roles]
         if len(alive_gods) == 0:
             return Winner.WEREWOLF
 
@@ -245,6 +315,22 @@ class Game:
         role = player.role
 
         # Hunter can shoot after being eliminated (by vote/kill)
+        # Wolf king can shoot when voted out during day
+        if phase == GamePhase.DEATH_SHOOT:
+            if self.current_actor_seat == player.seat_id:
+                # Hunter must be able to shoot (not poisoned)
+                if player.role == Role.HUNTER and not player.can_shoot:
+                    return None
+                # Wolf king can always shoot when in this phase
+                if player.role in [Role.HUNTER, Role.WOLF_KING]:
+                    alive_seats = self.get_alive_seats()
+                    return {
+                        "type": ActionType.SHOOT.value,
+                        "choices": alive_seats + [0],  # 0 = skip
+                        "message": "你可以开枪带走一名玩家"
+                    }
+
+        # Legacy hunter shoot phase (backward compatibility)
         if phase == GamePhase.HUNTER_SHOOT and role == Role.HUNTER:
             if self.current_actor_seat == player.seat_id and player.can_shoot:
                 alive_seats = self.get_alive_seats()
@@ -278,6 +364,40 @@ class Game:
                     "choices": kill_targets,
                     "message": "请选择今晚要击杀的目标"
                 }
+
+        # Night werewolf phase - White wolf king can choose to self-destruct
+        elif phase == GamePhase.NIGHT_WEREWOLF and role == Role.WHITE_WOLF_KING:
+            if player.seat_id not in self.wolf_votes:
+                # White wolf king can either vote for kill OR self-destruct
+                if not self.white_wolf_king_used_explode:
+                    kill_targets = [s for s in alive_seats if s != player.seat_id]
+                    return {
+                        "type": ActionType.KILL.value,  # Frontend will show both KILL and SELF_DESTRUCT options
+                        "choices": kill_targets,
+                        "message": "请投票击杀目标，或选择自爆（使用自爆动作）"
+                    }
+                else:
+                    # Already used self-destruct, can only vote for normal kill
+                    kill_targets = [s for s in alive_seats if s != player.seat_id]
+                    return {
+                        "type": ActionType.KILL.value,
+                        "choices": kill_targets,
+                        "message": "请选择今晚要击杀的目标"
+                    }
+
+        # Night guard phase
+        elif phase == GamePhase.NIGHT_GUARD and role == Role.GUARD:
+            # Guard can protect any alive player (including self)
+            # Filter out last night's target (cannot guard same person consecutively)
+            protect_choices = alive_seats.copy()
+            if self.guard_last_target and self.guard_last_target in protect_choices:
+                protect_choices.remove(self.guard_last_target)
+
+            return {
+                "type": ActionType.PROTECT.value,
+                "choices": protect_choices + [0],  # 0 = skip
+                "message": "请选择今晚要守护的玩家，或跳过"
+            }
 
         # Night seer phase
         elif phase == GamePhase.NIGHT_SEER and role == Role.SEER:
@@ -535,12 +655,24 @@ class GameStore:
         human_seat: Optional[int] = None,
         human_role: Optional[Role] = None,
         language: str = "zh",
-        game_id: Optional[str] = None
+        game_id: Optional[str] = None,
+        config: Optional[GameConfig] = None
     ) -> Game:
         """Create a new game with random role assignment.
 
         P0-PERF-001 Fix: Enforces capacity limits and cleans up old games.
+
+        Args:
+            human_seat: Seat ID for human player (1-based). If None, random.
+            human_role: Specific role for human player. If None, random.
+            language: Game language ("zh" or "en")
+            game_id: Custom game ID. If None, auto-generated.
+            config: Game configuration. If None, defaults to CLASSIC_9_CONFIG.
         """
+        # Use default 9-player config if not specified (backward compatibility)
+        if config is None:
+            config = CLASSIC_9_CONFIG
+
         # Check capacity and cleanup if needed
         if len(self.games) >= self.MAX_GAMES:
             cleaned = self._cleanup_old_games()
@@ -554,21 +686,20 @@ class GameStore:
             game_id = str(uuid.uuid4())[:8]
         game = Game(id=game_id, language=language)
 
-        # Role distribution: 3 werewolves, 3 villagers, 1 seer, 1 witch, 1 hunter
-        roles = [
-            Role.WEREWOLF, Role.WEREWOLF, Role.WEREWOLF,
-            Role.VILLAGER, Role.VILLAGER, Role.VILLAGER,
-            Role.SEER, Role.WITCH, Role.HUNTER
-        ]
+        # Get role distribution from config
+        roles = config.roles.copy()
 
         # Determine human seat
         if human_seat is None:
-            human_seat = random.randint(1, 9)
+            human_seat = random.randint(1, config.player_count)
         game.human_seat = human_seat
 
         # If human role is specified, ensure they get it
         if human_role:
-            roles.remove(human_role)
+            if human_role in roles:
+                roles.remove(human_role)
+            else:
+                raise ValueError(f"Role {human_role} not available in this game mode")
             random.shuffle(roles)
             roles.insert(human_seat - 1, human_role)
         else:
@@ -579,7 +710,7 @@ class GameStore:
         random.shuffle(personalities)
 
         # Create players
-        werewolf_seats = []
+        wolf_seats = []  # All wolf-aligned seats (including wolf king variants)
         for i, role in enumerate(roles):
             seat_id = i + 1
             is_human = (seat_id == human_seat)
@@ -591,15 +722,16 @@ class GameStore:
                 personality=None if is_human else personalities[i % len(personalities)]
             )
 
-            if role == Role.WEREWOLF:
-                werewolf_seats.append(seat_id)
+            # Track all wolf-aligned roles for teammate relationship
+            if role in WOLF_ROLES:
+                wolf_seats.append(seat_id)
 
             game.players[seat_id] = player
 
-        # Set werewolf teammates
-        for seat_id in werewolf_seats:
+        # Set werewolf teammates (includes wolf king/white wolf king)
+        for seat_id in wolf_seats:
             player = game.players[seat_id]
-            player.teammates = [s for s in werewolf_seats if s != seat_id]
+            player.teammates = [s for s in wolf_seats if s != seat_id]
 
         game.status = GameStatus.PLAYING
         self.games[game_id] = game

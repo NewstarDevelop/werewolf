@@ -19,9 +19,15 @@ class RoomManager:
         name: str,
         creator_nickname: str,
         creator_id: str,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        game_mode: str = "classic_9",
+        wolf_king_variant: Optional[str] = None,
+        max_players: int = 9
     ) -> Room:
-        """创建房间并添加创建者为第一个玩家"""
+        """创建房间并添加创建者为第一个玩家
+
+        Phase 8 Fix: Added game_mode and wolf_king_variant parameters.
+        """
         room_id = str(uuid.uuid4())[:8]
 
         # 创建房间记录
@@ -30,7 +36,10 @@ class RoomManager:
             name=name,
             creator_nickname=creator_nickname,
             status=RoomStatus.WAITING,
-            current_players=1
+            current_players=1,
+            max_players=max_players,
+            game_mode=game_mode,
+            wolf_king_variant=wolf_king_variant
         )
         db.add(room)
 
@@ -232,12 +241,12 @@ class RoomManager:
         ).order_by(RoomPlayer.joined_at).all()
 
         # DEBUG: Log fill_ai parameter
-        logger.info(f"start_game called: room={room_id}, fill_ai={fill_ai}, players={len(players)}")
+        logger.info(f"start_game called: room={room_id}, fill_ai={fill_ai}, players={len(players)}, max_players={room.max_players}")
 
-        # 检查人数（如果不填充AI，必须9人）
+        # 检查人数（如果不填充AI，必须满足房间最大人数）
         if not fill_ai:
-            if len(players) < 9:
-                raise ValueError(f"人数不足，当前{len(players)}/9人")
+            if len(players) < room.max_players:
+                raise ValueError(f"人数不足，当前{len(players)}/{room.max_players}人")
 
             # 检查所有玩家是否准备
             if not all(p.is_ready for p in players):
@@ -254,11 +263,24 @@ class RoomManager:
 
         # WL-008 Fix: 创建支持多人的游戏实例
         # 使用room_id作为game_id，建立玩家到座位的映射
+        # Determine game config based on max_players
+        from app.models.game import CLASSIC_9_CONFIG, get_classic_12_config
+        if room.max_players == 9:
+            game_config = CLASSIC_9_CONFIG
+        elif room.max_players == 12:
+            # Phase 8 Fix: Read wolf_king_variant from room instead of hardcoded value
+            if not room.wolf_king_variant:
+                raise ValueError("12人模式必须指定狼王类型")
+            game_config = get_classic_12_config(room.wolf_king_variant)
+        else:
+            raise ValueError(f"Unsupported max_players: {room.max_players}")
+
         game = game_store.create_game(
             human_seat=1 if players else 1,  # Deprecated, kept for compatibility
             human_role=None,  # 随机角色
             language="zh",
-            game_id=room_id  # 使用room_id作为game_id
+            game_id=room_id,  # 使用room_id作为game_id
+            config=game_config
         )
 
         # 设置多人对局映射
@@ -282,7 +304,7 @@ class RoomManager:
 
         # T-STAB-001 Fix: Sync Player.is_human with human_seats for multi-player games
         # This ensures game_engine phase handlers correctly identify human players
-        for seat_id in range(1, 10):
+        for seat_id in range(1, room.max_players + 1):
             player = game.get_player(seat_id)
             if player:
                 player.is_human = (seat_id in human_seats)
@@ -293,7 +315,8 @@ class RoomManager:
         db.commit()
 
         mode = "AI填充模式" if fill_ai else "多人模式"
-        logger.info(f"Game started in room {room_id} ({mode}, {len(human_seats)} humans, {9 - len(human_seats)} AI)")
+        ai_count = room.max_players - len(human_seats)
+        logger.info(f"Game started in room {room_id} ({mode}, {len(human_seats)} humans, {ai_count} AI)")
         return room_id
 
     def finish_game(self, db: Session, room_id: str):

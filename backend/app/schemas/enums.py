@@ -14,6 +14,7 @@ class GamePhase(str, Enum):
     NIGHT_START = "night_start"
     NIGHT_WEREWOLF_CHAT = "night_werewolf_chat"
     NIGHT_WEREWOLF = "night_werewolf"
+    NIGHT_GUARD = "night_guard"
     NIGHT_SEER = "night_seer"
     NIGHT_WITCH = "night_witch"
     DAY_ANNOUNCEMENT = "day_announcement"
@@ -22,6 +23,7 @@ class GamePhase(str, Enum):
     DAY_VOTE = "day_vote"
     DAY_VOTE_RESULT = "day_vote_result"
     HUNTER_SHOOT = "hunter_shoot"
+    DEATH_SHOOT = "death_shoot"
     GAME_OVER = "game_over"
 
 
@@ -32,6 +34,9 @@ class Role(str, Enum):
     SEER = "seer"
     WITCH = "witch"
     HUNTER = "hunter"
+    GUARD = "guard"
+    WOLF_KING = "wolf_king"
+    WHITE_WOLF_KING = "white_wolf_king"
 
 
 class ActionType(str, Enum):
@@ -44,6 +49,8 @@ class ActionType(str, Enum):
     SHOOT = "shoot"
     SPEAK = "speak"
     SKIP = "skip"
+    PROTECT = "protect"
+    SELF_DESTRUCT = "self_destruct"
 
 
 class MessageType(str, Enum):
