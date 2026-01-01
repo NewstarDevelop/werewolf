@@ -259,7 +259,7 @@ class Game:
         Win conditions for 12-player mode:
         - Villagers win if: all werewolves are dead (includes wolf king/white wolf king)
         - Werewolves win if:
-          1. alive_wolves >= alive_villagers (屠边，按村民数判断，不含神职)
+          1. alive_wolves >= alive_good_people (屠边，狼数 >= 好人总数，含神职)
           2. all villagers are dead (屠民)
           3. all gods are dead (屠神)
         """
@@ -274,8 +274,9 @@ class Game:
         if len(alive_wolves) == 0:
             return Winner.VILLAGER
 
-        # Werewolves win condition 1: 屠边 (wolves >= villagers, not counting gods)
-        if len(alive_wolves) >= len(alive_villagers):
+        # Werewolves win condition 1: 屠边 (wolves >= total good people including gods)
+        alive_good_people = len(alive_villagers) + len(alive_gods)
+        if len(alive_wolves) >= alive_good_people:
             return Winner.WEREWOLF
 
         # Werewolves win condition 2: 屠民 (all villagers dead)

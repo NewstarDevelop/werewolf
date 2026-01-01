@@ -719,6 +719,14 @@ class GameEngine:
             deaths_str = separator.join([f"{s}{seat_suffix}" for s in game.last_night_deaths])
             game.add_message(0, t("system_messages.day_breaks_deaths", language=game.language, deaths=deaths_str), MessageType.SYSTEM)
 
+            # Check win condition immediately after night deaths (before hunter shoot)
+            winner = game.check_winner()
+            if winner:
+                game.winner = winner
+                game.status = GameStatus.FINISHED
+                game.phase = GamePhase.GAME_OVER
+                return {"status": "game_over", "winner": winner}
+
             # Check for hunter death
             for seat_id in game.last_night_deaths:
                 player = game.get_player(seat_id)
@@ -729,7 +737,7 @@ class GameEngine:
         else:
             game.add_message(0, t("system_messages.day_breaks_peaceful", language=game.language), MessageType.SYSTEM)
 
-        # Check win condition
+        # Check win condition (for peaceful nights)
         winner = game.check_winner()
         if winner:
             game.winner = winner
@@ -857,6 +865,14 @@ class GameEngine:
                 game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM)
                 game.kill_player(eliminated)
 
+                # Check win condition immediately after death (before hunter/wolf king shoot)
+                winner = game.check_winner()
+                if winner:
+                    game.winner = winner
+                    game.status = GameStatus.FINISHED
+                    game.phase = GamePhase.GAME_OVER
+                    return {"status": "game_over", "winner": winner}
+
                 # Check for hunter or wolf king death shoot
                 player = game.get_player(eliminated)
                 if player:
@@ -871,7 +887,7 @@ class GameEngine:
                         game.phase = GamePhase.DEATH_SHOOT
                         return {"status": "updated", "new_phase": game.phase}
 
-        # Check win condition
+        # Check win condition (for cases where no one was eliminated)
         winner = game.check_winner()
         if winner:
             game.winner = winner
