@@ -44,13 +44,6 @@ const PlayerGrid = ({
   // Determine which players can be selected based on pending action
   const selectableIds = pendingAction?.choices || [];
 
-  // Circular Layout Calculations
-  // We use percentages to ensure responsiveness across different screen sizes.
-  // Center of the container is at 50% width, 50% height.
-  // Radius is set to 38-42% of the container to leave room for the cards.
-  const totalPlayers = players.length;
-  const radiusPercent = isMobile ? 38 : 42;
-
   return (
     <div className={`bg-card/50 rounded-xl border border-border flex flex-col ${isMobile ? 'p-2 h-full' : 'p-3 h-[600px]'}`}>
       {/* Header */}
@@ -64,9 +57,11 @@ const PlayerGrid = ({
         </span>
       </div>
 
-      {/* Circular Grid */}
-      <div className="relative flex-1 w-full aspect-square mx-auto">
-        {players.map((player, index) => {
+      {/* Responsive Grid Layout */}
+      <div className={`grid w-full h-full place-items-center content-center gap-2 sm:gap-4 ${
+        players.length >= 12 ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-3'
+      }`}>
+        {players.map((player) => {
           // Check if this player is a wolf teammate (for any wolf role)
           const isWolfRole = myRole === "werewolf" || myRole === "wolf_king" || myRole === "white_wolf_king";
           const isWolfTeammate =
@@ -83,25 +78,12 @@ const PlayerGrid = ({
             selectableIds.length === 0 ||
             selectableIds.includes(player.seatId);
 
-          // Calculate circular position
-          // Seat ID 1 starts at -90 degrees (12 o'clock)
-          // Angle increases clockwise
-          // Formula: angle = (index * 360 / total) - 90
-          const angleDeg = (index * 360) / totalPlayers - 90;
-          const angleRad = (angleDeg * Math.PI) / 180;
-
-          const left = 50 + radiusPercent * Math.cos(angleRad);
-          const top = 50 + radiusPercent * Math.sin(angleRad);
-
           return (
             <div
               key={player.id}
-              className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-in-out"
-              style={{
-                left: `${left}%`,
-                top: `${top}%`,
-                width: isMobile ? '3.5rem' : '5rem'
-              }}
+              className={`flex justify-center items-center transition-all duration-300 ease-in-out ${
+                isMobile ? 'w-14' : 'w-20'
+              }`}
             >
               <PlayerCard
                 seatId={player.seatId}

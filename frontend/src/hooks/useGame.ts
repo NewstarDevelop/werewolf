@@ -49,7 +49,14 @@ export function useGame(options: UseGameOptions = {}) {
     queryKey: ['gameState', gameId],
     queryFn: () => (gameId ? getGameState(gameId) : null),
     enabled: !!gameId,
-    refetchInterval: false, // We'll manually control refetching
+    refetchInterval: (query) => {
+      const state = query.state.data as GameState | null;
+      // Stop polling when game is finished
+      if (state?.status === 'finished') return false;
+      // Poll every 2 seconds during active game (matches RoomLobby/RoomWaiting pattern)
+      return 2000;
+    },
+    refetchIntervalInBackground: false,
     staleTime: 0,
   });
 

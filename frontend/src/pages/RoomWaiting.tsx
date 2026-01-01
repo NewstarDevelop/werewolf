@@ -248,7 +248,7 @@ export default function RoomWaiting() {
             ))}
 
             {/* Empty slots */}
-            {Array.from({ length: 9 - roomDetail.players.length }).map((_, index) => (
+            {Array.from({ length: Math.max(0, roomDetail.room.max_players - roomDetail.players.length) }).map((_, index) => (
               <Card key={`empty-${index}`} className="bg-slate-800/30 border-dashed border-slate-700">
                 <CardHeader>
                   <CardTitle className="text-slate-600 text-base">
