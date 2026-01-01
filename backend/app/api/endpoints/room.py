@@ -24,9 +24,12 @@ class CreateRoomRequest(BaseModel):
     P2-3 Fix: Added length validation for name and nickname fields.
     CRITICAL FIX: Removed creator_id to prevent identity spoofing.
     Server now generates UUID to ensure client cannot forge identities.
+    Phase 8 Fix: Added game_mode and wolf_king_variant for 12-player support.
     """
     name: str = Field(..., min_length=1, max_length=50, description="房间名称")
     creator_nickname: str = Field(..., min_length=1, max_length=20, description="创建者昵称")
+    game_mode: str = Field(default="classic_9", description="游戏模式: classic_9 或 classic_12")
+    wolf_king_variant: Optional[str] = Field(default=None, description="狼王类型: wolf_king 或 white_wolf_king (仅12人局)")
 
 
 class JoinRoomRequest(BaseModel):
@@ -62,6 +65,8 @@ class RoomResponse(BaseModel):
     status: str
     current_players: int
     max_players: int
+    game_mode: str
+    wolf_king_variant: Optional[str]
     created_at: str
 
 
@@ -100,10 +105,38 @@ def create_room(
 
     CRITICAL FIX: Server generates UUID for creator_id to prevent identity spoofing.
     Client cannot provide their own ID.
+    Phase 8 Fix: Validate game_mode and wolf_king_variant for 12-player support.
 
     Returns: { room: RoomResponse, token: str, player_id: str }
     """
     try:
+        # Phase 8 Fix: Validate game_mode and wolf_king_variant
+        if request.game_mode not in ["classic_9", "classic_12"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid game_mode. Must be 'classic_9' or 'classic_12'"
+            )
+
+        if request.game_mode == "classic_12":
+            if not request.wolf_king_variant:
+                raise HTTPException(
+                    status_code=400,
+                    detail="12-player mode requires wolf_king_variant ('wolf_king' or 'white_wolf_king')"
+                )
+            if request.wolf_king_variant not in ["wolf_king", "white_wolf_king"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid wolf_king_variant. Must be 'wolf_king' or 'white_wolf_king'"
+                )
+        elif request.game_mode == "classic_9" and request.wolf_king_variant:
+            raise HTTPException(
+                status_code=400,
+                detail="9-player mode does not support wolf_king_variant"
+            )
+
+        # Determine max_players based on game_mode
+        max_players = 12 if request.game_mode == "classic_12" else 9
+
         # CRITICAL FIX: 服务端生成creator_id，防止客户端伪造身份
         creator_id = str(uuid.uuid4())
 
@@ -115,7 +148,10 @@ def create_room(
             request.name,
             request.creator_nickname,
             creator_id,
-            user_id=user_id
+            user_id=user_id,
+            game_mode=request.game_mode,
+            wolf_king_variant=request.wolf_king_variant,
+            max_players=max_players
         )
 
         # 签发 JWT token
@@ -132,11 +168,15 @@ def create_room(
                 status=room.status.value,
                 current_players=room.current_players,
                 max_players=room.max_players,
+                game_mode=room.game_mode,
+                wolf_king_variant=room.wolf_king_variant,
                 created_at=room.created_at.isoformat()
             ),
             "token": token,
             "player_id": creator_id  # 返回服务端生成的player_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         # WL-014 Fix: Log detailed error, return generic message
         logger.error(f"Failed to create room: {e}", exc_info=True)
@@ -174,6 +214,8 @@ def get_rooms(
                 status=r.status.value,
                 current_players=r.current_players,
                 max_players=r.max_players,
+                game_mode=r.game_mode,
+                wolf_king_variant=r.wolf_king_variant,
                 created_at=r.created_at.isoformat()
             )
             for r in rooms
@@ -229,6 +271,8 @@ def get_room_detail(
                 status=room.status.value,
                 current_players=room.current_players,
                 max_players=room.max_players,
+                game_mode=room.game_mode,
+                wolf_king_variant=room.wolf_king_variant,
                 created_at=room.created_at.isoformat()
             ),
             players=[

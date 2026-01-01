@@ -100,10 +100,21 @@ class Settings:
         # CORS_ORIGINS: comma-separated list of allowed origins, or "*" for all
         # Example: "http://localhost:3000,https://example.com"
         # If "*", credentials will be disabled (per CORS spec)
+        #
+        # SECURITY WARNING: In production, NEVER use "*" with cookie-based authentication.
+        # Always specify exact origins to prevent CSRF attacks.
         cors_origins_str = os.getenv("CORS_ORIGINS", "*")
         if cors_origins_str == "*":
             self.CORS_ORIGINS: list[str] = ["*"]
             self.CORS_ALLOW_CREDENTIALS: bool = False  # Cannot use credentials with wildcard
+            # Log warning if running in production mode
+            if not os.getenv("DEBUG", "false").lower() == "true":
+                import logging
+                logging.warning(
+                    "SECURITY WARNING: CORS_ORIGINS='*' in production mode. "
+                    "This is insecure with cookie-based authentication. "
+                    "Set specific origins (e.g., CORS_ORIGINS='https://example.com')"
+                )
         else:
             self.CORS_ORIGINS = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
             self.CORS_ALLOW_CREDENTIALS = True
