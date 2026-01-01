@@ -30,6 +30,7 @@ export interface RoomPlayer {
   is_ready: boolean;
   is_creator: boolean;
   is_me: boolean;
+  user_id: string | null;  // 用户ID（已登录用户），用于重复检测
   joined_at: string;
 }
 

@@ -51,9 +51,17 @@ export function setNickname(nickname: string): void {
 }
 
 /**
- * 清除玩家数据（用于测试或重置）
+ * 清除玩家数据（用于退出登录或重置）
+ * 清除 localStorage 中的所有玩家相关数据
+ * 注意：HttpOnly Cookie 需要通过后端 /api/auth/logout 端点清除
  */
 export function clearPlayerData(): void {
+  // 清除玩家ID和昵称
   localStorage.removeItem('werewolf_player_id');
   localStorage.removeItem('werewolf_player_nickname');
+  // 清除用户认证token（如果存在）
+  localStorage.removeItem('user_auth_token');
+  // 清除sessionStorage中的房间token
+  sessionStorage.removeItem('werewolf_token');
+  sessionStorage.removeItem('werewolf_token_expiry');
 }

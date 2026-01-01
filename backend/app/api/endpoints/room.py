@@ -82,6 +82,7 @@ class RoomPlayerResponse(BaseModel):
     is_ready: bool
     is_creator: bool
     is_me: bool  # 标识是否为当前请求用户
+    user_id: Optional[str] = None  # 用户ID（已登录用户），用于前端重复检测
     joined_at: str
 
 
@@ -283,6 +284,7 @@ def get_room_detail(
                     is_ready=p.is_ready,
                     is_creator=p.is_creator,
                     is_me=(p.player_id == current_player_id),
+                    user_id=p.user_id,  # 包含user_id用于前端重复检测
                     joined_at=p.joined_at.isoformat()
                 )
                 for p in players

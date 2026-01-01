@@ -4,6 +4,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { authService, User, AuthError } from '@/services/authService';
 import { clearUserToken } from '@/utils/token';
+import { clearPlayerData } from '@/utils/player';
 
 interface AuthContextType {
   user: User | null;
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await authService.logout();
+    clearPlayerData(); // 清除所有本地数据（player_id, nickname, tokens）
     setUser(null);
   }, []);
 

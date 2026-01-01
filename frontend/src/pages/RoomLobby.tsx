@@ -11,9 +11,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { createRoom, getRooms, joinRoom } from '@/services/roomApi';
+import { createRoom, getRooms, joinRoom, getRoomDetail } from '@/services/roomApi';
 import { getPlayerId, getNickname, setNickname as saveNickname } from '@/utils/player';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { authService } from '@/services/authService';
+import { useAuth } from '@/contexts/AuthContext';
 import { z } from 'zod';
 import { GameMode, WolfKingVariant } from '@/services/api';
 
@@ -29,6 +31,7 @@ const roomNameSchema = z.string()
 export default function RoomLobby() {
   const navigate = useNavigate();
   const { t } = useTranslation('common');
+  const { user, isAuthenticated, logout: authLogout } = useAuth();
   const playerId = getPlayerId();
 
   const [nickname, setNickname] = useState(getNickname() || '');
@@ -99,14 +102,63 @@ export default function RoomLobby() {
     });
   };
 
-  const handleJoinRoom = (roomId: string) => {
+  const handleJoinRoom = async (roomId: string) => {
     const nicknameResult = nicknameSchema.safeParse(nickname.trim());
     if (!nicknameResult.success) {
       toast.error(nicknameResult.error.errors[0].message);
       return;
     }
 
+    // 检查已登录用户是否已在房间中
+    try {
+      const currentUser = await authService.getCurrentUser();
+      if (currentUser) {
+        // 获取房间详情
+        const roomDetail = await getRoomDetail(roomId);
+
+        // 检查当前用户的user_id是否已在房间中
+        const alreadyInRoom = roomDetail.players.some(
+          (p) => p.user_id === currentUser.id
+        );
+
+        if (alreadyInRoom) {
+          toast.error(t('room.already_in_room'), {
+            description: t('room.cannot_join_twice'),
+            action: {
+              label: t('room.enter_room'),
+              onClick: () => navigate(`/room/${roomId}/waiting`),
+            },
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      // 区分不同类型的错误
+      if (error instanceof Error) {
+        if (error.message.includes('Unauthorized') || error.message.includes('401')) {
+          // 未登录用户，跳过检查（后端会生成新的player_id）
+          console.debug('User not authenticated, skipping duplicate check');
+        } else {
+          // 其他错误（如网络错误、房间不存在等），记录但允许继续尝试加入
+          // 后端会进行最终校验
+          console.warn('Failed to check room membership:', error.message);
+        }
+      } else {
+        console.warn('Failed to check room membership:', error);
+      }
+    }
+
     joinRoomMutation.mutate({ roomId, nickname: nicknameResult.data });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authLogout();
+      toast.success(t('auth.logout_success', { defaultValue: '已退出登录' }));
+      navigate('/');
+    } catch (error) {
+      toast.error(t('auth.logout_failed', { defaultValue: '退出登录失败' }));
+    }
   };
 
   return (
@@ -118,7 +170,20 @@ export default function RoomLobby() {
       <div className="container relative z-10 mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8 relative">
-          <div className="absolute right-0 top-0">
+          <div className="absolute right-0 top-0 flex items-center gap-2">
+            {isAuthenticated && user && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
+                <span>{user.nickname}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="h-8"
+                >
+                  {t('auth.logout', { defaultValue: '退出登录' })}
+                </Button>
+              </div>
+            )}
             <LanguageSwitcher />
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 font-display tracking-tight">

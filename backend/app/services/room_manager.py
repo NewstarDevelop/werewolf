@@ -119,6 +119,15 @@ class RoomManager:
                 if room.status != RoomStatus.WAITING:
                     raise ValueError("房间已开始游戏，无法加入")
 
+                # 对已登录用户，检查user_id是否已在房间（防止重复加入）
+                if user_id:
+                    existing_user = db.query(RoomPlayer).filter(
+                        RoomPlayer.room_id == room_id,
+                        RoomPlayer.user_id == user_id
+                    ).first()
+                    if existing_user:
+                        raise ValueError(f"您已在该房间中（房间ID: {room_id}），无法重复加入")
+
                 # 检查是否已加入
                 existing = db.query(RoomPlayer).filter(
                     RoomPlayer.room_id == room_id,

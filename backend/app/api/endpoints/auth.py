@@ -309,3 +309,29 @@ async def reset_password(body: PasswordResetRequest, db: Session = Depends(get_d
     # In production, send email with reset link here
 
     return {"message": "If the email exists, a password reset link has been sent"}
+
+
+@router.post("/logout")
+async def logout():
+    """
+    用户退出登录
+    POST /api/auth/logout
+
+    清除 HttpOnly Cookie 中的 JWT token
+    前端需要额外清除 localStorage 中的 player_id
+    """
+    response = Response(
+        content='{"message":"退出登录成功"}',
+        media_type="application/json"
+    )
+
+    # 清除 user_access_token cookie
+    response.delete_cookie(
+        key="user_access_token",
+        path="/",
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax"
+    )
+
+    return response
