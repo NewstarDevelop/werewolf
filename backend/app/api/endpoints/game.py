@@ -24,6 +24,7 @@ from app.services.log_manager import get_game_logs
 from app.services.game_analyzer import analyze_game
 from app.services.analysis_cache import AnalysisCache
 from app.services.room_manager import room_manager
+from app.services.websocket_manager import websocket_manager
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/game", tags=["game"])
@@ -403,6 +404,28 @@ async def step_game(
             except Exception as e:
                 logger.error(f"Failed to record game history for {game_id}: {e}", exc_info=True)
 
+        # WebSocket: 推送游戏状态更新到所有连接的客户端
+        try:
+            # Get all player IDs for this game to broadcast to
+            if game.player_mapping:
+                # Multi-player mode: broadcast to all players
+                for player_id in game.player_mapping.keys():
+                    player_state = game.get_state_for_player(player_id)
+                    await websocket_manager.broadcast_to_game(
+                        game_id,
+                        "game_update",
+                        player_state
+                    )
+            else:
+                # Single-player mode: broadcast general update
+                await websocket_manager.broadcast_to_game(
+                    game_id,
+                    "game_update",
+                    {"status": status, "new_phase": new_phase}
+                )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast game update via WebSocket: {e}")
+
         return StepResponse(
             status=status,
             new_phase=new_phase,
@@ -454,6 +477,28 @@ async def submit_action(
                 status_code=400,
                 detail=result.get("message", "Action failed")
             )
+
+        # WebSocket: 推送游戏状态更新到所有连接的客户端
+        try:
+            if game.player_mapping:
+                # Multi-player mode: broadcast to all players
+                for pid in game.player_mapping.keys():
+                    player_state = game.get_state_for_player(pid)
+                    await websocket_manager.broadcast_to_game(
+                        game_id,
+                        "game_update",
+                        player_state
+                    )
+            else:
+                # Single-player mode
+                player_state = game.get_state_for_player(player_id)
+                await websocket_manager.broadcast_to_game(
+                    game_id,
+                    "game_update",
+                    player_state
+                )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast action update via WebSocket: {e}")
 
         return ActionResponse(
             success=True,

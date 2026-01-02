@@ -17,15 +17,17 @@ import {
   needsHumanAction,
 } from '@/services/api';
 import { saveToken } from '@/utils/token';
+import { useGameWebSocket } from './useGameWebSocket';
 
 interface UseGameOptions {
   autoStep?: boolean;
   stepInterval?: number;
   gameId?: string; // Optional game ID to load existing game
+  enableWebSocket?: boolean; // Enable WebSocket for real-time updates
 }
 
 export function useGame(options: UseGameOptions = {}) {
-  const { autoStep = true, stepInterval = 2000, gameId: initialGameId } = options;  // P1-4: Increased from 1500ms
+  const { autoStep = true, stepInterval = 2000, gameId: initialGameId, enableWebSocket = true } = options;
 
   const [gameId, setGameId] = useState<string | null>(initialGameId || null);
   const [isStarting, setIsStarting] = useState(false);
@@ -37,6 +39,15 @@ export function useGame(options: UseGameOptions = {}) {
   const stepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // H-H4 FIX + M5 FIX: Store stepMutate with explicit type signature
   const stepMutateRef = useRef<((variables?: void) => void) | null>(null);
+
+  // WebSocket connection for real-time updates
+  const { isConnected: isWebSocketConnected, connectionError: wsError } = useGameWebSocket({
+    gameId,
+    enabled: enableWebSocket && !!gameId,
+    onError: (err) => {
+      console.warn('[WebSocket] Connection error, falling back to polling:', err.message);
+    },
+  });
 
   // Query for game state
   const {
@@ -53,8 +64,10 @@ export function useGame(options: UseGameOptions = {}) {
       const state = query.state.data as GameState | null;
       // Stop polling when game is finished
       if (state?.status === 'finished') return false;
-      // Poll every 2 seconds during active game (matches RoomLobby/RoomWaiting pattern)
-      return 2000;
+
+      // If WebSocket is connected, poll less frequently as fallback (every 10s)
+      // Otherwise, poll every 2s for near real-time updates
+      return isWebSocketConnected ? 10000 : 2000;
     },
     refetchIntervalInBackground: false,
     staleTime: 0,
@@ -287,6 +300,7 @@ export function useGame(options: UseGameOptions = {}) {
     isNight,
     needsAction,
     isGameOver,
+    isWebSocketConnected,  // WebSocket connection status
 
     // Actions
     startGame: handleStartGame,
