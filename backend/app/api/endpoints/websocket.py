@@ -4,8 +4,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from typing import Optional, Dict
 
 from app.services.websocket_manager import websocket_manager
-from app.services.game_store import game_store
-from app.core.auth import get_user_from_websocket
+from app.models.game import game_store
 
 logger = logging.getLogger(__name__)
 
