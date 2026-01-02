@@ -28,6 +28,7 @@ class Room(Base):
     password = Column(String(128), nullable=True)  # 房间密码 (hash长度)
     game_mode = Column(String(20), default="classic_9", nullable=False)  # 游戏模式: classic_9, classic_12
     wolf_king_variant = Column(String(20), nullable=True)  # 狼王类型: wolf_king, white_wolf_king (仅12人局)
+    language = Column(String(10), default="zh", nullable=False)  # 游戏语言: zh, en
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     started_at = Column(DateTime, nullable=True)  # 游戏开始时间
     finished_at = Column(DateTime, nullable=True)  # 游戏结束时间

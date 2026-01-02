@@ -30,6 +30,7 @@ class CreateRoomRequest(BaseModel):
     creator_nickname: str = Field(..., min_length=1, max_length=20, description="创建者昵称")
     game_mode: str = Field(default="classic_9", description="游戏模式: classic_9 或 classic_12")
     wolf_king_variant: Optional[str] = Field(default=None, description="狼王类型: wolf_king 或 white_wolf_king (仅12人局)")
+    language: str = Field(default="zh", description="游戏语言: zh 或 en")
 
 
 class JoinRoomRequest(BaseModel):
@@ -135,6 +136,13 @@ def create_room(
                 detail="9-player mode does not support wolf_king_variant"
             )
 
+        # Validate language
+        if request.language not in ["zh", "en"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid language. Must be 'zh' or 'en'"
+            )
+
         # Determine max_players based on game_mode
         max_players = 12 if request.game_mode == "classic_12" else 9
 
@@ -152,6 +160,7 @@ def create_room(
             user_id=user_id,
             game_mode=request.game_mode,
             wolf_king_variant=request.wolf_king_variant,
+            language=request.language,
             max_players=max_players
         )
 

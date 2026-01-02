@@ -45,6 +45,7 @@ export interface CreateRoomRequest {
   creator_id: string;
   game_mode: GameMode;
   wolf_king_variant?: WolfKingVariant;
+  language?: string;
 }
 
 export interface JoinRoomRequest {

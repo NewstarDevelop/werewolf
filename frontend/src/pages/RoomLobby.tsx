@@ -30,7 +30,7 @@ const roomNameSchema = z.string()
 
 export default function RoomLobby() {
   const navigate = useNavigate();
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
   const { user, isAuthenticated, logout: authLogout } = useAuth();
   const playerId = getPlayerId();
 
@@ -99,6 +99,7 @@ export default function RoomLobby() {
       creator_id: playerId,
       game_mode: gameMode,
       wolf_king_variant: gameMode === 'classic_12' ? wolfKingVariant : undefined,
+      language: i18n.language,
     });
   };
 
@@ -174,6 +175,14 @@ export default function RoomLobby() {
             {isAuthenticated && user && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
                 <span>{user.nickname}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/history')}
+                  className="h-8"
+                >
+                  {t('history.title')}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

@@ -22,6 +22,7 @@ class RoomManager:
         user_id: Optional[str] = None,
         game_mode: str = "classic_9",
         wolf_king_variant: Optional[str] = None,
+        language: str = "zh",
         max_players: int = 9
     ) -> Room:
         """创建房间并添加创建者为第一个玩家
@@ -39,7 +40,8 @@ class RoomManager:
             current_players=1,
             max_players=max_players,
             game_mode=game_mode,
-            wolf_king_variant=wolf_king_variant
+            wolf_king_variant=wolf_king_variant,
+            language=language
         )
         db.add(room)
 
@@ -287,7 +289,7 @@ class RoomManager:
         game = game_store.create_game(
             human_seat=1 if players else 1,  # Deprecated, kept for compatibility
             human_role=None,  # 随机角色
-            language="zh",
+            language=room.language,
             game_id=room_id,  # 使用room_id作为game_id
             config=game_config
         )

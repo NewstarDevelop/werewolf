@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 const OAuthCallback = lazy(() => import("./pages/auth/OAuthCallback"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // H1 FIX: Disable React Query retry to prevent double-retry with fetchApi
@@ -62,6 +63,7 @@ const App = () => (
                   <Route path="/room/:roomId/waiting" element={<RoomWaiting />} />
                   <Route path="/game/:gameId" element={<GamePage />} />
                   <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/history" element={<HistoryPage />} />
                 </Route>
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

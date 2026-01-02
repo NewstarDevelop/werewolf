@@ -9,6 +9,15 @@
     "skip": "Skip",
     "close": "Close"
   },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error occurred",
+    "back": "Back",
+    "previous": "Previous",
+    "next": "Next",
+    "page_of": "Page {{current}} of {{total}}",
+    "no_data": "No data"
+  },
   "game": {
     "start": "Start Game",
     "restart": "Restart",
@@ -170,5 +179,25 @@
     "wolf_king_variant": "Wolf King Variant",
     "variant_wolf_king": "Wolf King",
     "variant_white_wolf_king": "White Wolf King"
+  },
+  "history": {
+    "title": "Game History",
+    "my_games": "My Game Records",
+    "no_games": "No game records",
+    "winner_all": "All",
+    "winner_werewolf": "Werewolf Won",
+    "winner_villager": "Villager Won",
+    "filter_by_winner": "Filter by Winner",
+    "view_detail": "View Details",
+    "game_time": "Game Time",
+    "duration": "Duration",
+    "hours": "hrs",
+    "minutes": "mins",
+    "my_role": "My Role",
+    "result": "Result",
+    "players": "Players",
+    "winner": "Winner",
+    "game_detail": "Game Details",
+    "page_info": "Total {{total}} records"
   }
 }
