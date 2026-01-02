@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { getErrorMessage, logError } from '@/utils/errorHandler';
 
 const loginSchema = z.object({
   email: z.string().email({ message: '请输入有效的邮箱地址' }),
@@ -60,11 +61,12 @@ export default function LoginPage() {
       } else {
         navigate('/lobby', { replace: true });
       }
-    } catch (error: any) {
+    } catch (error) {
+      logError('LoginPage.onSubmit', error);
       toast({
         variant: 'destructive',
         title: '登录失败',
-        description: error.message || '邮箱或密码错误',
+        description: getErrorMessage(error, '邮箱或密码错误'),
       });
     } finally {
       setIsLoading(false);
@@ -76,11 +78,12 @@ export default function LoginPage() {
     try {
       const authUrl = await authService.getLinuxdoAuthUrl('/lobby');
       window.location.href = authUrl;
-    } catch (error: any) {
+    } catch (error) {
+      logError('LoginPage.handleLinuxdoLogin', error);
       toast({
         variant: 'destructive',
         title: 'OAuth 登录失败',
-        description: error.message,
+        description: getErrorMessage(error, 'OAuth 登录过程中出现错误'),
       });
       setIsOAuthLoading(false);
     }

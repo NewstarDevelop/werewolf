@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import GameStatusBar from "@/components/game/GameStatusBar";
 import ChatLog from "@/components/game/ChatLog";
@@ -31,7 +31,16 @@ interface UIPlayer {
 const GamePage = () => {
   const { t } = useTranslation(['common', 'game']);
   const { gameId: gameIdFromRoute } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
+
+  // Validate gameId exists - redirect to lobby if missing
+  useEffect(() => {
+    if (!gameIdFromRoute) {
+      navigate('/lobby', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameIdFromRoute]);
 
   const {
     gameId,

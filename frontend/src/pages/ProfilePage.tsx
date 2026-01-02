@@ -17,6 +17,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User as UserIcon, TrendingUp } from 'lucide-react';
+import type { PlayerStats } from '@/types/user';
+import { getErrorMessage, logError } from '@/utils/errorHandler';
 
 const profileSchema = z.object({
   nickname: z.string().min(2).max(50).optional(),
@@ -31,7 +33,7 @@ export default function ProfilePage() {
   const { user, logout, updateUser, refreshUser } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   const form = useForm<ProfileFormData>({
@@ -63,7 +65,7 @@ export default function ProfilePage() {
   const onSubmit = async (data: ProfileFormData) => {
     setIsLoading(true);
     try {
-      const updates: any = {};
+      const updates: Partial<{ nickname: string; bio: string; avatar_url: string }> = {};
       if (data.nickname && data.nickname !== user?.nickname) updates.nickname = data.nickname;
       if (data.bio !== undefined && data.bio !== user?.bio) updates.bio = data.bio;
       if (data.avatar_url && data.avatar_url !== user?.avatar_url) updates.avatar_url = data.avatar_url;
@@ -76,11 +78,12 @@ export default function ProfilePage() {
           description: '您的个人资料已更新',
         });
       }
-    } catch (error: any) {
+    } catch (error) {
+      logError('ProfilePage.onSubmit', error);
       toast({
         variant: 'destructive',
         title: '更新失败',
-        description: error.message,
+        description: getErrorMessage(error, '更新过程中出现错误'),
       });
     } finally {
       setIsLoading(false);

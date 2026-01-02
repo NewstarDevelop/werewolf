@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { getErrorMessage, logError } from '@/utils/errorHandler';
 
 const registerSchema = z.object({
   email: z.string().email({ message: '请输入有效的邮箱地址' }),
@@ -65,11 +66,12 @@ export default function RegisterPage() {
       } else {
         navigate('/lobby', { replace: true });
       }
-    } catch (error: any) {
+    } catch (error) {
+      logError('RegisterPage.onSubmit', error);
       toast({
         variant: 'destructive',
         title: '注册失败',
-        description: error.message || '注册过程中出现错误',
+        description: getErrorMessage(error, '注册过程中出现错误'),
       });
     } finally {
       setIsLoading(false);
