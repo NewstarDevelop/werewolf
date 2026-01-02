@@ -69,9 +69,14 @@ export function useGame(options: UseGameOptions = {}) {
       // Stop polling when game is finished
       if (state?.status === 'finished') return false;
 
-      // Phase 2.2: Only slow down polling AFTER receiving first WS message
-      // If WS hasn't delivered yet, keep polling frequently (2s)
-      return wsReceivedFirstUpdate ? 10000 : 2000;
+      // Phase 2.2: Only slow down polling when WebSocket is healthy
+      // Require: WS enabled + connected + no error + first update received
+      const shouldSlowPoll =
+        enableWebSocket &&
+        isWebSocketConnected &&
+        !wsError &&
+        wsReceivedFirstUpdate;
+      return shouldSlowPoll ? 10000 : 2000;
     },
     refetchIntervalInBackground: false,
     staleTime: 0,

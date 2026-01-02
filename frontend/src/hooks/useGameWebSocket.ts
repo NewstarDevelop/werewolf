@@ -41,6 +41,47 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
     onFirstUpdateRef.current = onFirstUpdate;
   });
 
+  // Unified state update handler for both 'connected' and 'game_update' messages
+  const applyIncomingState = useCallback(
+    (incoming: GameState) => {
+      queryClient.setQueryData(['gameState', gameId], (old: GameState | undefined) => {
+        const incomingVersion = incoming?.state_version;
+        const oldVersion = old?.state_version;
+
+        // Version check: reject strictly older updates (allow equal versions)
+        if (
+          old &&
+          typeof incomingVersion === 'number' &&
+          typeof oldVersion === 'number' &&
+          incomingVersion < oldVersion
+        ) {
+          console.warn(`[WebSocket] Stale update rejected (v${incomingVersion} < v${oldVersion})`);
+          return old;
+        }
+
+        // Data integrity check
+        const isComplete = Array.isArray(incoming?.message_log) && Array.isArray(incoming?.players);
+        if (!isComplete) {
+          console.warn('[WebSocket] Incomplete data, triggering refetch');
+          queryClient.invalidateQueries({ queryKey: ['gameState', gameId] });
+          return old;
+        }
+
+        const merged = {
+          ...incoming,
+          message_log: mergeMessages(old?.message_log || [], incoming.message_log),
+        };
+
+        if (onFirstUpdateRef.current) {
+          onFirstUpdateRef.current();
+        }
+
+        return merged;
+      });
+    },
+    [queryClient, gameId]
+  );
+
   // Cleanup function
   const cleanup = useCallback(() => {
     shouldReconnectRef.current = false;
@@ -102,46 +143,9 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
           const message: WebSocketMessage = JSON.parse(event.data);
           console.log('[WebSocket] Received message:', message.type);
 
-          if (message.type === 'game_update') {
-            // Intelligent state merging with version control
-            queryClient.setQueryData(['gameState', gameId], (old: GameState | undefined) => {
-              // Version check: reject stale updates
-              if (old && message.data.state_version !== undefined &&
-                  old.state_version !== undefined &&
-                  message.data.state_version <= old.state_version) {
-                console.warn(`[WebSocket] Stale update rejected (v${message.data.state_version} <= v${old.state_version})`);
-                return old;
-              }
-
-              // Data integrity check
-              const isComplete = message.data.message_log && message.data.players;
-              if (!isComplete) {
-                console.warn('[WebSocket] Incomplete data, triggering refetch');
-                queryClient.invalidateQueries({ queryKey: ['gameState', gameId] });
-                return old;
-              }
-
-              // Merge strategy: preserve old data, overlay new fields
-              const merged = {
-                ...old,
-                ...message.data,
-                // Message deduplication and merge
-                message_log: mergeMessages(old?.message_log || [], message.data.message_log)
-              };
-
-              // Trigger onFirstUpdate callback
-              if (onFirstUpdateRef.current) {
-                onFirstUpdateRef.current();
-              }
-
-              return merged;
-            });
-          } else if (message.type === 'connected') {
-            // Initial connection: directly set data
-            queryClient.setQueryData(['gameState', gameId], message.data);
-            if (onFirstUpdateRef.current) {
-              onFirstUpdateRef.current();
-            }
+          if (message.type === 'game_update' || message.type === 'connected') {
+            // Unified handling for both message types with version control
+            applyIncomingState(message.data);
           } else if (message.type === 'error') {
             console.error('[WebSocket] Server error:', message.data);
             setConnectionError(message.data.message || 'WebSocket error');
@@ -184,7 +188,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         reconnectTimeoutRef.current = setTimeout(connect, 5000);
       }
     }
-  }, [gameId, enabled, cleanup, sendPing, queryClient]); // 移除 onError, onFirstUpdate 依赖
+  }, [gameId, enabled, cleanup, sendPing, applyIncomingState]); // 移除 onError, onFirstUpdate 依赖
 
   // Connect on mount and when gameId changes
   useEffect(() => {
