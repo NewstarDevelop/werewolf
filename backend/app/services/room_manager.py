@@ -350,7 +350,7 @@ class RoomManager:
                 room_id=room_id,
                 started_at=room.started_at or datetime.utcnow(),
                 finished_at=datetime.utcnow(),
-                winner_faction=game.winner.value
+                winner=game.winner.value
             )
             db.add(session)
 

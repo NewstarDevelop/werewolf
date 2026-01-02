@@ -21,14 +21,14 @@ class Room(Base):
     id = Column(String(36), primary_key=True)  # 使用game_id作为房间ID (UUID标准长度)
     name = Column(String(100), nullable=False)  # 房间名称
     creator_nickname = Column(String(50), nullable=False)  # 创建者昵称
-    status = Column(SQLEnum(RoomStatus), default=RoomStatus.WAITING, nullable=False)
+    status = Column(SQLEnum(RoomStatus), default=RoomStatus.WAITING, nullable=False, index=True)
     max_players = Column(Integer, default=9, nullable=False)  # 最大玩家数
     current_players = Column(Integer, default=0, nullable=False)  # 当前玩家数
     is_private = Column(Boolean, default=False, nullable=False)  # 是否私密房间
     password = Column(String(128), nullable=True)  # 房间密码 (hash长度)
     game_mode = Column(String(20), default="classic_9", nullable=False)  # 游戏模式: classic_9, classic_12
     wolf_king_variant = Column(String(20), nullable=True)  # 狼王类型: wolf_king, white_wolf_king (仅12人局)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     started_at = Column(DateTime, nullable=True)  # 游戏开始时间
     finished_at = Column(DateTime, nullable=True)  # 游戏结束时间
 

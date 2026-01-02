@@ -5,7 +5,7 @@ SYSTEM_PROMPT_ZH = """# 私有信息（只有你知道）{wolf_info}{seer_info}{
 {language_instruction}
 
 # 游戏规则
-- 板子配置：3狼人、3村民、1预言家、1女巫、1猎人
+{board_config}
 - 好人阵营胜利条件：所有狼人出局
 - 狼人阵营胜利条件：所有神职出局 或 所有村民出局
 
@@ -180,7 +180,7 @@ SYSTEM_PROMPT_EN = """# Private Information (Only you know){wolf_info}{seer_info
 {language_instruction}
 
 # Game Rules
-- Board Configuration: 3 Werewolves, 3 Villagers, 1 Seer, 1 Witch, 1 Hunter
+{board_config}
 - Village Team Win Condition: All werewolves eliminated
 - Werewolf Team Win Condition: All power roles eliminated OR all villagers eliminated
 

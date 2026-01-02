@@ -745,7 +745,9 @@ class GameEngine:
             game.phase = GamePhase.GAME_OVER
             return {"status": "game_over", "winner": winner}
 
-        # Setup speech order (from seat 1 or random)
+        # Setup speech order with random starting position
+        # Rule: Each day, randomly select a starting seat from alive players
+        # This ensures fairness and prevents position-based advantages
         alive_seats = game.get_alive_seats()
         start_seat = random.choice(alive_seats)
         start_idx = alive_seats.index(start_seat)

@@ -64,14 +64,42 @@ def build_system_prompt(player: "Player", game: "Game", language: str = "zh") ->
     if language == "en":
         language_instruction = f"\n\n{t('prompts.language_instruction', language=language)}"
 
+    # Board configuration (dynamic based on player count)
+    board_config = ""
+    player_count = 9  # Default fallback
+
+    # Valid configurations
+    VALID_WOLF_KING_VARIANTS = {"wolf_king", "white_wolf_king"}
+    SUPPORTED_PLAYER_COUNTS = {9, 12}
+
+    if hasattr(game, 'config') and game.config:
+        player_count = game.config.player_count
+
+        # Validate player count
+        if player_count not in SUPPORTED_PLAYER_COUNTS:
+            # Unsupported player count, fallback to 9-player mode
+            player_count = 9
+            board_config = t("prompts.board_config_9", language=language)
+        elif player_count == 9:
+            board_config = t("prompts.board_config_9", language=language)
+        elif player_count == 12:
+            # Validate wolf king variant
+            wolf_king_variant = game.config.wolf_king_variant or "wolf_king"
+            if wolf_king_variant not in VALID_WOLF_KING_VARIANTS:
+                wolf_king_variant = "wolf_king"  # Fallback to default
+            board_config = t(f"prompts.board_config_12_{wolf_king_variant}", language=language)
+    else:
+        # Fallback to 9-player config if game.config is not available
+        board_config = t("prompts.board_config_9", language=language)
+
     # Select template based on language
     template = SYSTEM_PROMPT_EN if language == "en" else SYSTEM_PROMPT_ZH
 
-    system_prompt = f"""{t('prompts.game_intro', language=language)}
+    system_prompt = f"""{t('prompts.game_intro', language=language, player_count=player_count)}
 {t('prompts.your_role', language=language, role=role_desc)}
 {t('prompts.your_seat', language=language, seat_id=player.seat_id)}
 {personality_desc}
-{template.format(wolf_info=wolf_info, seer_info=seer_info, witch_info=witch_info, language_instruction=language_instruction)}
+{template.format(wolf_info=wolf_info, seer_info=seer_info, witch_info=witch_info, language_instruction=language_instruction, board_config=board_config)}
 """
     return system_prompt
 

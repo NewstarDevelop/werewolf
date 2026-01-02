@@ -127,11 +127,11 @@ class Settings:
         # OAuth2 Configuration - linux.do
         self.LINUXDO_CLIENT_ID: str = os.getenv("LINUXDO_CLIENT_ID", "")
         self.LINUXDO_CLIENT_SECRET: str = os.getenv("LINUXDO_CLIENT_SECRET", "")
-        self.LINUXDO_AUTHORIZE_URL: str = os.getenv("LINUXDO_AUTHORIZE_URL", "https://linux.do/oauth2/authorize")
-        self.LINUXDO_TOKEN_URL: str = os.getenv("LINUXDO_TOKEN_URL", "https://linux.do/oauth2/token")
-        self.LINUXDO_USERINFO_URL: str = os.getenv("LINUXDO_USERINFO_URL", "https://linux.do/oauth2/userinfo")
+        self.LINUXDO_AUTHORIZE_URL: str = os.getenv("LINUXDO_AUTHORIZE_URL", "https://connect.linux.do/oauth2/authorize")
+        self.LINUXDO_TOKEN_URL: str = os.getenv("LINUXDO_TOKEN_URL", "https://connect.linux.do/oauth2/token")
+        self.LINUXDO_USERINFO_URL: str = os.getenv("LINUXDO_USERINFO_URL", "https://connect.linux.do/api/user")
         self.LINUXDO_REDIRECT_URI: str = os.getenv("LINUXDO_REDIRECT_URI", "")
-        self.LINUXDO_SCOPES: str = os.getenv("LINUXDO_SCOPES", "openid email profile")
+        self.LINUXDO_SCOPES: str = os.getenv("LINUXDO_SCOPES", "user")
 
         # AI Analysis configuration (independent from game AI)
         self.ANALYSIS_PROVIDER: Optional[str] = os.getenv("ANALYSIS_PROVIDER") or None
