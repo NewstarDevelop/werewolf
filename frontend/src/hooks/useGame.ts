@@ -120,8 +120,7 @@ export function useGame(options: UseGameOptions = {}) {
     onError: (err: Error) => {
       // Ignore AbortError - this happens when request is cancelled due to component re-render
       // (e.g., WebSocket update triggers state change while step request is in flight)
-      if (err.name === 'AbortError') {
-        console.debug('Step request cancelled (AbortError) - this is normal during rapid state updates');
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
         return;
       }
       console.error('Step error:', err);
