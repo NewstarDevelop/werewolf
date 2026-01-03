@@ -362,8 +362,8 @@ class Game:
         alive_seats = self.get_alive_seats()
         other_alive = [s for s in alive_seats if s != player.seat_id]
 
-        # Night werewolf chat phase
-        if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role == Role.WEREWOLF:
+        # Night werewolf chat phase - all wolf-aligned roles participate
+        if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role in WOLF_ROLES:
             if player.seat_id not in self.wolf_chat_completed:
                 return {
                     "type": ActionType.SPEAK.value,
@@ -371,8 +371,8 @@ class Game:
                     "message": "与狼队友讨论今晚击杀目标（发言后自动进入投票）"
                 }
 
-        # Night werewolf phase
-        if phase == GamePhase.NIGHT_WEREWOLF and role == Role.WEREWOLF:
+        # Night werewolf phase - regular werewolf and wolf king vote
+        if phase == GamePhase.NIGHT_WEREWOLF and role in {Role.WEREWOLF, Role.WOLF_KING}:
             if player.seat_id not in self.wolf_votes:
                 kill_targets = [s for s in alive_seats if s != player.seat_id]
                 return {

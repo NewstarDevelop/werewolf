@@ -262,8 +262,8 @@ def _get_pending_action(game, human_player) -> PendingAction | None:
     alive_seats = game.get_alive_seats()
     other_alive = [s for s in alive_seats if s != human_player.seat_id]
 
-    # Night werewolf chat phase
-    if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role == Role.WEREWOLF:
+    # Night werewolf chat phase - all wolf-aligned roles participate
+    if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role in {Role.WEREWOLF, Role.WOLF_KING, Role.WHITE_WOLF_KING}:
         if human_player.seat_id not in game.wolf_chat_completed:
             return PendingAction(
                 type=ActionType.SPEAK,
@@ -271,8 +271,8 @@ def _get_pending_action(game, human_player) -> PendingAction | None:
                 message="与狼队友讨论今晚击杀目标（发言后自动进入投票）"
             )
 
-    # Night werewolf phase
-    if phase == GamePhase.NIGHT_WEREWOLF and role == Role.WEREWOLF:
+    # Night werewolf phase - regular werewolf and wolf king vote
+    if phase == GamePhase.NIGHT_WEREWOLF and role in {Role.WEREWOLF, Role.WOLF_KING}:
         if human_player.seat_id not in game.wolf_votes:
             # 狼人可以击杀任何存活玩家（包括自己和队友，实现自刀策略）
             kill_targets = alive_seats[:]
