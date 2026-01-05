@@ -57,12 +57,12 @@ def validate_target(
     # VOTE: Can vote for others, not self
     # SHOOT: Cannot shoot self
     # VERIFY: Cannot verify self (already checked in handler, but add here for completeness)
+    # PROTECT: 12-player mode allows self-guard, so removed from this list
     no_self_target_actions = [
         ActionType.POISON,
         ActionType.VOTE,
         ActionType.SHOOT,
-        ActionType.VERIFY,
-        ActionType.PROTECT
+        ActionType.VERIFY
     ]
 
     if action_type in no_self_target_actions and target_id == actor_seat:
@@ -71,8 +71,7 @@ def validate_target(
             ActionType.POISON: "毒",
             ActionType.VOTE: "投票给",
             ActionType.SHOOT: "射击",
-            ActionType.VERIFY: "验证",
-            ActionType.PROTECT: "守护"
+            ActionType.VERIFY: "验证"
         }
         action_name = action_names.get(action_type, "选择")
         raise ValueError(f"不能{action_name}自己")
@@ -275,6 +274,7 @@ class GameEngine:
                 # Guard can skip by choosing target_id = 0
                 if target_id == 0:
                     game.guard_target = None
+                    game.guard_decided = True
                     return {"success": True, "message": "已跳过守护"}
 
                 # Validate target
@@ -288,6 +288,7 @@ class GameEngine:
                     return {"success": False, "message": "不能连续两夜守护同一人"}
 
                 game.guard_target = target_id
+                game.guard_decided = True
                 game.add_action(player.seat_id, ActionType.PROTECT, target_id)
                 return {"success": True, "message": f"已守护{target_id}号玩家"}
 
@@ -486,6 +487,8 @@ class GameEngine:
         game.pending_deaths = []
         game.pending_deaths_unblockable = []  # Reset unblockable deaths
         game.white_wolf_king_explode_target = None  # Reset white wolf king explode target
+        game.guard_target = None  # Reset guard target
+        game.guard_decided = False  # Reset guard decision tracker
         game.seer_verified_this_night = False  # Reset seer verification tracker
         game.witch_save_decided = False
         game.witch_poison_decided = False
@@ -573,7 +576,7 @@ class GameEngine:
         if guard and guard.is_alive:
             if guard.is_human:
                 # Human guard hasn't made decision yet
-                if game.guard_target is None:
+                if not game.guard_decided:
                     return {"status": "waiting_for_human", "phase": game.phase}
             else:
                 # AI guard chooses protection target
@@ -589,6 +592,7 @@ class GameEngine:
                     game.guard_target = target if target != 0 else None
                     if game.guard_target:
                         game.add_action(guard.seat_id, ActionType.PROTECT, game.guard_target)
+                game.guard_decided = True
 
         game.phase = GamePhase.NIGHT_SEER
         game.increment_version()
@@ -696,12 +700,26 @@ class GameEngine:
                 game.witch_poison_decided = True
 
         # Process deaths
+        # Check for "同守同救" rule: if both witch saved and guard protected the same target, that target dies
+        witch_saved_target = None
+        for action in game.actions:
+            if action.day == game.day and action.action_type == ActionType.SAVE:
+                witch_saved_target = action.target_id
+                break
+
         # Apply guard protection (blocks wolf kill only, not poison or white wolf king explode)
-        # Guard protection happens BEFORE calculating last_night_deaths
         if game.guard_target and game.guard_target == game.night_kill_target:
-            if game.night_kill_target in game.pending_deaths:
-                game.pending_deaths.remove(game.night_kill_target)
-                # Optional: Add system message about successful protection (visible only in debug)
+            # Check for 同守同救 (both witch and guard saved the same person)
+            if witch_saved_target == game.night_kill_target:
+                # 同守同救: the target dies despite both protections
+                # Add the target back to pending_deaths if it was removed by witch
+                if game.night_kill_target not in game.pending_deaths:
+                    game.pending_deaths.append(game.night_kill_target)
+                logger.info(f"同守同救: {game.night_kill_target}号玩家因同时被守卫守护和女巫救治而死亡")
+            else:
+                # Normal guard protection (no witch save)
+                if game.night_kill_target in game.pending_deaths:
+                    game.pending_deaths.remove(game.night_kill_target)
 
         # Update guard's last target for next night's consecutive guard rule
         game.guard_last_target = game.guard_target

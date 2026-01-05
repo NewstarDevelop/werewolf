@@ -160,8 +160,9 @@ def build_context_prompt(player: "Player", game: "Game", action_type: str = "spe
     # Phase-specific instructions
     phase_instruction = ""
     if action_type == "speech":
-        # 检查是否是狼人夜间讨论阶段
-        if game.phase.value == "night_werewolf_chat" and player.role.value == "werewolf":
+        # 检查是否是狼人夜间讨论阶段 (包括狼王和白狼王)
+        wolf_roles = {"werewolf", "wolf_king", "white_wolf_king"}
+        if game.phase.value == "night_werewolf_chat" and player.role.value in wolf_roles:
             # 狼人夜间讨论专用 prompt
             separator = "、" if language == "zh" else ", "
             seat_suffix = "号" if language == "zh" else ""

@@ -189,7 +189,7 @@ export default function RoomWaiting() {
               </div>
               {!hasEnoughPlayers && (
                 <div className="text-yellow-400 text-center py-2">
-                  {t('room.need_players', { count: 9 - roomDetail.players.length })}
+                  {t('room.need_players', { count: roomDetail.room.max_players - roomDetail.players.length })}
                 </div>
               )}
             </div>

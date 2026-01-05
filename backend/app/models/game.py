@@ -161,6 +161,7 @@ class Game:
     wolf_chat_completed: set[int] = field(default_factory=set)  # Seats that completed wolf chat
     guard_target: Optional[int] = None  # Guard's protection target this night
     guard_last_target: Optional[int] = None  # Last night's protection target (for consecutive guard rule)
+    guard_decided: bool = False  # Track if guard has made decision this night
     white_wolf_king_used_explode: bool = False  # Whether white wolf king has used self-destruct
     white_wolf_king_explode_target: Optional[int] = None  # Target of white wolf king's self-destruct this night
     seer_verified_this_night: bool = False  # Track if seer verified this night
