@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import { VariableSizeList, ListOnScrollProps } from "react-window";
+import { List, useDynamicRowHeight } from "react-window";
 import ChatMessage from "./ChatMessage";
 import { MessageCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +20,7 @@ interface ChatLogProps {
 }
 
 // 估算消息高度：系统消息较短，普通消息较高
-const getItemSize = (msg: Message): number => {
+const estimateItemSize = (msg: Message): number => {
   if (msg.isSystem) return 52; // 系统消息：padding + 单行
   // 普通消息：发送者行 + 消息气泡 + margin
   const baseHeight = 72;
@@ -31,13 +31,18 @@ const getItemSize = (msg: Message): number => {
 
 const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<VariableSizeList>(null);
+  const listRef = useRef<React.ComponentRef<typeof List>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const { t } = useTranslation('common');
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   const shouldVirtualize = messages.length > 50;
+
+  // 使用 react-window v2 的动态行高 hook
+  const { getRowHeight, setRowHeight, observeRowElements } = useDynamicRowHeight({
+    estimatedRowHeight: 72,
+  });
 
   // 监听容器尺寸变化
   useEffect(() => {
@@ -55,24 +60,17 @@ const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
     return () => resizeObserver.disconnect();
   }, []);
 
-  // 消息变化时重置缓存的高度
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.resetAfterIndex(0);
-    }
-  }, [messages]);
-
   // Track scroll position for virtualized list
-  const handleVirtualScroll = useCallback(({ scrollOffset }: ListOnScrollProps) => {
+  const handleVirtualScroll = useCallback(({ scrollOffset }: { scrollOffset: number }) => {
     if (!listRef.current || containerSize.height === 0) return;
     // 计算总高度
     let totalHeight = 0;
     for (let i = 0; i < messages.length; i++) {
-      totalHeight += getItemSize(messages[i]);
+      totalHeight += getRowHeight(i) || estimateItemSize(messages[i]);
     }
     const isNearBottom = totalHeight - scrollOffset - containerSize.height < 100;
     isNearBottomRef.current = isNearBottom;
-  }, [messages, containerSize.height]);
+  }, [messages, containerSize.height, getRowHeight]);
 
   // P2-3: Smart scroll - only auto-scroll if user is near bottom
   useEffect(() => {
@@ -91,6 +89,23 @@ const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
       }
     }
   }, [messages, shouldVirtualize]);
+
+  // 行渲染组件
+  const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const msg = messages[index];
+    return (
+      <div style={style} ref={observeRowElements(index)}>
+        <ChatMessage
+          sender={msg.sender}
+          message={msg.message}
+          isUser={msg.isUser}
+          isSystem={msg.isSystem}
+          timestamp={msg.timestamp}
+          day={msg.day}
+        />
+      </div>
+    );
+  }, [messages, observeRowElements]);
 
   return (
     <div className="flex flex-col h-full bg-card/50 rounded-xl border border-border overflow-hidden">
@@ -116,32 +131,17 @@ const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
       ) : shouldVirtualize ? (
         <div ref={containerRef} className="flex-1 min-h-0">
           {containerSize.height > 0 && containerSize.width > 0 && (
-            <VariableSizeList
+            <List
               ref={listRef}
               height={containerSize.height}
               width={containerSize.width}
               itemCount={messages.length}
-              itemSize={(index) => getItemSize(messages[index])}
+              rowHeight={getRowHeight}
               onScroll={handleVirtualScroll}
-              className="scrollbar-thin"
-              style={{ padding: '16px' }}
+              className="scrollbar-thin p-4"
             >
-              {({ index, style }) => {
-                const msg = messages[index];
-                return (
-                  <div style={style}>
-                    <ChatMessage
-                      sender={msg.sender}
-                      message={msg.message}
-                      isUser={msg.isUser}
-                      isSystem={msg.isSystem}
-                      timestamp={msg.timestamp}
-                      day={msg.day}
-                    />
-                  </div>
-                );
-              }}
-            </VariableSizeList>
+              {Row}
+            </List>
           )}
         </div>
       ) : (
