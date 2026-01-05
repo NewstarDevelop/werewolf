@@ -386,7 +386,8 @@ class Game:
         # Night werewolf phase - regular werewolf and wolf king vote (white wolf king handled separately below)
         if phase == GamePhase.NIGHT_WEREWOLF and role in {Role.WEREWOLF, Role.WOLF_KING}:
             if player.seat_id not in self.wolf_votes:
-                kill_targets = [s for s in alive_seats if s != player.seat_id]
+                # 狼人可以击杀任何存活玩家（包括自己，实现自刀策略）
+                kill_targets = alive_seats[:]
                 return {
                     "type": ActionType.KILL.value,
                     "choices": kill_targets,
@@ -397,8 +398,9 @@ class Game:
         elif phase == GamePhase.NIGHT_WEREWOLF and role == Role.WHITE_WOLF_KING:
             if player.seat_id not in self.wolf_votes:
                 # White wolf king can either vote for kill OR self-destruct
+                # 白狼王可以击杀任何存活玩家（包括自己，实现自刀策略）
                 if not self.white_wolf_king_used_explode:
-                    kill_targets = [s for s in alive_seats if s != player.seat_id]
+                    kill_targets = alive_seats[:]
                     return {
                         "type": ActionType.KILL.value,  # Frontend will show both KILL and SELF_DESTRUCT options
                         "choices": kill_targets,
@@ -406,7 +408,7 @@ class Game:
                     }
                 else:
                     # Already used self-destruct, can only vote for normal kill
-                    kill_targets = [s for s in alive_seats if s != player.seat_id]
+                    kill_targets = alive_seats[:]
                     return {
                         "type": ActionType.KILL.value,
                         "choices": kill_targets,
