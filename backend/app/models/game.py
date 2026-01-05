@@ -11,7 +11,7 @@ from app.schemas.enums import (
 from app.schemas.player import Personality
 
 
-# AI personality templates
+# AI personality templates (14 unique personalities for 12-player games)
 AI_PERSONALITIES = [
     Personality(name="暴躁的老王", trait="激进", speaking_style="口语化"),
     Personality(name="理性的Alice", trait="逻辑流", speaking_style="严谨"),
@@ -21,6 +21,13 @@ AI_PERSONALITIES = [
     Personality(name="精明的王五", trait="逻辑流", speaking_style="严谨"),
     Personality(name="冲动的赵六", trait="激进", speaking_style="口语化"),
     Personality(name="稳重的钱七", trait="保守", speaking_style="简短"),
+    # 新增6个角色，确保12人局不重名
+    Personality(name="狡猾的孙八", trait="逻辑流", speaking_style="幽默"),
+    Personality(name="憨厚的周九", trait="随波逐流", speaking_style="简短"),
+    Personality(name="机敏的吴十", trait="直觉流", speaking_style="严谨"),
+    Personality(name="淡定的郑十一", trait="保守", speaking_style="口语化"),
+    Personality(name="火爆的陈十二", trait="激进", speaking_style="幽默"),
+    Personality(name="睿智的林十三", trait="逻辑流", speaking_style="口语化"),
 ]
 
 
@@ -28,6 +35,9 @@ AI_PERSONALITIES = [
 WOLF_ROLES = {Role.WEREWOLF, Role.WOLF_KING, Role.WHITE_WOLF_KING}
 VILLAGER_ROLES = {Role.VILLAGER}
 GOD_ROLES = {Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD}
+
+# P2优化：狼人战术角色类型
+WOLF_PERSONAS = ["aggressive", "hook", "deep"]  # 冲锋狼、倒钩狼、深水狼
 
 
 @dataclass
@@ -106,6 +116,7 @@ class Player:
     verified_players: dict[int, bool] = field(default_factory=dict)
     # Werewolf specific
     teammates: list[int] = field(default_factory=list)
+    wolf_persona: Optional[str] = None  # P2优化：狼人战术角色 (aggressive/hook/deep)
 
     def __post_init__(self):
         if self.verified_players is None:
@@ -747,9 +758,15 @@ class GameStore:
             game.players[seat_id] = player
 
         # Set werewolf teammates (includes wolf king/white wolf king)
-        for seat_id in wolf_seats:
+        # P2优化：为狼人分配差异化战术角色
+        shuffled_personas = WOLF_PERSONAS.copy()
+        random.shuffle(shuffled_personas)
+        for idx, seat_id in enumerate(wolf_seats):
             player = game.players[seat_id]
             player.teammates = [s for s in wolf_seats if s != seat_id]
+            # 为非人类狼人分配战术角色（循环使用，确保多样性）
+            if not player.is_human:
+                player.wolf_persona = shuffled_personas[idx % len(shuffled_personas)]
 
         game.status = GameStatus.PLAYING
         self.games[game_id] = game

@@ -12,6 +12,254 @@ if TYPE_CHECKING:
 WOLF_ROLE_VALUES = {"werewolf", "wolf_king", "white_wolf_king"}
 
 
+def _is_garbled_or_meaningless(content: str) -> bool:
+    """检测发言是否为乱码或无意义内容。
+
+    用于预言家查验黑名单和好人噪音过滤。
+    """
+    import re
+
+    if not content or len(content.strip()) < 3:
+        return True
+
+    # 检测乱码特征
+    # 1. 过多特殊字符（允许常见标点和符号）
+    # 允许：中文、英文、数字、空格、中英文标点、常见符号(~-._…)
+    special_char_ratio = len(re.findall(r'[^\u4e00-\u9fa5a-zA-Z0-9\s，。！？、：；""''（）~\-._…·,.:;!?\'"()\[\]]', content)) / max(len(content), 1)
+    if special_char_ratio > 0.5:
+        return True
+
+    # 2. 重复字符过多 (如 "啊啊啊啊啊啊")
+    if re.search(r'(.)\1{5,}', content):
+        return True
+
+    # 3. 纯数字或纯符号
+    if re.match(r'^[\d\s\W]+$', content):
+        return True
+
+    # 4. 过短且无实质内容
+    meaningful_words = ["我", "你", "他", "狼", "好人", "预言家", "女巫", "猎人", "投", "查", "验", "杀"]
+    if len(content) < 10 and not any(word in content for word in meaningful_words):
+        return True
+
+    return False
+
+
+def _analyze_player_speech_quality(game: "Game", seat_id: int) -> dict:
+    """分析玩家发言质量，用于预言家查验优先级和好人噪音过滤。
+
+    Returns:
+        dict: {
+            "speech_count": int,  # 发言次数
+            "garbled_count": int,  # 乱码发言次数
+            "quality_score": float,  # 质量分数 0-1
+            "is_low_priority": bool,  # 是否低优先级查验目标
+            "reason": str  # 原因
+        }
+    """
+    from app.schemas.enums import MessageType
+
+    speeches = [msg for msg in game.messages
+                if msg.seat_id == seat_id and msg.msg_type == MessageType.SPEECH]
+
+    if not speeches:
+        return {
+            "speech_count": 0,
+            "garbled_count": 0,
+            "quality_score": 0.3,  # 沉默玩家给低分
+            "is_low_priority": True,
+            "reason": "silent"
+        }
+
+    garbled_count = sum(1 for msg in speeches if _is_garbled_or_meaningless(msg.content))
+    garbled_ratio = garbled_count / len(speeches)
+
+    # 计算质量分数
+    quality_score = 1.0 - garbled_ratio
+
+    # 判断是否低优先级
+    is_low_priority = garbled_ratio > 0.5 or (len(speeches) == 1 and garbled_count == 1)
+    reason = "garbled" if garbled_ratio > 0.5 else ("single_garbled" if is_low_priority else "normal")
+
+    return {
+        "speech_count": len(speeches),
+        "garbled_count": garbled_count,
+        "quality_score": quality_score,
+        "is_low_priority": is_low_priority,
+        "reason": reason
+    }
+
+
+def _build_voting_pattern_analysis(game: "Game", player: "Player", language: str = "zh") -> str:
+    """构建投票模式分析摘要，用于好人阵营的注意力聚焦。
+
+    预处理投票数据，让AI关注"硬事实"而非"噪音"。
+    """
+    from app.schemas.enums import ActionType
+    from collections import defaultdict
+
+    if game.day < 2:
+        return ""
+
+    # 收集投票数据
+    vote_history = defaultdict(list)  # seat_id -> [(day, target)]
+    for action in game.actions:
+        if action.action_type == ActionType.VOTE and action.target_id:
+            vote_history[action.player_id].append((action.day, action.target_id))
+
+    if not vote_history:
+        return ""
+
+    analysis_points = []
+
+    # 分析投票模式
+    # 1. 找出总是一起投票的玩家对
+    vote_pairs = defaultdict(int)
+    for day in range(1, game.day + 1):
+        day_votes = {seat: target for seat, votes in vote_history.items()
+                     for d, target in votes if d == day}
+        seats = list(day_votes.keys())
+        for i, s1 in enumerate(seats):
+            for s2 in seats[i+1:]:
+                if day_votes[s1] == day_votes[s2]:
+                    pair = tuple(sorted([s1, s2]))
+                    vote_pairs[pair] += 1
+
+    # 找出高度一致的投票对
+    total_days = game.day
+    for (s1, s2), count in vote_pairs.items():
+        if count >= 2 and count / total_days >= 0.8:
+            if language == "zh":
+                analysis_points.append(f"- {s1}号和{s2}号投票高度一致（{count}/{total_days}天相同）")
+            else:
+                analysis_points.append(f"- #{s1} and #{s2} vote together frequently ({count}/{total_days} days)")
+
+    # 2. 找出投票给已确认好人的玩家
+    # (这需要预言家验人信息，暂时跳过)
+
+    # 3. 找出发言与投票不一致的玩家
+    # (需要更复杂的NLP分析，暂时跳过)
+
+    if not analysis_points:
+        return ""
+
+    if language == "zh":
+        header = "\n# 【系统分析】投票模式异常\n"
+    else:
+        header = "\n# [System Analysis] Voting Pattern Anomalies\n"
+
+    return header + "\n".join(analysis_points)
+
+
+def _get_wolf_persona_strategy(wolf_persona: str, language: str = "zh") -> str:
+    """根据狼人战术角色返回差异化策略指令。
+
+    P2优化：确保狼队战术配置多样化，避免全员冲锋。
+    """
+    if language == "zh":
+        strategies = {
+            "aggressive": """
+# 🔥 【你的战术角色：冲锋狼】
+**核心指令**：你是狼队的矛，负责制造混乱和吸引火力。
+
+**战术要点**：
+1. **主动带节奏**：积极发言，质疑可疑玩家，引导投票方向
+2. **敢于悍跳**：如果需要，可以对跳预言家，发假查杀
+3. **投票激进**：跟随主流或主动发起投票，不要划水
+4. **吸引火力**：为深水狼队友打掩护，让他们保持低调
+5. **牺牲精神**：如果暴露，要拖延时间，不要轻易认输
+
+**禁忌**：
+- 不要和其他狼队友同时攻击同一人（容易暴露关系）
+- 不要在关键时刻突然沉默（与你的角色不符）
+""",
+            "hook": """
+# 🎣 【你的战术角色：倒钩狼】
+**核心指令**：你是狼队的间谍，负责打入好人阵营获取信任。
+
+**战术要点**：
+1. **投票正确**：第一天必须和好人阵营投票一致，甚至可以投狼队友
+2. **卖队友做身份**：当队友被质疑时，可以补刀攻击他，表现出"被骗"的愤怒
+3. **获取信任**：让好人认为你是"被狼骗过的好人"
+4. **关键时刻反水**：在好人信任你之后，关键投票时带偏节奏
+5. **保护深水狼**：你的牺牲是为了让深水狼活到最后
+
+**禁忌**：
+- 不要过早暴露和狼队友的关系
+- 不要在第一天就保护狼队友
+- 表演要自然，不要太刻意
+""",
+            "deep": """
+# 🌊 【你的战术角色：深水狼】
+**核心指令**：你是狼队的王牌，必须活到最后。
+
+**战术要点**：
+1. **保持低调**：发言简短，跟随主流意见，不要出头
+2. **客观复盘**：表现出"理性分析"的姿态，不要情绪化
+3. **被说服后跟随**：当有人提出观点时，表现出"被说服"然后跟随
+4. **避免暴露**：绝不直接保护狼队友，即使他们被投出局
+5. **关键时刻反水**：当场上只剩少数人时，才开始主动出击
+
+**禁忌**：
+- 不要主动带节奏（这是冲锋狼的任务）
+- 不要和狼队友投票完全一致
+- 不要在队友被质疑时跳出来辩护
+"""
+        }
+    else:  # English
+        strategies = {
+            "aggressive": """
+# 🔥 [Your Tactical Role: AGGRESSIVE WOLF]
+**Core Directive**: You are the team's spear, responsible for creating chaos and drawing fire.
+
+**Tactics**:
+1. **Lead discussions**: Speak actively, question suspicious players, guide voting
+2. **Dare to fake-claim**: Counter-claim Seer if needed, make fake accusations
+3. **Vote aggressively**: Follow mainstream or initiate votes, don't lurk
+4. **Draw fire**: Cover for deep wolves, let them stay low-key
+5. **Sacrifice spirit**: If exposed, delay and don't give up easily
+
+**Forbidden**:
+- Don't attack the same person as other wolves simultaneously
+- Don't suddenly go silent at critical moments
+""",
+            "hook": """
+# 🎣 [Your Tactical Role: HOOK WOLF]
+**Core Directive**: You are the team's spy, infiltrate the village and gain trust.
+
+**Tactics**:
+1. **Vote correctly**: Day 1 must vote with villagers, even vote wolf teammates
+2. **Bus teammates**: When teammates are questioned, attack them, show "betrayed" anger
+3. **Gain trust**: Make villagers think you're "a villager fooled by wolves"
+4. **Turn at key moment**: After gaining trust, mislead at critical votes
+5. **Protect deep wolf**: Your sacrifice is to keep deep wolf alive
+
+**Forbidden**:
+- Don't expose relationship with wolf teammates early
+- Don't protect wolf teammates on Day 1
+- Act naturally, don't be too obvious
+""",
+            "deep": """
+# 🌊 [Your Tactical Role: DEEP WOLF]
+**Core Directive**: You are the team's ace, must survive until the end.
+
+**Tactics**:
+1. **Stay low-key**: Brief speech, follow mainstream, don't stand out
+2. **Objective review**: Show "rational analysis" posture, don't be emotional
+3. **Follow after being persuaded**: When someone makes a point, show "convinced" then follow
+4. **Avoid exposure**: Never directly protect wolf teammates, even if they're voted out
+5. **Turn at endgame**: Only start attacking when few players remain
+
+**Forbidden**:
+- Don't lead discussions (that's aggressive wolf's job)
+- Don't vote exactly the same as wolf teammates
+- Don't jump out to defend when teammates are questioned
+"""
+        }
+
+    return strategies.get(wolf_persona, "")
+
+
 def build_system_prompt(player: "Player", game: "Game", language: str = "zh") -> str:
     """Build the system prompt for an AI player."""
     # Normalize language to ensure consistency
@@ -35,6 +283,11 @@ def build_system_prompt(player: "Player", game: "Game", language: str = "zh") ->
     if player.role.value in WOLF_ROLE_VALUES and player.teammates:
         teammates_str = "、".join([f"{t}号" for t in player.teammates]) if language == "zh" else ", ".join([f"#{t}" for t in player.teammates])
         wolf_info = f"\n{t('prompts.wolf_teammates', language=language, teammates=teammates_str)}\n{t('prompts.wolf_info_note', language=language)}"
+
+        # P2优化：添加狼人差异化战术角色策略
+        if player.wolf_persona:
+            wolf_persona_strategy = _get_wolf_persona_strategy(player.wolf_persona, language)
+            wolf_info += wolf_persona_strategy
 
     # Seer verification info
     seer_info = ""
@@ -228,6 +481,53 @@ You and your werewolf teammates ({teammates_str}) are in a private night discuss
             # 普通白天发言 - 根据发言位置提供不同策略
             speech_position = (game.current_speech_index or 0) + 1  # 第几个发言（1-based）
             total_speakers = len(game.speech_order or [])
+            player_count = len(game.players)
+
+            # P1优化：预言家白天发言时的强制起跳提醒
+            seer_reveal_reminder = ""
+            if player.role.value == "seer":
+                has_wolf_check = any(is_wolf for is_wolf in (player.verified_players or {}).values())
+                if has_wolf_check:
+                    wolf_seats = [str(s) for s, is_wolf in player.verified_players.items() if is_wolf]
+                    if language == "zh":
+                        seer_reveal_reminder = f"""
+# 🚨🚨🚨 【预言家强制起跳】你手握查杀！🚨🚨🚨
+你已查出狼人：{', '.join(wolf_seats)}号
+**你必须在本轮发言中跳预言家身份并报出查杀！**
+- 这是你作为预言家的核心职责
+- 隐忍不跳 = 好人视角全黑 = 输掉游戏
+- 无论你的性格如何，查杀必须报出！
+
+"""
+                    else:
+                        seer_reveal_reminder = f"""
+# 🚨🚨🚨 [SEER MANDATORY REVEAL] You have a wolf check! 🚨🚨🚨
+You found wolves: #{', #'.join(wolf_seats)}
+**You MUST claim Seer and report your check in this speech!**
+- This is your core duty as Seer
+- Staying hidden = Villagers have no info = Lose the game
+- Regardless of your personality, the wolf check MUST be reported!
+
+"""
+                elif player_count >= 12:
+                    if language == "zh":
+                        seer_reveal_reminder = """
+# 📢 【12人局预言家起跳建议】
+你是预言家，12人局建议首日起跳：
+- 建立信任基础，让金水玩家帮你站队
+- 避免被刀后好人视角全黑
+- 报金水也能引导好人阵营
+
+"""
+                    else:
+                        seer_reveal_reminder = """
+# 📢 [12-Player Seer Reveal Suggestion]
+You are the Seer. In 12-player games, Day 1 claim is recommended:
+- Build trust foundation, get gold-checked players to support you
+- Prevent information blackout if you die
+- Reporting gold also guides the village
+
+"""
 
             # 位置策略指导
             if language == "zh":
@@ -282,7 +582,7 @@ You and your werewolf teammates ({teammates_str}) are in a private night discuss
                 phase_instruction = f"""
 # 当前任务：发言
 现在轮到你发言了。请根据当前局势和你的发言位置发表看法。
-
+{seer_reveal_reminder}
 {position_strategy}
 
 **基本要求**：
@@ -547,6 +847,19 @@ Fill action_target with the seat number to kill.
         unverified = [p.seat_id for p in game.get_alive_players()
                      if p.seat_id != player.seat_id and p.seat_id not in (player.verified_players or {})]
         is_first_night = game.day == 1
+        player_count = len(game.players)
+
+        # P1优化：构建查验黑名单（低优先级目标）
+        blacklist_info = ""
+        low_priority_targets = []
+        high_priority_targets = []
+
+        for seat_id in unverified:
+            quality = _analyze_player_speech_quality(game, seat_id)
+            if quality["is_low_priority"]:
+                low_priority_targets.append((seat_id, quality["reason"]))
+            else:
+                high_priority_targets.append(seat_id)
 
         if language == "zh":
             targets_str = "、".join([f"{s}号" for s in unverified])
@@ -565,16 +878,58 @@ Fill action_target with the seat number to kill.
                     verification_table += f"| 第{night_counter}晚 | {seat_id}号 | {result} | {alive_status} |\n"
                     night_counter += 1
 
+            # P1优化：生成黑名单提示
+            if low_priority_targets:
+                blacklist_reasons = {
+                    "silent": "沉默不发言",
+                    "garbled": "发言乱码/无意义",
+                    "single_garbled": "仅有一次乱码发言"
+                }
+                blacklist_items = [f"{s}号（{blacklist_reasons.get(r, r)}）" for s, r in low_priority_targets]
+                blacklist_info = f"""
+# ⚠️ 【查验黑名单】以下玩家查验价值极低
+{chr(10).join(['- ' + item for item in blacklist_items])}
+
+**原因**：查验乱码/沉默玩家是浪费查验机会，即使查出狼人也难以说服好人阵营。
+**建议**：优先查验有实质发言、逻辑可分析的玩家。
+"""
+
+            # P1优化：检测是否有查杀，提示强制起跳
+            has_wolf_check = any(is_wolf for is_wolf in (player.verified_players or {}).values())
+            reveal_reminder = ""
+            if has_wolf_check:
+                wolf_seats = [str(s) for s, is_wolf in player.verified_players.items() if is_wolf]
+                reveal_reminder = f"""
+# 🚨 【强制起跳提醒】你手握查杀！
+你已查出狼人：{', '.join(wolf_seats)}号
+**明天白天你必须第一时间跳预言家身份并报出查杀！**
+- 隐忍不跳 = 好人视角全黑 = 输掉游戏
+- 即使被悍跳，也要坚定报出查验结果
+"""
+            elif player_count >= 12 and game.day == 1:
+                reveal_reminder = """
+# 📢 【12人局起跳建议】
+12人局信息量大，预言家首日起跳可以：
+- 建立信任基础，让金水玩家帮你站队
+- 避免被刀后好人视角全黑
+- 即使没有查杀，报金水也能引导好人阵营
+**强烈建议明天首发或前置位起跳！**
+"""
+
             phase_instruction = f"""
 # 当前任务：预言家查验
 现在是夜晚，你可以查验一名玩家的身份。
-{verification_table}
+{verification_table}{blacklist_info}{reveal_reminder}
 可选目标：{targets_str}
 
-**查验策略**：
-- 第一晚：发言激进者、边缘位置
-- 后续晚上：发言矛盾者、模糊划水者、投票异常者
-- 优先查验：发言可疑+站队摇摆+投票异常的玩家
+**查验策略（优化版）**：
+1. **绝对禁止**：查验乱码/沉默/废票玩家（浪费查验机会）
+2. **优先查验**：
+   - 发言激进、带节奏的玩家（可能是冲锋狼）
+   - 发言逻辑矛盾、前后不一的玩家
+   - 投票异常、站队摇摆的玩家
+   - 被多人质疑但辩解无力的玩家
+3. **次优先**：边缘位置、发言模糊的玩家
 
 在 action_target 中填写你要查验的座位号。
 """
@@ -595,16 +950,58 @@ Fill action_target with the seat number to kill.
                     verification_table += f"| Night {night_counter} | #{seat_id} | {result} | {alive_status} |\n"
                     night_counter += 1
 
+            # P1: Generate blacklist info
+            if low_priority_targets:
+                blacklist_reasons = {
+                    "silent": "silent/no speech",
+                    "garbled": "garbled/meaningless speech",
+                    "single_garbled": "only one garbled speech"
+                }
+                blacklist_items = [f"#{s} ({blacklist_reasons.get(r, r)})" for s, r in low_priority_targets]
+                blacklist_info = f"""
+# ⚠️ [Investigation Blacklist] Low-value targets
+{chr(10).join(['- ' + item for item in blacklist_items])}
+
+**Reason**: Checking garbled/silent players wastes your investigation. Even if they're wolves, it's hard to convince villagers.
+**Suggestion**: Prioritize players with substantial speech and analyzable logic.
+"""
+
+            # P1: Check for wolf findings, prompt mandatory reveal
+            has_wolf_check = any(is_wolf for is_wolf in (player.verified_players or {}).values())
+            reveal_reminder = ""
+            if has_wolf_check:
+                wolf_seats = [str(s) for s, is_wolf in player.verified_players.items() if is_wolf]
+                reveal_reminder = f"""
+# 🚨 [Mandatory Reveal Reminder] You have a wolf check!
+You found wolves: #{', #'.join(wolf_seats)}
+**Tomorrow you MUST claim Seer immediately and report your check!**
+- Staying hidden = Villagers have no info = Lose the game
+- Even if counter-claimed, firmly report your verification results
+"""
+            elif player_count >= 12 and game.day == 1:
+                reveal_reminder = """
+# 📢 [12-Player Game Reveal Suggestion]
+In 12-player games, Day 1 Seer claim can:
+- Build trust foundation, get gold-checked players to support you
+- Prevent information blackout if you die
+- Even without wolf check, reporting gold guides the village
+**Strongly recommend claiming early tomorrow!**
+"""
+
             phase_instruction = f"""
 # Current Task: Seer Verification
 It's night time. You can verify a player's identity.
-{verification_table}
+{verification_table}{blacklist_info}{reveal_reminder}
 Available targets: {targets_str}
 
-**Verification Strategy**:
-- First night: Aggressive speakers, edge positions
-- Later nights: Contradictory speakers, silent players, abnormal voters
-- Priority: Suspicious speech + wavering stance + abnormal voting
+**Verification Strategy (Optimized)**:
+1. **Absolutely avoid**: Checking garbled/silent/random-voting players (waste of check)
+2. **Priority targets**:
+   - Aggressive speakers, vote manipulators (possible charging wolves)
+   - Players with contradictory logic
+   - Abnormal voters, wavering stances
+   - Heavily questioned players with weak defense
+3. **Secondary**: Edge positions, vague speakers
 
 Fill action_target with the seat number to verify.
 """
@@ -716,12 +1113,17 @@ Available targets: {targets_str}
 """
 
     # Assemble context with language-specific headers
+    # P2优化：为好人阵营添加投票模式分析
+    voting_analysis = ""
+    if player.role.value not in WOLF_ROLE_VALUES:
+        voting_analysis = _build_voting_pattern_analysis(game, player, language)
+
     if language == "zh":
         context_prompt = f"""# 当前游戏状态
 第 {game.day} 天
 存活玩家：{alive_str}
 已出局玩家：{dead_str}
-
+{voting_analysis}
 # 历史发言记录
 {chat_str}
 {phase_instruction}
@@ -736,7 +1138,7 @@ Available targets: {targets_str}
 Day {game.day}
 Alive players: {alive_str}
 Eliminated players: {dead_str}
-
+{voting_analysis}
 # Chat History
 {chat_str}
 {phase_instruction}

@@ -72,6 +72,16 @@ SYSTEM_PROMPT_ZH = """# 私有信息（只有你知道）{wolf_info}{seer_info}{
    - 报验时机：第一天可以报金水建立信任，有查杀时果断报出
    - 对抗假跳：真预言家要自信，用查验逻辑证明自己
    - 遗言安排：临死前清晰报出所有查验结果和推理
+   - **【被悍跳时的反向逻辑攻击】**（极其重要）：
+     * 当有人对跳预言家时，不要只强调"我是真的"，这毫无说服力
+     * **攻击对方的逻辑漏洞**：
+       - 对方的查验对象选择是否合理？（为什么查那个人？）
+       - 对方的金水/查杀时机是否可疑？（是否在关键时刻才跳出来？）
+       - 对方保了谁、打了谁？（是否在保护狼队友？）
+       - 对方的票型是否和其"查验结果"矛盾？
+     * **用事实说话**：引用具体发言、投票记录来证明对方是假的
+     * **坑位学分析**：分析对方如果是真预言家，狼人的行为是否合理
+     * **主动引导**：让金水玩家帮你站队，形成逻辑链
 
    **女巫**：
    - 解药使用：首夜默认保留（除非被刀者明确暴露神职身份），后期谨慎
@@ -173,6 +183,13 @@ SYSTEM_PROMPT_ZH = """# 私有信息（只有你知道）{wolf_info}{seer_info}{
 - thought 是你的内心想法，用于分析局势
 - speak 是你要说的话，会被其他玩家看到
 - action_target 在发言阶段填 null，在投票/技能阶段填目标座位号
+
+# 【语言硬约束】
+**你只能使用中文输出。** 即使其他玩家使用英文或其他语言与你交流，你也必须始终用中文回复。
+- 禁止输出任何英文单词、短语或句子
+- 禁止中英混杂的表达方式
+- 所有 thought 和 speak 内容必须是纯中文
+- 违反此规则将导致角色扮演失败
 """
 
 # English template for system prompt body
@@ -247,6 +264,16 @@ SYSTEM_PROMPT_EN = """# Private Information (Only you know){wolf_info}{seer_info
    - Reveal timing: First day can reveal gold to build trust, reveal accusation decisively when found
    - Counter fake-claim: Real Seer must be confident, prove yourself with verification logic
    - Last words arrangement: Before death clearly report all verification results and reasoning
+   - **[Counter-Logic Attack When Fake-Claimed]** (Extremely Important):
+     * When someone counter-claims Seer, don't just say "I'm the real one" - this is unconvincing
+     * **Attack their logical flaws**:
+       - Is their verification target choice reasonable? (Why check that person?)
+       - Is their gold/kill timing suspicious? (Did they only claim at a critical moment?)
+       - Who did they protect/attack? (Are they protecting wolf teammates?)
+       - Does their voting pattern contradict their "verification results"?
+     * **Use facts**: Quote specific speeches and voting records to prove they're fake
+     * **Position analysis**: If they were real Seer, would the wolves' behavior make sense?
+     * **Lead actively**: Get your gold-checked players to support you, form a logical chain
 
    **Witch**:
    - Antidote use: First night default keep (unless killed person clearly exposed power role), later be cautious
@@ -348,4 +375,11 @@ Notes:
 - thought is your inner thinking, used to analyze situation
 - speak is what you say, will be seen by other players
 - action_target fill null during speech phase, fill target seat number during voting/ability phase
+
+# 【Language Hard Constraint】
+**You MUST output ONLY in English.** Even if other players communicate with you in Chinese or other languages, you must ALWAYS reply in English.
+- Prohibited to output any Chinese characters, words, or sentences
+- Prohibited to mix languages in your expression
+- All thought and speak content must be pure English
+- Violating this rule will result in roleplay failure
 """
