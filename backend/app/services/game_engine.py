@@ -251,9 +251,9 @@ class GameEngine:
                 if game.white_wolf_king_used_explode:
                     return {"success": False, "message": "你已使用过自爆技能"}
 
-                # Validate target (cannot self-destruct self, that makes no sense)
+                # Validate target (white wolf king self-destruct must target another player)
                 if target_id == player.seat_id:
-                    return {"success": False, "message": "不能自爆自己"}
+                    return {"success": False, "message": "白狼王自爆必须选择其他玩家作为目标"}
 
                 try:
                     validate_target(game, target_id, ActionType.SELF_DESTRUCT, player.seat_id, allow_abstain=False)
@@ -550,6 +550,12 @@ class GameEngine:
             # White wolf king self-destruct replaces normal wolf kill
             # Add explode target to unblockable deaths (cannot be saved by guard/witch)
             game.pending_deaths_unblockable.append(game.white_wolf_king_explode_target)
+
+            # 白狼王自爆后自己也死亡（无法被守卫/女巫阻挡）
+            white_wolf_king = game.get_player_by_role(Role.WHITE_WOLF_KING)
+            if white_wolf_king:
+                game.pending_deaths_unblockable.append(white_wolf_king.seat_id)
+
             # No night_kill_target (self-destruct replaces wolf kill)
             game.night_kill_target = None
         else:
