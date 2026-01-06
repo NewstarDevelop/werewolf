@@ -34,8 +34,8 @@ const ChatMessage = ({
 
     // Regular system message
     return (
-      <div className="flex justify-center my-3 animate-slide-up">
-        <div className="px-4 py-2 rounded-full bg-accent/10 border border-accent/20 text-accent text-sm">
+      <div className="flex justify-center my-3 animate-fade-in-up">
+        <div className="px-4 py-2 rounded-full bg-accent/10 border border-accent/20 text-accent text-sm backdrop-blur-sm shadow-sm">
           {message}
         </div>
       </div>
@@ -46,7 +46,7 @@ const ChatMessage = ({
     <div
       className={`flex ${
         isUser ? "justify-end" : "justify-start"
-      } mb-3 animate-slide-up`}
+      } mb-3 animate-fade-in-up`}
     >
       <div className={`max-w-[75%] ${isUser ? "order-2" : "order-1"}`}>
         <div
@@ -66,13 +66,13 @@ const ChatMessage = ({
           )}
         </div>
         <div
-          className={`px-4 py-2.5 rounded-2xl ${
+          className={`px-4 py-2.5 rounded-2xl transition-colors ${
             isUser
-              ? "bg-accent/20 border border-accent/30 rounded-br-md"
-              : "bg-muted border border-border rounded-bl-md"
+              ? "bg-accent/20 border border-accent/30 rounded-br-md shadow-[var(--shadow-message-user)]"
+              : "bg-muted/80 border border-white/5 rounded-bl-md backdrop-blur-sm"
           }`}
         >
-          <p className="text-sm text-foreground/90">{message}</p>
+          <p className="text-sm text-foreground/90 leading-relaxed">{message}</p>
         </div>
       </div>
     </div>

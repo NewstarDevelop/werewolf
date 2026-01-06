@@ -91,11 +91,11 @@ const GameActions = ({
   };
 
   return (
-    <div className="bg-card/80 backdrop-blur-sm border-t border-border p-3">
+    <div className="glass-panel-dark border-t border-white/5 p-3">
       <div className="flex flex-col gap-3">
         {/* Action hint - P1-1: Use translated message for consistency */}
         {(translatedMessage || pendingAction?.message) && (
-          <div className="text-center text-sm text-accent bg-accent/10 py-2 px-4 rounded-lg">
+          <div className="text-center text-sm text-accent bg-accent/10 py-2 px-4 rounded-lg border border-accent/20 animate-fade-in">
             {translatedMessage || pendingAction?.message}
           </div>
         )}

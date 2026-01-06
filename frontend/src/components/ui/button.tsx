@@ -5,18 +5,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_hsl(0_72%_50%/0.4)] hover:shadow-[0_0_30px_hsl(0_72%_50%/0.5)]",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_hsl(0_72%_50%/0.4)] hover:shadow-[0_0_30px_hsl(0_72%_50%/0.5)] hover:-translate-y-0.5",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:-translate-y-0.5",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground hover:border-accent/50",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        vote: "bg-[hsl(0_72%_45%)] text-[hsl(0_0%_100%)] hover:bg-[hsl(0_72%_45%)]/90 shadow-[0_0_20px_hsl(0_72%_50%/0.4)] hover:shadow-[0_0_30px_hsl(0_72%_50%/0.6)] font-display uppercase tracking-wider",
-        skill: "bg-accent text-accent-foreground hover:bg-accent/90 shadow-[0_0_20px_hsl(215_60%_50%/0.3)] hover:shadow-[0_0_30px_hsl(215_60%_50%/0.5)] font-display uppercase tracking-wider",
+        vote: "bg-[hsl(0_72%_45%)] text-[hsl(0_0%_100%)] hover:bg-[hsl(0_72%_45%)]/90 shadow-[0_0_20px_hsl(0_72%_50%/0.4)] hover:shadow-[0_0_30px_hsl(0_72%_50%/0.6)] font-display uppercase tracking-wider hover:-translate-y-0.5",
+        skill: "bg-accent text-accent-foreground hover:bg-accent/90 shadow-[0_0_20px_hsl(215_60%_50%/0.3)] hover:shadow-[0_0_30px_hsl(215_60%_50%/0.5)] font-display uppercase tracking-wider hover:-translate-y-0.5",
         muted: "bg-muted text-muted-foreground hover:bg-muted/80",
       },
       size: {

@@ -75,7 +75,7 @@ const PlayerCard = ({
   const getBackgroundClass = () => {
     if (isSelected) return "bg-werewolf/20 scale-105";
     if (isCurrentActor && isUser) return "bg-yellow-400/20 scale-105";
-    return "bg-card/50";
+    return "glass-panel";
   };
 
   // P2-5: Generate accessible label describing player state

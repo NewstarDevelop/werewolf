@@ -39,10 +39,10 @@ const GameStatusBar = ({
   const isMobile = useIsMobile();
 
   return (
-    <header className="relative flex items-center justify-between px-4 py-3 bg-card/80 backdrop-blur-sm border-b border-border">
+    <header className="relative flex items-center justify-between px-4 py-3 glass-panel-dark border-b border-white/5">
       {/* Decorative glow */}
       <div
-        className={`absolute inset-0 opacity-20 transition-colors duration-1000 ${
+        className={`absolute inset-0 opacity-30 transition-all duration-1000 ${
           isGameOver
             ? winner === "villager"
               ? "bg-gradient-to-r from-transparent via-villager/30 to-transparent"
@@ -138,9 +138,9 @@ const GameStatusBar = ({
               }`}
             >
               {isNight ? (
-                <Moon className="w-5 h-5 text-moonlight animate-pulse-glow" />
+                <Moon className="w-5 h-5 text-moonlight animate-glow-pulse" />
               ) : (
-                <Sun className="w-5 h-5 text-day animate-pulse-glow" />
+                <Sun className="w-5 h-5 text-day animate-glow-pulse" />
               )}
               <span
                 className={`font-display text-lg font-bold ${

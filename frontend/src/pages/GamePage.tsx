@@ -290,10 +290,15 @@ const GamePage = () => {
     : "";
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-black overflow-hidden">
-      {/* Atmospheric background - removed for pure black */}
-
-      {/* Moon/Sun glow effect - removed for pure black */}
+    <div className="flex flex-col h-[100dvh] bg-black overflow-hidden relative">
+      {/* Atmospheric background */}
+      <div className="absolute inset-0 atmosphere-night pointer-events-none" />
+      <div className={`absolute inset-0 transition-opacity duration-1000 pointer-events-none ${isNight ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="absolute inset-0 atmosphere-moonlight" />
+      </div>
+      <div className={`absolute inset-0 transition-opacity duration-1000 pointer-events-none ${!isNight ? 'opacity-30' : 'opacity-0'}`}>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-transparent to-transparent" />
+      </div>
 
       {/* Status Bar */}
       <div className="relative z-10">

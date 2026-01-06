@@ -49,14 +49,23 @@
     --chat-other: 220 18% 18%;
 
     /* Gradients */
-    --gradient-night: linear-gradient(180deg, hsl(222 30% 6%) 0%, hsl(222 35% 12%) 100%);
+    --gradient-night: linear-gradient(to bottom, hsl(222 30% 5%), hsl(222 35% 8%));
+    --gradient-deep-space: radial-gradient(circle at center, hsl(222 30% 10%) 0%, hsl(222 30% 4%) 100%);
     --gradient-card: linear-gradient(145deg, hsl(222 22% 12%) 0%, hsl(222 25% 8%) 100%);
     --gradient-glow: radial-gradient(circle, hsl(0 72% 50% / 0.3) 0%, transparent 70%);
+    --gradient-glass: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+    --gradient-moonlight: radial-gradient(ellipse at top, hsl(215 60% 70% / 0.15) 0%, transparent 60%);
+    --gradient-blood: radial-gradient(circle at center, hsl(0 72% 45% / 0.2) 0%, transparent 70%);
 
     /* Shadows */
     --shadow-card: 0 8px 32px hsl(0 0% 0% / 0.4);
     --shadow-glow-red: 0 0 20px hsl(0 72% 50% / 0.4);
     --shadow-glow-blue: 0 0 20px hsl(215 60% 50% / 0.3);
+    --shadow-inner-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+    --shadow-elevation-1: 0 2px 8px hsl(0 0% 0% / 0.3);
+    --shadow-elevation-2: 0 4px 16px hsl(0 0% 0% / 0.4);
+    --shadow-elevation-3: 0 8px 32px hsl(0 0% 0% / 0.5);
+    --shadow-message-user: 0 2px 8px rgba(59, 130, 246, 0.15);
 
     --sidebar-background: 222 25% 6%;
     --sidebar-foreground: 210 20% 92%;
@@ -100,6 +109,11 @@
     font-family: 'Cinzel', serif;
     letter-spacing: 0.02em;
   }
+
+  /* Custom selection color */
+  ::selection {
+    @apply bg-accent/30 text-accent-foreground;
+  }
 }
 
 @layer utilities {
@@ -125,6 +139,74 @@
 
   .animate-float {
     animation: float 4s ease-in-out infinite;
+  }
+
+  /* New animations */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+
+  .animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  /* Glass morphism utilities */
+  .glass-panel {
+    @apply bg-card/30 backdrop-blur-md border border-white/5;
+    box-shadow: var(--shadow-inner-glow), var(--shadow-elevation-2);
+  }
+
+  .glass-panel-dark {
+    @apply bg-black/40 backdrop-blur-lg border border-white/5;
+    box-shadow: var(--shadow-inner-glow), var(--shadow-elevation-3);
+  }
+
+  .glass-card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .glass-card-hover:hover {
+    @apply bg-card/50 border-accent/30 -translate-y-1;
+    box-shadow: var(--shadow-glow-blue), var(--shadow-elevation-2);
+  }
+
+  /* Atmospheric effects */
+  .atmosphere-night {
+    background: var(--gradient-night);
+  }
+
+  .atmosphere-moonlight {
+    background: var(--gradient-moonlight);
+  }
+
+  .atmosphere-blood {
+    background: var(--gradient-blood);
+  }
+
+  /* Text effects */
+  .text-gradient-werewolf {
+    @apply bg-gradient-to-r from-red-500 via-red-400 to-orange-500 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-moonlight {
+    @apply bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent;
   }
 
   /* Custom scrollbar styles */
@@ -155,6 +237,58 @@
     50% { transform: translateY(-5px); }
   }
 
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes glowPulse {
+    0%, 100% {
+      box-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+    }
+    50% {
+      box-shadow: 0 0 15px currentColor, 0 0 25px currentColor;
+    }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
   }
@@ -171,5 +305,27 @@
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Respect user's reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-fade-in-up,
+    .animate-slide-up,
+    .animate-scale-in,
+    .animate-glow-pulse,
+    .animate-shimmer,
+    .animate-pulse-slow,
+    .animate-float {
+      animation: none !important;
+    }
+
+    .glass-card-hover:hover {
+      transform: none !important;
+    }
+
+    * {
+      transition-duration: 0.01ms !important;
+    }
   }
 }
