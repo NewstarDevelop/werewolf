@@ -2,24 +2,23 @@ import { memo } from "react";
 import { User, Skull, Shield, Search, Crosshair, FlaskConical, Target, Crown, Ghost } from "lucide-react";
 import { type Role } from "@/services/api";
 import { useTranslation } from "react-i18next";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { cva } from 'class-variance-authority';
 
 const playerCardVariants = cva(
-  'relative group flex flex-col items-center gap-2 rounded-xl transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+  'relative group flex flex-col items-center gap-2 rounded-xl transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background select-none backface-hidden will-change-transform',
   {
     variants: {
       status: {
         alive: '',
-        dead: 'opacity-50 cursor-not-allowed grayscale',
+        dead: 'opacity-40 grayscale blur-[0.5px]',
       },
       selectable: {
-        true: 'hover:scale-105 hover:bg-muted/50 cursor-pointer',
+        true: 'hover:scale-105 hover:bg-muted/50 cursor-pointer active:scale-95',
         false: 'cursor-not-allowed',
       },
       selected: {
-        true: 'bg-werewolf/20 scale-105',
-        false: 'glass-panel',
+        true: 'bg-werewolf/20 scale-105 shadow-glow-red',
+        false: 'glass-panel hover:shadow-lg',
       },
       isCurrentActor: {
         true: 'bg-yellow-400/20 scale-105',
@@ -103,15 +102,6 @@ const PlayerCard = ({
   isKillTarget = false,
 }: PlayerCardProps) => {
   const { t } = useTranslation(['common', 'roles']);
-  const isMobile = useIsMobile();
-
-  // Responsive sizing constants
-  const padding = isMobile ? "p-2.5" : "p-3";
-  const avatarSize = isMobile ? "w-12 h-12" : "w-14 h-14";
-  const iconSize = isMobile ? "w-6 h-6" : "w-7 h-7";
-  const nameMaxWidth = isMobile ? "max-w-[60px]" : "max-w-[90px]";
-  const badgeOffset = isMobile ? "-top-1 -left-1" : "-top-2 -left-2";
-  const badgeOffsetRight = isMobile ? "-top-1 -right-1" : "-top-2 -right-2";
 
   const getRoleIcon = () => {
     if (!role) return null;
@@ -194,7 +184,7 @@ const PlayerCard = ({
       aria-label={getAccessibleLabel()}
       aria-pressed={isSelected}
       className={`
-        ${padding}
+        p-2.5 md:p-3
         ${playerCardVariants({
           status: isAlive ? 'alive' : 'dead',
           selectable: isAlive && isSelectable,
@@ -206,7 +196,7 @@ const PlayerCard = ({
       `}
     >
       {/* Seat number badge */}
-      <div className={`absolute ${badgeOffset} w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center z-10`}>
+      <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center z-10">
         <span className="text-[10px] font-bold text-muted-foreground">
           {seatId}
         </span>
@@ -214,14 +204,14 @@ const PlayerCard = ({
 
       {/* Current actor indicator - highest priority */}
       {isCurrentActor && isAlive && (
-        <div className={`absolute ${badgeOffsetRight} z-10`}>
+        <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 z-10">
           <Target className="w-4 h-4 text-accent animate-pulse" />
         </div>
       )}
 
       {/* Wolf teammate indicator - only show when not current actor */}
       {isWolfTeammate && !isUser && !isCurrentActor && (
-        <div className={`absolute ${badgeOffsetRight} z-10`}>
+        <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 z-10">
           <Skull className="w-4 h-4 text-werewolf" />
         </div>
       )}
@@ -229,7 +219,7 @@ const PlayerCard = ({
       {/* Verification result indicator - only show when no other right indicators */}
       {verificationResult !== undefined && !isUser && !isCurrentActor && !isWolfTeammate && (
         <div
-          className={`absolute ${badgeOffsetRight} w-4 h-4 rounded-full z-10 ${
+          className={`absolute -top-1 -right-1 md:-top-2 md:-right-2 w-4 h-4 rounded-full z-10 ${
             verificationResult ? "bg-werewolf" : "bg-villager"
           }`}
         />
@@ -238,7 +228,7 @@ const PlayerCard = ({
       {/* Avatar */}
       <div
         className={`
-          relative ${avatarSize} rounded-full flex items-center justify-center
+          relative w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center
           transition-all duration-300
           ${
             isAlive
@@ -251,14 +241,14 @@ const PlayerCard = ({
       >
         {isAlive ? (
           <User
-            className={`${iconSize} ${
+            className={`w-6 h-6 md:w-7 md:h-7 ${
               isSelected
                 ? "text-werewolf"
                 : "text-muted-foreground group-hover:text-accent"
             }`}
           />
         ) : (
-          <Skull className={`${iconSize} text-muted-foreground/50`} />
+          <Skull className="w-6 h-6 md:w-7 md:h-7 text-muted-foreground/50" />
         )}
 
         {/* Role badge for user */}
@@ -272,7 +262,7 @@ const PlayerCard = ({
       {/* Name */}
       <div className="text-center min-h-[32px] flex flex-col items-center justify-center gap-1">
         <p
-          className={`text-sm font-semibold truncate ${nameMaxWidth} ${
+          className={`text-sm font-semibold truncate max-w-[60px] md:max-w-[90px] ${
             isAlive
               ? isSelected
                 ? "text-werewolf"

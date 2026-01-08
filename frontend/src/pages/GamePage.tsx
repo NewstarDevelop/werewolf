@@ -17,7 +17,6 @@ import {
 } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { translateSystemMessage, translateActionMessage } from "@/utils/messageTranslator";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 interface UIPlayer {
   id: number;
@@ -32,7 +31,6 @@ const GamePage = () => {
   const { t } = useTranslation(['common', 'game']);
   const { gameId: gameIdFromRoute } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
 
   // Validate gameId exists - redirect to lobby if missing
   useEffect(() => {
@@ -319,14 +317,14 @@ const GamePage = () => {
       </div>
 
       {/* Main Content */}
-      <div className={`relative z-10 flex flex-1 overflow-hidden ${isMobile ? 'flex-col p-2 gap-2' : 'flex-row p-4 gap-4'}`}>
+      <div className="relative z-10 flex flex-1 overflow-hidden flex-col md:flex-row p-3 gap-3 md:p-6 md:gap-6 max-w-[1920px] mx-auto w-full">
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 shadow-2xl rounded-2xl overflow-hidden glass-panel border border-white/10 ring-1 ring-black/5">
           <ChatLog messages={messages} isLoading={isLoading} />
         </div>
 
         {/* Right Sidebar: Players */}
-        <div className={isMobile ? 'w-full max-h-[35vh] shrink-0' : 'w-80 shrink-0'}>
+        <div className="w-full md:w-[340px] lg:w-[380px] shrink-0 max-h-[40vh] md:max-h-none flex flex-col">
           <PlayerGrid
             players={players}
             selectedPlayerId={selectedPlayerId}

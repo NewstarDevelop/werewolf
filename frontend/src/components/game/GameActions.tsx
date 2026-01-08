@@ -101,7 +101,7 @@ const GameActions = ({
         )}
 
         {/* Chat Input */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 items-center bg-black/20 p-1.5 rounded-2xl border border-white/5 focus-within:border-accent/50 focus-within:bg-black/40 focus-within:shadow-[0_0_15px_rgba(0,0,0,0.3)] transition-all duration-300">
           <div className="flex-1 relative">
             <input
               type="text"
@@ -116,15 +116,15 @@ const GameActions = ({
               }
               disabled={!canSpeak || isSubmitting}
               aria-label={t('message.input_label')}
-              className="w-full px-4 py-2 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="w-full px-4 py-2 h-10 bg-transparent border-none text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base font-medium"
             />
           </div>
           <Button
             type="submit"
             size="icon"
-            variant="muted"
+            variant="ghost"
             disabled={!canSpeak || !message.trim() || isSubmitting}
-            className="h-10 w-10"
+            className="h-10 w-10 rounded-xl hover:bg-accent hover:text-accent-foreground transition-all duration-300 active:scale-95"
             aria-label={t('action.send')}
           >
             {isSubmitting ? (
@@ -141,7 +141,7 @@ const GameActions = ({
             variant="vote"
             onClick={onVote}
             disabled={!canVote || isSubmitting}
-            className="flex-1"
+            className="flex-1 h-11 md:h-10"
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -155,7 +155,7 @@ const GameActions = ({
             variant="skill"
             onClick={onUseSkill}
             disabled={(!canUseSkill && pendingAction?.type !== 'self_destruct') || isSubmitting}
-            className="flex-1"
+            className="flex-1 h-11 md:h-10"
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -170,7 +170,7 @@ const GameActions = ({
               variant="muted"
               onClick={getSkipHandler()}
               disabled={isSubmitting}
-              className="w-24"
+              className="w-24 h-11 md:h-10"
             >
               <SkipForward className="w-4 h-4" />
               {t('action.skip')}

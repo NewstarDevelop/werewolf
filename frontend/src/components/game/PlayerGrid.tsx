@@ -2,7 +2,6 @@ import PlayerCard from "./PlayerCard";
 import { Users } from "lucide-react";
 import { PendingAction, Role } from "@/services/api";
 import { useTranslation } from "react-i18next";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Player {
   id: number;
@@ -39,16 +38,12 @@ const PlayerGrid = ({
   nightKillTarget,
 }: PlayerGridProps) => {
   const { t } = useTranslation('common');
-  const isMobile = useIsMobile();
-
-  // Responsive sizing constants
-  const cardContainerWidth = isMobile ? 'w-16' : 'w-24';
 
   // Determine which players can be selected based on pending action
   const selectableIds = pendingAction?.choices || [];
 
   return (
-    <div className={`bg-card/50 rounded-xl border border-border flex flex-col ${isMobile ? 'p-2 h-full overflow-y-auto scrollbar-thin' : 'p-3 min-h-[500px] max-h-[70vh] overflow-y-auto scrollbar-thin'}`}>
+    <div className="bg-card/50 rounded-xl border border-border flex flex-col p-2 md:p-3 h-full md:h-auto md:min-h-[500px] md:max-h-[70vh] overflow-y-auto scrollbar-thin">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border shrink-0">
         <Users className="w-4 h-4 text-accent" />
@@ -61,9 +56,7 @@ const PlayerGrid = ({
       </div>
 
       {/* Responsive Grid Layout */}
-      <div className={`grid w-full place-items-center ${isMobile ? 'content-start' : 'content-center'} gap-2 sm:gap-6 ${
-        players.length >= 12 ? 'grid-cols-3' : 'grid-cols-3'
-      } ${isMobile ? 'auto-rows-min' : ''}`}>
+      <div className="grid w-full place-items-center content-start md:content-center gap-3 sm:gap-4 md:gap-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 auto-rows-min md:auto-rows-auto pb-4">
         {players.map((player) => {
           // Check if this player is a wolf teammate (for any wolf role)
           const isWolfRole = myRole === "werewolf" || myRole === "wolf_king" || myRole === "white_wolf_king";
@@ -84,7 +77,7 @@ const PlayerGrid = ({
           return (
             <div
               key={player.id}
-              className={`flex justify-center items-center transition-all duration-300 ease-in-out min-w-0 ${cardContainerWidth}`}
+              className="flex justify-center items-center transition-all duration-300 ease-in-out w-full"
             >
               <PlayerCard
                 seatId={player.seatId}
