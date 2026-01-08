@@ -270,12 +270,42 @@ def build_system_prompt(player: "Player", game: "Game", language: str = "zh") ->
     # Personality description
     personality_desc = ""
     if player.personality:
-        trait_desc = t(f"personality.traits.{player.personality.trait}", language=language)
+        # Try to get wolf-specific trait if player is a wolf
+        trait_key = f"personality.traits.{player.personality.trait}"
+        if player.role.value in WOLF_ROLE_VALUES:
+            wolf_trait_key = f"{trait_key}_狼人"
+            trait_desc = t(wolf_trait_key, language=language, default=None)
+            if not trait_desc:  # Fallback to general trait if wolf version doesn't exist
+                trait_desc = t(trait_key, language=language)
+        else:
+            trait_desc = t(trait_key, language=language)
+
         style_desc = t(f"personality.styles.{player.personality.speaking_style}", language=language)
         personality_desc = f"""
 {t('prompts.your_name', language=language, name=player.personality.name)}
 {t('prompts.personality_trait', language=language, trait=trait_desc)}
 {t('prompts.speaking_style', language=language, style=style_desc)}
+"""
+
+        # Add emotional constraint for aggressive wolves
+        if player.role.value in WOLF_ROLE_VALUES and player.personality.trait == "激进":
+            if language == "zh":
+                personality_desc += """
+
+⚠️ 情绪管理检查点:
+- 攻击前必须列出2-3条逻辑证据
+- 避免纯情绪输出(如"我就是觉得他有问题")
+- 用理性包装你的攻击性,让好人觉得你是"正义的愤怒"
+- 你的目标是制造混乱,但不能让自己显得可疑
+"""
+            else:
+                personality_desc += """
+
+⚠️ Emotional Management Checkpoint:
+- List 2-3 logical evidence points before attacking
+- Avoid pure emotional output (e.g., "I just feel they're suspicious")
+- Wrap your aggression in rationality, make villagers see you as "righteous anger"
+- Your goal is to create chaos without making yourself suspicious
 """
 
     # Wolf teammates info (only for werewolves, wolf_king, white_wolf_king)
@@ -413,6 +443,14 @@ def build_context_prompt(player: "Player", game: "Game", action_type: str = "spe
 
     chat_str = "\n".join(chat_history) if chat_history else no_messages_label
 
+    # Wolf night plan context (inject for wolves during day)
+    wolf_plan_context = ""
+    if player.role.value in WOLF_ROLE_VALUES and game.wolf_night_plan and game.phase.value.startswith("day"):
+        if language == "zh":
+            wolf_plan_context = f"\n\n💡 **昨晚团队计划**: {game.wolf_night_plan}\n记住团队战术,白天行动要配合夜间计划\n"
+        else:
+            wolf_plan_context = f"\n\n💡 **Last Night's Team Plan**: {game.wolf_night_plan}\nRemember the team tactics, coordinate day actions with night plan\n"
+
     # Phase-specific instructions
     phase_instruction = ""
     if action_type == "speech":
@@ -536,14 +574,19 @@ You are the Seer. In 12-player games, Day 1 claim is recommended:
 **首发位策略（你是第一个发言）**：
 - **信息量有限**：你之前没有任何人的发言可以参考
 - **设定基调**：你的发言会影响后续玩家的思路和节奏
-- **谨慎表态**：
-  - 如果你是预言家，可以选择跳或不跳（视局势而定）
-  - 如果你是狼人，不要过早暴露队友，先观察
-  - 如果你是村民，可以抛出一些疑点引导讨论
-- **建议内容**：
-  - 总结夜晚结果（谁死了、怎么死的）
-  - 提出1-2个疑点或观察
-  - 不要过早站队或下死结论
+
+📋 首置位发言结构化模板:
+1. 分析昨晚死亡情况(谁死了?可能原因?)
+   - 例如: "昨晚X号死了,如果是狼刀可能因为他发言太好"
+2. 表明身份倾向(不暴露神职,但展示思考)
+   - 如果你是预言家,可以选择跳或不跳(视局势而定)
+   - 如果你是狼人,不要过早暴露队友,先观察
+   - 如果你是村民,可以抛出一些疑点引导讨论
+3. 提出观察重点(后置位应该关注什么)
+   - 例如: "我会重点听后置位对X号的评价,看谁试图带节奏"
+4. 避免空话(不要说"我没什么好说的")
+
+**关键**: 首置位不是劣势,而是设定讨论方向的机会
 """
                 elif speech_position >= total_speakers - 1:
                     position_strategy = f"""
@@ -597,14 +640,19 @@ You are the Seer. In 12-player games, Day 1 claim is recommended:
 **First Speaker Strategy (You speak first)**:
 - **Limited information**: You have no previous speeches to reference
 - **Set the tone**: Your speech will influence subsequent players' thinking
-- **Cautious stance**:
-  - If you're the seer, decide whether to claim (depends on situation)
-  - If you're a werewolf, don't expose teammates early, observe first
-  - If you're a villager, raise some suspicions to guide discussion
-- **Suggested content**:
-  - Summarize night results (who died, how)
-  - Raise 1-2 suspicions or observations
-  - Don't take early sides or make absolute conclusions
+
+📋 First Speaker Structured Template:
+1. Analyze last night's deaths (who died? possible reasons?)
+   - Example: "Player X died last night, possibly because their speech was too good"
+2. Show your thinking (don't reveal god role, but demonstrate analysis)
+   - If you're the seer, decide whether to claim (depends on situation)
+   - If you're a werewolf, don't expose teammates early, observe first
+   - If you're a villager, raise some suspicions to guide discussion
+3. Suggest observation focus (what should later speakers watch for?)
+   - Example: "I'll focus on how later speakers evaluate Player X, watch for manipulation"
+4. Avoid empty talk (don't say "I have nothing to say")
+
+**Key**: First position isn't a disadvantage, it's an opportunity to set discussion direction
 """
                 elif speech_position >= total_speakers - 1:
                     position_strategy = f"""
@@ -677,10 +725,11 @@ It's your turn to speak. Analyze the situation and share your thoughts based on 
 """
             elif player.role.value == "seer":
                 role_specific_strategy = """
-**预言家投票策略**：
+**预言家投票策略**:
 - 坚定带队投出查杀
 - 通过逻辑证明自己是真预
 - 利用金水玩家帮你站队
+- 如遇悍跳,主动拆解对方逻辑漏洞(指出他的查杀/金水不合理之处)
 """
             elif player.role.value == "witch":
                 role_specific_strategy = """
@@ -690,9 +739,11 @@ It's your turn to speak. Analyze the situation and share your thoughts based on 
 """
             elif player.role.value == "hunter":
                 role_specific_strategy = """
-**猎人投票策略**：
+**猎人投票策略**:
 - 绝对隐藏身份
-- 记录可疑玩家，为死后开枪准备
+- 记录可疑玩家,为死后开枪准备
+- 如被怀疑,可软暗示:"投我需谨慎,某些身份不能轻易出"
+- 关键时刻可带队,但不暴露身份
 """
             else:  # villager
                 role_specific_strategy = """
@@ -747,6 +798,7 @@ It's your turn to speak. Analyze the situation and share your thoughts based on 
 - Lead team to vote out your checked wolves
 - Prove you're real seer through logic
 - Use your gold checks to support you
+- If facing counter-claim, actively deconstruct their logic flaws (point out unreasonable checks)
 """
             elif player.role.value == "witch":
                 role_specific_strategy = """
@@ -759,6 +811,8 @@ It's your turn to speak. Analyze the situation and share your thoughts based on 
 **Hunter Voting Strategy**:
 - Absolutely hide your identity
 - Remember suspicious players for your final shot
+- If suspected, soft hint: "Be careful voting me, some roles shouldn't be eliminated easily"
+- Can lead votes at key moments, but don't reveal identity
 """
             else:  # villager
                 role_specific_strategy = """
@@ -1123,7 +1177,7 @@ Available targets: {targets_str}
 第 {game.day} 天
 存活玩家：{alive_str}
 已出局玩家：{dead_str}
-{voting_analysis}
+{wolf_plan_context}{voting_analysis}
 # 历史发言记录
 {chat_str}
 {phase_instruction}
@@ -1138,7 +1192,7 @@ Available targets: {targets_str}
 Day {game.day}
 Alive players: {alive_str}
 Eliminated players: {dead_str}
-{voting_analysis}
+{wolf_plan_context}{voting_analysis}
 # Chat History
 {chat_str}
 {phase_instruction}
@@ -1194,7 +1248,33 @@ def build_wolf_strategy_prompt(player: "Player", game: "Game", language: str = "
     elif game.day == 1 and not seer_claimed:
         dead_players = [p for p in game.players.values() if not p.is_alive]
         if dead_players:
-            strategy_hints.append(t("prompts.wolf_strategy_first_claim", language=language))
+            # Check if a wolf teammate died on night 1 (self-knife strategy)
+            dead_wolves = [p for p in dead_players if p.role.value in WOLF_ROLE_VALUES]
+            if dead_wolves:
+                # Assign the smallest seat number alive wolf to claim seer
+                alive_wolves = [p.seat_id for p in game.players.values()
+                               if p.is_alive and p.role.value in WOLF_ROLE_VALUES]
+                if alive_wolves and player.seat_id == min(alive_wolves):
+                    if language == "zh":
+                        strategy_hints.append("""
+🚨 紧急战术: 队友首夜死亡(疑似自刀)
+你必须立即起跳预言家配合自刀战术:
+- 给死亡队友发金水(利用银水身份获取信任)
+- 或给某好人发查杀(制造混乱,转移注意力)
+- 这是自刀战术的核心,不起跳等于白白牺牲队友
+- 记住:你的目标是利用"银水"身份做高自己或污真预言家
+""")
+                    else:
+                        strategy_hints.append("""
+🚨 URGENT TACTIC: Teammate died first night (suspected self-knife)
+You MUST immediately claim Seer to support the self-knife strategy:
+- Give gold result to dead teammate (leverage silver water status for trust)
+- Or give kill result to a villager (create chaos, divert attention)
+- This is the core of self-knife tactics - not claiming wastes teammate's sacrifice
+- Remember: Your goal is to leverage "silver water" status to gain trust or discredit real Seer
+""")
+            else:
+                strategy_hints.append(t("prompts.wolf_strategy_first_claim", language=language))
 
     # Scenario 3: Mid-game, consider using emotional players
     if game.day >= 2:

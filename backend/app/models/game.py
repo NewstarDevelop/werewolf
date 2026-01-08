@@ -170,6 +170,7 @@ class Game:
     night_kill_target: Optional[int] = None
     wolf_votes: dict[int, int] = field(default_factory=dict)  # wolf_seat -> target_seat
     wolf_chat_completed: set[int] = field(default_factory=set)  # Seats that completed wolf chat
+    wolf_night_plan: Optional[str] = None  # Summary of wolf team's night discussion and strategy
     guard_target: Optional[int] = None  # Guard's protection target this night
     guard_last_target: Optional[int] = None  # Last night's protection target (for consecutive guard rule)
     guard_decided: bool = False  # Track if guard has made decision this night

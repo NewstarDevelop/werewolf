@@ -175,12 +175,15 @@ class GameEngine:
         if not is_human_player:
             return {"success": False, "message": "Invalid player"}
 
+        # Allow dead Hunter or Wolf King to shoot in their respective phases
+        # Hunter: can shoot if not poisoned (can_shoot=True)
+        # Wolf King: can always shoot when voted out during day
         allow_dead_hunter_shoot = (
-            game.phase == GamePhase.HUNTER_SHOOT
-            and player.role == Role.HUNTER
+            game.phase in (GamePhase.HUNTER_SHOOT, GamePhase.DEATH_SHOOT)
+            and player.role in (Role.HUNTER, Role.WOLF_KING)
             and game.current_actor_seat == player.seat_id
-            and player.can_shoot
             and action_type in (ActionType.SHOOT, ActionType.SKIP)
+            and (player.role == Role.WOLF_KING or player.can_shoot)  # Wolf King always can, Hunter checks can_shoot
         )
         if not player.is_alive and not allow_dead_hunter_shoot:
             return {"success": False, "message": "Player is dead"}
@@ -524,6 +527,8 @@ class GameEngine:
                 game.wolf_chat_completed.add(wolf.seat_id)
 
         # All werewolves have chatted, move to kill vote phase
+        # Summarize wolf night plan before moving to next phase
+        game.wolf_night_plan = self._summarize_wolf_plan(game)
         game.add_message(0, t("system_messages.werewolf_discussion_end", language=game.language), MessageType.SYSTEM)
         game.phase = GamePhase.NIGHT_WEREWOLF
         game.increment_version()
@@ -1157,6 +1162,57 @@ class GameEngine:
         game.add_message(0, t("system_messages.game_over", language=game.language, winner=winner_text), MessageType.SYSTEM)
         game.increment_version()
         return {"status": "game_over", "winner": game.winner}
+
+    def _summarize_wolf_plan(self, game: Game) -> str:
+        """Summarize wolf team's night discussion and strategy."""
+        wolf_messages = [msg for msg in game.messages
+                        if msg.msg_type == MessageType.WOLF_CHAT and msg.day == game.day]
+
+        if not wolf_messages:
+            return ""
+
+        # Extract key strategy keywords
+        keywords = {
+            "zh": {
+                "self_knife": ["自刀", "刀自己", "刀队友"],
+                "claim_seer": ["跳预言家", "悍跳", "起跳"],
+                "target": ["刀", "击杀", "杀"],
+                "hide": ["深水", "隐藏", "低调"],
+                "attack": ["冲锋", "带节奏", "攻击"]
+            },
+            "en": {
+                "self_knife": ["self-knife", "knife teammate"],
+                "claim_seer": ["claim seer", "counter-claim", "fake seer"],
+                "target": ["kill", "target", "eliminate"],
+                "hide": ["hide", "stay low", "deep wolf"],
+                "attack": ["charge", "lead", "attack"]
+            }
+        }
+
+        lang = "zh" if game.language == "zh" else "en"
+        strategy_points = []
+
+        # Analyze messages for strategy keywords
+        for msg in wolf_messages:
+            content = msg.content.lower()
+            for strategy, patterns in keywords[lang].items():
+                if any(pattern in content for pattern in patterns):
+                    if strategy == "self_knife":
+                        strategy_points.append("自刀战术" if lang == "zh" else "Self-knife tactic")
+                    elif strategy == "claim_seer":
+                        strategy_points.append("悍跳预言家" if lang == "zh" else "Fake seer claim")
+                    elif strategy == "target":
+                        # Extract target number if mentioned
+                        import re
+                        numbers = re.findall(r'(\d+)号', content) if lang == "zh" else re.findall(r'#(\d+)', content)
+                        if numbers:
+                            strategy_points.append(f"目标{numbers[0]}号" if lang == "zh" else f"Target #{numbers[0]}")
+
+        # Remove duplicates and join
+        strategy_points = list(dict.fromkeys(strategy_points))
+        if strategy_points:
+            return ", ".join(strategy_points[:3])  # Limit to 3 key points
+        return ""
 
 
 # Global engine instance

@@ -497,11 +497,20 @@ class LLMService:
         return response.action_target if response.action_target else random.choice(targets)
 
     async def decide_witch_action(self, player: "Player", game: "Game") -> dict:
-        """Decide witch action (save/poison) (WL-010: async)."""
+        """Decide witch action (save/poison) with value calculation (WL-010: async)."""
         result = {"save": False, "poison_target": None}
 
         # First check if should save
         if player.has_save_potion and game.night_kill_target:
+            # Calculate save value
+            save_value = self._calculate_save_value(game, game.night_kill_target)
+
+            # High-value targets (revealed seer) must be saved
+            if save_value >= 80:
+                result["save"] = True
+                return result  # Can't use both in same night
+
+            # For medium-value targets, let LLM decide
             response = await self.generate_response(
                 player, game, "witch_save", [game.night_kill_target, 0]
             )
@@ -523,6 +532,35 @@ class LLMService:
                     result["poison_target"] = response.action_target
 
         return result
+
+    def _calculate_save_value(self, game: "Game", target_id: int) -> int:
+        """Calculate the value of saving a target (0-100)."""
+        target = game.players.get(target_id)
+        if not target:
+            return 0
+
+        # Revealed seer is highest priority
+        if target.role.value == "seer":
+            # Check if seer has revealed (claimed in messages)
+            for msg in game.messages:
+                if msg.seat_id == target_id:
+                    content = msg.content.lower()
+                    seer_patterns = ["我是预言家", "i am the seer", "i'm the seer", "本预言家"]
+                    if any(pattern in content for pattern in seer_patterns):
+                        return 100  # Must save revealed seer
+
+        # Check if target is suspected wolf (don't save)
+        # This is a simplified check - could be enhanced with voting pattern analysis
+        wolf_suspicion = 0
+        for action in game.actions:
+            if action.action_type.value == "vote" and action.target_id == target_id:
+                wolf_suspicion += 1
+
+        if wolf_suspicion >= 3:  # Many people voted for them
+            return 0  # Likely wolf, don't save
+
+        # Default value for unknown players
+        return 50
 
     async def decide_vote_target(
         self, player: "Player", game: "Game", targets: list[int]
