@@ -3,6 +3,72 @@ import { User, Skull, Shield, Search, Crosshair, FlaskConical, Target, Crown, Gh
 import { type Role } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cva } from 'class-variance-authority';
+
+const playerCardVariants = cva(
+  'relative group flex flex-col items-center gap-2 rounded-xl transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+  {
+    variants: {
+      status: {
+        alive: '',
+        dead: 'opacity-50 cursor-not-allowed grayscale',
+      },
+      selectable: {
+        true: 'hover:scale-105 hover:bg-muted/50 cursor-pointer',
+        false: 'cursor-not-allowed',
+      },
+      selected: {
+        true: 'bg-werewolf/20 scale-105',
+        false: 'glass-panel',
+      },
+      isCurrentActor: {
+        true: 'bg-yellow-400/20 scale-105',
+        false: '',
+      },
+      isUser: {
+        true: 'ring-2 ring-accent/30',
+        false: '',
+      },
+    },
+    compoundVariants: [
+      {
+        status: 'alive',
+        selectable: true,
+        className: '',
+      },
+      {
+        selected: true,
+        isCurrentActor: true,
+        className: 'bg-yellow-400/20',
+      },
+    ],
+    defaultVariants: {
+      status: 'alive',
+      selectable: true,
+      selected: false,
+      isCurrentActor: false,
+      isUser: false,
+    },
+  }
+);
+
+const playerCardBorderVariants = cva('', {
+  variants: {
+    borderType: {
+      currentActorUser: 'border-2 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse z-20',
+      currentActor: 'border-2 border-accent animate-pulse z-20',
+      selected: 'border-2 border-werewolf shadow-glow-red',
+      killTarget: 'border-2 border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)] animate-pulse',
+      wolfTeammate: 'border-2 border-werewolf/50',
+      verifiedWerewolf: 'border-2 border-werewolf/70',
+      verifiedGood: 'border-2 border-villager/70',
+      default: 'border border-border hover:border-accent/50',
+    },
+  },
+  defaultVariants: {
+    borderType: 'default',
+  },
+});
 
 interface PlayerCardProps {
   seatId: number;
@@ -71,13 +137,6 @@ const PlayerCard = ({
     }
   };
 
-  // Determine background class based on special status
-  const getBackgroundClass = () => {
-    if (isSelected) return "bg-werewolf/20 scale-105";
-    if (isCurrentActor && isUser) return "bg-yellow-400/20 scale-105";
-    return "glass-panel";
-  };
-
   // P2-5: Generate accessible label describing player state
   const getAccessibleLabel = () => {
     const parts: string[] = [];
@@ -91,27 +150,6 @@ const PlayerCard = ({
     if (isCurrentActor) parts.push(t('player.current_actor'));
     if (role) parts.push(t(`roles:${role}`));
     return parts.join(', ');
-  };
-
-  // Determine border color based on special status
-  const getBorderClass = () => {
-    // Speaking/acting has absolute highest priority - must be checked first!
-    if (isCurrentActor && isUser) return "border-2 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse z-20";
-    if (isCurrentActor) return "border-2 border-accent animate-pulse z-20";
-
-    // Selection state (second priority)
-    if (isSelected) return "border-2 border-werewolf shadow-glow-red";
-
-    // Kill target for witch save phase (third priority)
-    if (isKillTarget) return "border-2 border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)] animate-pulse";
-
-    // Team/verification states (lower priority, only show when NOT speaking)
-    if (isWolfTeammate) return "border-2 border-werewolf/50";
-    if (verificationResult === true) return "border-2 border-werewolf/70";
-    if (verificationResult === false) return "border-2 border-villager/70";
-
-    // Default state
-    return "border border-border hover:border-accent/50";
   };
 
   const getRoleBadgeStyle = (role: Role) => {
@@ -137,6 +175,18 @@ const PlayerCard = ({
     }
   };
 
+  // Determine border type based on priority
+  const getBorderType = (): 'currentActorUser' | 'currentActor' | 'selected' | 'killTarget' | 'wolfTeammate' | 'verifiedWerewolf' | 'verifiedGood' | 'default' => {
+    if (isCurrentActor && isUser) return 'currentActorUser';
+    if (isCurrentActor) return 'currentActor';
+    if (isSelected) return 'selected';
+    if (isKillTarget) return 'killTarget';
+    if (isWolfTeammate) return 'wolfTeammate';
+    if (verificationResult === true) return 'verifiedWerewolf';
+    if (verificationResult === false) return 'verifiedGood';
+    return 'default';
+  };
+
   return (
     <button
       onClick={() => onSelect(seatId)}
@@ -144,18 +194,15 @@ const PlayerCard = ({
       aria-label={getAccessibleLabel()}
       aria-pressed={isSelected}
       className={`
-        relative group flex flex-col items-center gap-2 ${padding} rounded-xl
-        transition-all duration-300
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
-        ${
-          isAlive && isSelectable
-            ? "hover:scale-105 hover:bg-muted/50 cursor-pointer"
-            : "opacity-50 cursor-not-allowed"
-        }
-        ${!isAlive ? "grayscale" : ""}
-        ${getBackgroundClass()}
-        ${getBorderClass()}
-        ${isUser ? "ring-2 ring-accent/30" : ""}
+        ${padding}
+        ${playerCardVariants({
+          status: isAlive ? 'alive' : 'dead',
+          selectable: isAlive && isSelectable,
+          selected: isSelected,
+          isCurrentActor: isCurrentActor, // Fix #3: Remove && isUser to apply to all current actors
+          isUser,
+        })}
+        ${playerCardBorderVariants({ borderType: getBorderType() })}
       `}
     >
       {/* Seat number badge */}
