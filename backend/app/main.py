@@ -59,6 +59,16 @@ async def startup_event():
             "AI features may not work properly."
         )
 
+    # Check AI Analysis configuration (separate from game AI)
+    analysis_provider = settings.get_analysis_provider()
+    if not analysis_provider:
+        config_warnings.append(
+            "AI analysis is not configured. Analysis will use fallback mode (basic statistics only). "
+            "To enable AI analysis: "
+            "1) Set OPENAI_API_KEY in .env, OR "
+            "2) Configure another provider (e.g., DEEPSEEK_API_KEY) and set ANALYSIS_PROVIDER=deepseek"
+        )
+
     # Check ADMIN_KEY (optional but recommended)
     if not settings.ADMIN_KEY:
         config_warnings.append(

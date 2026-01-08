@@ -332,6 +332,14 @@ class Settings:
                 max_tokens=self.ANALYSIS_MAX_TOKENS,
             )
 
+        # No valid provider found - log detailed warning
+        logger.warning(
+            "No valid AI provider configured for analysis. "
+            "Analysis will use fallback mode (basic statistics only). "
+            "To enable AI analysis, configure one of: "
+            "1) Set OPENAI_API_KEY in .env "
+            "2) Configure another provider (e.g., DEEPSEEK_API_KEY) and set ANALYSIS_PROVIDER=deepseek"
+        )
         return None
 
     def validate_analysis_config(self) -> tuple[bool, list[str]]:

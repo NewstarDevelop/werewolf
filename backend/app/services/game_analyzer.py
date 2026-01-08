@@ -414,7 +414,11 @@ async def _call_ai_analyzer(prompt: str, language: str, mode: str) -> str:
 
     provider = settings.get_analysis_provider()
     if not provider:
-        logger.error("No analysis provider configured")
+        logger.error(
+            "AI analysis unavailable: No valid provider configured. "
+            "To enable analysis: 1) Set OPENAI_API_KEY in .env, "
+            "OR 2) Configure another provider (e.g., DEEPSEEK_API_KEY) and set ANALYSIS_PROVIDER=deepseek"
+        )
         return _generate_fallback_analysis(language)
 
     # T-PERF-001: Use async client to prevent blocking
