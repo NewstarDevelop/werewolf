@@ -17,11 +17,11 @@ const playerCardVariants = cva(
         false: 'cursor-not-allowed',
       },
       selected: {
-        true: 'bg-werewolf/20 scale-105 shadow-glow-red',
+        true: 'bg-werewolf/20 shadow-glow-red',
         false: 'glass-panel hover:shadow-lg',
       },
       isCurrentActor: {
-        true: 'bg-yellow-400/20 scale-105',
+        true: 'bg-yellow-400/20',
         false: '',
       },
       isUser: {
@@ -56,11 +56,11 @@ const playerCardBorderVariants = cva('', {
     borderType: {
       currentActorUser: 'border-2 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse z-20',
       currentActor: 'border-2 border-accent animate-pulse z-20',
-      selected: 'border-2 border-werewolf shadow-glow-red',
+      selected: 'border-2 border-werewolf shadow-glow-red z-30',
       killTarget: 'border-2 border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)] animate-pulse',
       wolfTeammate: 'border-2 border-werewolf/50',
-      verifiedWerewolf: 'border-2 border-werewolf/70',
-      verifiedGood: 'border-2 border-villager/70',
+      verifiedWerewolf: 'border-2 border-werewolf shadow-[0_0_10px_hsl(var(--werewolf)/0.5)] md:shadow-[0_0_15px_hsl(var(--werewolf)/0.5)] z-10',
+      verifiedGood: 'border-2 border-villager shadow-[0_0_10px_hsl(var(--villager)/0.5)] md:shadow-[0_0_15px_hsl(var(--villager)/0.5)] z-10',
       default: 'border border-border hover:border-accent/50',
     },
   },
