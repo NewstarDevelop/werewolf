@@ -46,7 +46,7 @@ const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
 
   // 监听容器尺寸变化
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !shouldVirtualize) return;
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
@@ -58,7 +58,7 @@ const ChatLog = ({ messages, isLoading }: ChatLogProps) => {
     });
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [shouldVirtualize]);
 
   // Fix #5: Cache total height calculation to avoid recalculating on every scroll
   const totalHeight = useMemo(() => {
