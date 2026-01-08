@@ -965,7 +965,13 @@ class GameEngine:
                 game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
             return self._continue_after_death_shoot(game)
 
-        if shooter.is_human:
+        # Check if shooter is human player (multi-player support)
+        # Priority: human_seats (room mode) > is_human (single-player mode)
+        is_human_shooter = (
+            (game.human_seats and shooter.seat_id in game.human_seats) or
+            (not game.human_seats and shooter.is_human)
+        )
+        if is_human_shooter:
             return {"status": "waiting_for_human", "phase": game.phase}
 
         # AI shooter decides
@@ -1040,7 +1046,13 @@ class GameEngine:
             game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
             return self._continue_after_hunter(game)  # P0-CRIT-001: sync call
 
-        if hunter.is_human:
+        # Check if hunter is human player (multi-player support)
+        # Priority: human_seats (room mode) > is_human (single-player mode)
+        is_human_hunter = (
+            (game.human_seats and hunter.seat_id in game.human_seats) or
+            (not game.human_seats and hunter.is_human)
+        )
+        if is_human_hunter:
             return {"status": "waiting_for_human", "phase": game.phase}
 
         # AI hunter decides
