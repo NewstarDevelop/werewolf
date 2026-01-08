@@ -333,10 +333,21 @@ class RoomManager:
     def finish_game(self, db: Session, room_id: str):
         """游戏结束，更新房间状态并记录游戏历史"""
         from app.models.game_history import GameSession, GameParticipant
-        from app.schemas.enums import Winner
+        from app.schemas.enums import Winner, RoomStatus
 
-        room = db.query(Room).filter(Room.id == room_id).first()
+        # 幂等性检查：防止重复处理
+        existing_session = db.query(GameSession).filter_by(id=room_id).first()
+        if existing_session:
+            logger.warning(f"Game session already exists for room {room_id}, skipping")
+            return
+
+        # 使用状态条件查询防止竞态条件
+        room = db.query(Room).filter(
+            Room.id == room_id,
+            Room.status != RoomStatus.FINISHED  # 只处理未完成的游戏
+        ).first()
         if not room:
+            logger.info(f"Room {room_id} not found or already finished, skipping")
             return
 
         # 更新房间状态
@@ -348,7 +359,7 @@ class RoomManager:
         if game and game.winner:
             # 记录游戏会话
             session = GameSession(
-                id=str(uuid.uuid4())[:8],
+                id=room_id,  # 使用 room_id 作为主键，确保关联正确
                 room_id=room_id,
                 started_at=room.started_at or datetime.utcnow(),
                 finished_at=datetime.utcnow(),
@@ -356,32 +367,43 @@ class RoomManager:
             )
             db.add(session)
 
-            # 获取房间玩家
-            players = db.query(RoomPlayer).filter(
-                RoomPlayer.room_id == room_id
-            ).all()
+            # 获取房间玩家映射（用于获取用户信息）
+            room_players_map = {
+                p.seat_id: p for p in db.query(RoomPlayer).filter(
+                    RoomPlayer.room_id == room_id
+                ).all()
+            }
 
-            # 为每个有user_id的玩家记录参与信息
-            for player in players:
-                if player.user_id and player.seat_id:
-                    game_player = game.get_player(player.seat_id)
-                    if game_player:
-                        # 判断是否获胜
-                        is_winner = False
-                        if game.winner == Winner.WEREWOLF:
-                            is_winner = game_player.role.is_werewolf()
-                        elif game.winner == Winner.VILLAGER:
-                            is_winner = not game_player.role.is_werewolf()
+            # 遍历所有游戏内的座位（包括AI玩家），确保历史记录完整
+            for seat_id in range(1, room.max_players + 1):
+                game_player = game.get_player(seat_id)
+                if not game_player:
+                    continue
 
-                        participant = GameParticipant(
-                            session_id=session.id,
-                            user_id=player.user_id,
-                            seat_id=player.seat_id,
-                            role=game_player.role.value,
-                            is_winner=is_winner,
-                            survived=game_player.is_alive
-                        )
-                        db.add(participant)
+                # 获取对应的房间玩家信息（真人玩家有记录，AI玩家为None）
+                room_player = room_players_map.get(seat_id)
+
+                # 判断是否获胜（支持平局）
+                is_winner = False
+                if game.winner == Winner.WEREWOLF:
+                    is_winner = game_player.role.is_werewolf()
+                elif game.winner == Winner.VILLAGER:
+                    is_winner = not game_player.role.is_werewolf()
+                elif game.winner == Winner.DRAW:
+                    # 平局时所有人都标记为未获胜
+                    is_winner = False
+
+                participant = GameParticipant(
+                    game_id=session.id,  # 修正：使用 game_id 字段
+                    user_id=room_player.user_id if room_player else None,  # AI玩家为None
+                    player_id=game_player.player_id,  # 补充：player_id 字段
+                    seat_id=seat_id,
+                    nickname=game_player.nickname,  # 补充：nickname 字段（从游戏内获取）
+                    is_ai=game_player.is_ai,  # 补充：is_ai 字段（从游戏内获取）
+                    role=game_player.role.value,
+                    is_winner=is_winner
+                )
+                db.add(participant)
 
         db.commit()
         logger.info(f"Game finished in room {room_id}")
