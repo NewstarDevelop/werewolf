@@ -184,7 +184,7 @@ const PlayerCard = ({
       aria-label={getAccessibleLabel()}
       aria-pressed={isSelected}
       className={`
-        p-2.5 md:p-3
+        p-3 md:p-4
         ${playerCardVariants({
           status: isAlive ? 'alive' : 'dead',
           selectable: isAlive && isSelectable,
@@ -196,7 +196,7 @@ const PlayerCard = ({
       `}
     >
       {/* Seat number badge */}
-      <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center z-10">
+      <div className="absolute -top-2 -right-2 md:-top-3 md:-right-3 w-5 h-5 md:w-6 md:h-6 rounded-full bg-muted border border-border flex items-center justify-center z-40 shadow-sm">
         <span className="text-[10px] font-bold text-muted-foreground">
           {seatId}
         </span>
@@ -204,14 +204,14 @@ const PlayerCard = ({
 
       {/* Current actor indicator - highest priority */}
       {isCurrentActor && isAlive && (
-        <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 z-10">
+        <div className="absolute -top-2 -left-2 md:-top-3 md:-left-3 z-40" aria-hidden="true">
           <Target className="w-4 h-4 text-accent animate-pulse" />
         </div>
       )}
 
       {/* Wolf teammate indicator - only show when not current actor */}
       {isWolfTeammate && !isUser && !isCurrentActor && (
-        <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 z-10">
+        <div className="absolute -top-2 -left-2 md:-top-3 md:-left-3 z-40" aria-hidden="true">
           <Skull className="w-4 h-4 text-werewolf" />
         </div>
       )}
@@ -219,7 +219,7 @@ const PlayerCard = ({
       {/* Verification result indicator - only show when no other right indicators */}
       {verificationResult !== undefined && !isUser && !isCurrentActor && !isWolfTeammate && (
         <div
-          className={`absolute -top-1 -right-1 md:-top-2 md:-right-2 w-4 h-4 rounded-full z-10 ${
+          className={`absolute -top-2 -right-2 md:-top-3 md:-right-3 w-4 h-4 rounded-full z-40 shadow-sm ${
             verificationResult ? "bg-werewolf" : "bg-villager"
           }`}
         />

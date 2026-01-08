@@ -56,7 +56,7 @@ const PlayerGrid = ({
       </div>
 
       {/* Responsive Grid Layout */}
-      <div className="grid w-full place-items-center content-start md:content-center gap-3 sm:gap-4 md:gap-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 auto-rows-min md:auto-rows-auto pb-4">
+      <div className="grid w-full place-items-center content-start md:content-center gap-3 sm:gap-4 md:gap-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 auto-rows-min md:auto-rows-auto pb-4 overflow-visible">
         {players.map((player) => {
           // Check if this player is a wolf teammate (for any wolf role)
           const isWolfRole = myRole === "werewolf" || myRole === "wolf_king" || myRole === "white_wolf_king";
