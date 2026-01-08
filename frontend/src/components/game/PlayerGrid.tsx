@@ -87,10 +87,7 @@ const PlayerGrid = ({
                 isSelected={selectedPlayerId === player.id}
                 role={player.role}
                 onSelect={onSelectPlayer}
-                isCurrentActor={
-                  // 只在发言阶段显示边框，真实玩家显示黄色边框
-                  pendingAction?.type === "speak" && player.isUser
-                }
+                isCurrentActor={currentActor === player.seatId}
                 isWolfTeammate={isWolfTeammate}
                 verificationResult={verificationResult}
                 wolfVote={wolfVote}

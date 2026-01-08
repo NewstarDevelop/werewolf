@@ -58,7 +58,7 @@ const playerCardBorderVariants = cva('', {
       currentActor: 'border-2 border-accent animate-pulse z-20',
       selected: 'border-2 border-werewolf shadow-glow-red z-30',
       killTarget: 'border-2 border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.5)] animate-pulse',
-      wolfTeammate: 'border-2 border-werewolf/50',
+      wolfTeammate: 'border-2 border-werewolf shadow-[0_0_8px_hsl(var(--werewolf)/0.4)]',
       verifiedWerewolf: 'border-2 border-werewolf shadow-[0_0_10px_hsl(var(--werewolf)/0.5)] md:shadow-[0_0_15px_hsl(var(--werewolf)/0.5)] z-10',
       verifiedGood: 'border-2 border-villager shadow-[0_0_10px_hsl(var(--villager)/0.5)] md:shadow-[0_0_15px_hsl(var(--villager)/0.5)] z-10',
       default: 'border border-border hover:border-accent/50',
@@ -196,7 +196,7 @@ const PlayerCard = ({
       `}
     >
       {/* Seat number badge */}
-      <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center z-10">
+      <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center z-10">
         <span className="text-[10px] font-bold text-muted-foreground">
           {seatId}
         </span>
@@ -204,14 +204,14 @@ const PlayerCard = ({
 
       {/* Current actor indicator - highest priority */}
       {isCurrentActor && isAlive && (
-        <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 z-10">
+        <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 z-10">
           <Target className="w-4 h-4 text-accent animate-pulse" />
         </div>
       )}
 
       {/* Wolf teammate indicator - only show when not current actor */}
       {isWolfTeammate && !isUser && !isCurrentActor && (
-        <div className="absolute -top-1 -right-1 md:-top-2 md:-right-2 z-10">
+        <div className="absolute -top-1 -left-1 md:-top-2 md:-left-2 z-10">
           <Skull className="w-4 h-4 text-werewolf" />
         </div>
       )}
