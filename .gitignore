@@ -30,6 +30,7 @@ build/
 .claude/
 .spec-workflow/
 .playwright-mcp/
+tmpclaude-*
 
 # Environment
 .env
@@ -49,7 +50,10 @@ Thumbs.db
 
 # Data (runtime generated)
 backend/data/
+data/
 *.db
+*.db-shm
+*.db-wal
 
 # WL-015 Fix: Windows reserved device names
 # Prevent creation of files with Windows reserved names
