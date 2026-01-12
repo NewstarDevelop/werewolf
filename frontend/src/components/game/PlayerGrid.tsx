@@ -55,8 +55,12 @@ const PlayerGrid = ({
         </span>
       </div>
 
-      {/* Responsive Grid Layout */}
-      <div className="grid w-full place-items-center content-start md:content-center gap-3 sm:gap-4 md:gap-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 auto-rows-min md:auto-rows-auto pb-4 overflow-visible">
+      {/* Responsive Grid Layout
+          - Left padding prevents badges from overflowing left boundary
+          - Gap prevents card overlap on hover (scale-105)
+          - Scrollable container handles overflow
+      */}
+      <div className="grid w-full place-items-center content-start md:content-center gap-4 sm:gap-5 md:gap-6 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 auto-rows-min md:auto-rows-auto pl-3 pr-1 pb-4">
         {players.map((player) => {
           // Check if this player is a wolf teammate (for any wolf role)
           const isWolfRole = myRole === "werewolf" || myRole === "wolf_king" || myRole === "white_wolf_king";
@@ -77,7 +81,7 @@ const PlayerGrid = ({
           return (
             <div
               key={player.id}
-              className="flex justify-center items-center transition-all duration-300 ease-in-out w-full"
+              className="flex justify-center items-center transition-all duration-300 ease-in-out w-full p-1"
             >
               <PlayerCard
                 seatId={player.seatId}
