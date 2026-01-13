@@ -56,9 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout();
-    clearPlayerData(); // 清除所有本地数据（player_id, nickname, tokens）
-    setUser(null);
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Logout API call failed:', error);
+      // Continue with local cleanup even if server request fails
+    } finally {
+      // Always clear local state regardless of server response
+      clearPlayerData(); // 清除所有本地数据（player_id, nickname, tokens）
+      clearUserToken();
+      setUser(null);
+    }
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {

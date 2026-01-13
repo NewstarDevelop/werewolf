@@ -63,30 +63,38 @@ export function getAuthHeader(): HeadersInit {
   }
 
   return {
-    'Authorization': `Bearer ${token}`
+    'Authorization': \`Bearer \${token}\`
   };
 }
 
 // User authentication (persistent across sessions)
+// DEPRECATED: The following functions are deprecated as the app now uses
+// HttpOnly cookies exclusively for security. Keeping for backward compatibility
+// but should not be used in new code.
 const USER_TOKEN_KEY = 'user_auth_token';
 
 /**
+ * @deprecated Use HttpOnly cookies instead. This function is kept for cleanup only.
  * Save user authentication token (localStorage for persistence).
  */
 export function saveUserToken(token: string): void {
+  console.warn('saveUserToken is deprecated. Application uses HttpOnly cookies for authentication.');
   if (!token) return;
   localStorage.setItem(USER_TOKEN_KEY, token);
 }
 
 /**
+ * @deprecated Use HttpOnly cookies instead. This function is kept for cleanup only.
  * Get user authentication token.
  */
 export function getUserToken(): string | null {
+  console.warn('getUserToken is deprecated. Application uses HttpOnly cookies for authentication.');
   return localStorage.getItem(USER_TOKEN_KEY);
 }
 
 /**
  * Clear user authentication token.
+ * Note: Still needed for cleanup during logout.
  */
 export function clearUserToken(): void {
   localStorage.removeItem(USER_TOKEN_KEY);
@@ -94,6 +102,7 @@ export function clearUserToken(): void {
 
 /**
  * Decode JWT token payload.
+ * @deprecated Token validation should be done server-side with HttpOnly cookies.
  */
 export function decodeToken(token: string): any | null {
   try {
@@ -106,6 +115,7 @@ export function decodeToken(token: string): any | null {
 
 /**
  * Check if token is expired.
+ * @deprecated Token validation should be done server-side with HttpOnly cookies.
  */
 export function isTokenExpired(token: string): boolean {
   const payload = decodeToken(token);
@@ -115,6 +125,7 @@ export function isTokenExpired(token: string): boolean {
 
 /**
  * Get user auth header for API requests.
+ * @deprecated Use credentials: 'include' for cookie-based auth instead.
  */
 export function getUserAuthHeader(): HeadersInit {
   const token = getUserToken();
@@ -123,6 +134,6 @@ export function getUserAuthHeader(): HeadersInit {
     return {};
   }
   return {
-    'Authorization': `Bearer ${token}`
+    'Authorization': \`Bearer \${token}\`
   };
 }
