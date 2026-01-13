@@ -3,6 +3,7 @@ import secrets
 import time
 import logging
 from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from typing import List, Dict, Optional
 
 from app.core.config import settings
@@ -29,6 +30,67 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/game", tags=["game"])
 logger = logging.getLogger(__name__)
+
+
+def _persist_game_over_sync(db: Session, game_id: str) -> None:
+    """
+    Synchronous helper to persist game completion.
+
+    This function is designed to be called via run_in_threadpool to avoid
+    blocking the async event loop. It handles both the persistence and
+    rollback within the same thread to ensure Session safety.
+
+    Args:
+        db: Database session
+        game_id: Game/room ID
+    """
+    try:
+        room_manager.finish_game(db, game_id)
+        logger.info(
+            "Game history persisted successfully",
+            extra={"game_id": game_id}
+        )
+    except Exception:
+        # Rollback in the same thread to maintain Session safety
+        try:
+            db.rollback()
+        except Exception:
+            logger.error(
+                "Database rollback failed",
+                extra={"game_id": game_id},
+                exc_info=True
+            )
+
+        logger.error(
+            "Failed to persist game history",
+            extra={"game_id": game_id},
+            exc_info=True
+        )
+
+
+async def _persist_game_over(
+    db: Session,
+    game_id: str,
+    status: Optional[str],
+    winner: Optional[str]
+) -> None:
+    """
+    Persist game completion to database.
+
+    Executes synchronous DB operations in a threadpool to avoid blocking the event loop.
+    Ensures proper transaction rollback on errors within the same thread.
+
+    Args:
+        db: Database session
+        game_id: Game/room ID
+        status: Game result status
+        winner: Winner identifier if game ended
+    """
+    if status != "game_over" or not winner:
+        return
+
+    # Execute entire DB operation (including potential rollback) in a single thread
+    await run_in_threadpool(_persist_game_over_sync, db, game_id)
 
 # P1-SEC-002: Rate limiting for admin key authentication
 _admin_key_failures: Dict[str, Dict] = {}  # ip -> {"count": int, "locked_until": float}
@@ -440,12 +502,8 @@ async def step_game(
         if status == "error":
             raise HTTPException(status_code=400, detail=message or "Unknown error")
 
-        # 如果游戏结束，记录游戏历史
-        if status == "game_over" and winner:
-            try:
-                room_manager.finish_game(db, game_id)
-            except Exception as e:
-                logger.error(f"Failed to record game history for {game_id}: {e}", exc_info=True)
+        # Persist game completion if game ended
+        await _persist_game_over(db, game_id, status, winner)
 
         # WebSocket: 推送游戏状态更新到所有连接的客户端
         try:
@@ -466,7 +524,11 @@ async def step_game(
                     full_state
                 )
         except Exception as e:
-            logger.warning(f"Failed to broadcast game update via WebSocket: {e}")
+            logger.warning(
+                "Failed to broadcast game update via WebSocket",
+                extra={"game_id": game_id, "error": str(e)},
+                exc_info=True
+            )
 
         return StepResponse(
             status=status,
@@ -479,7 +541,8 @@ async def step_game(
 async def submit_action(
     game_id: str,
     request: ActionRequest,
-    current_player: Dict = Depends(get_current_player)
+    current_player: Dict = Depends(get_current_player),
+    db: Session = Depends(get_db)
 ) -> ActionResponse:
     """
     Submit a player action.
@@ -520,6 +583,9 @@ async def submit_action(
                 detail=result.get("message", "Action failed")
             )
 
+        # Persist game completion if action ended the game
+        await _persist_game_over(db, game_id, result.get("status"), result.get("winner"))
+
         # WebSocket: 推送游戏状态更新到所有连接的客户端
         try:
             if game.player_mapping:
@@ -538,7 +604,11 @@ async def submit_action(
                     player_state
                 )
         except Exception as e:
-            logger.warning(f"Failed to broadcast action update via WebSocket: {e}")
+            logger.warning(
+                "Failed to broadcast action update via WebSocket",
+                extra={"game_id": game_id, "error": str(e)},
+                exc_info=True
+            )
 
         return ActionResponse(
             success=True,
