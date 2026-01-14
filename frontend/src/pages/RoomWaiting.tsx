@@ -1,7 +1,7 @@
 /**
  * Room Waiting Page - waiting room before game starts
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -20,14 +20,74 @@ export default function RoomWaiting() {
   const queryClient = useQueryClient();
   const playerId = getPlayerId();
 
+  // FIX: 防止重复导航的 ref
+  const hasNavigatedRef = useRef(false);
+
   // Query room detail (refresh every 2 seconds, stop when window loses focus)
   const { data: roomDetail, isLoading } = useQuery({
     queryKey: ['roomDetail', roomId],
     queryFn: () => getRoomDetail(roomId!),
-    enabled: !!roomId,
+    enabled: !!roomId && !hasNavigatedRef.current,
     refetchInterval: 2000,
     refetchIntervalInBackground: false,  // P2-2: Stop polling when window loses focus
   });
+
+  // FIX: 监听房间 WebSocket 的 game_started 事件
+  useEffect(() => {
+    if (!roomId || hasNavigatedRef.current) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = import.meta.env.VITE_API_URL
+      ? new URL(import.meta.env.VITE_API_URL).host
+      : window.location.host;
+    const wsUrl = `${protocol}//${host}/api/ws/room/${roomId}`;
+
+    console.log('[RoomWaiting] Connecting to room WebSocket:', wsUrl);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('[RoomWaiting] WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('[RoomWaiting] WebSocket message:', message.type);
+
+        if (message.type === 'game_started' && !hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          const gameId = message.data?.game_id;
+          if (gameId) {
+            toast.success(t('toast.game_started'));
+            navigate(`/game/${gameId}`);
+          }
+        }
+      } catch (error) {
+        console.error('[RoomWaiting] Failed to parse WebSocket message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[RoomWaiting] WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[RoomWaiting] WebSocket closed');
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [roomId, navigate, t]);
+
+  // FIX: 兜底方案 - 通过轮询检测房间状态变为 PLAYING 时自动导航
+  useEffect(() => {
+    if (roomDetail?.room.status === 'playing' && roomDetail.room.game_id && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      toast.success(t('toast.game_started'));
+      navigate(`/game/${roomDetail.room.game_id}`);
+    }
+  }, [roomDetail, navigate, t]);
 
   // Toggle ready mutation
   const readyMutation = useMutation({
@@ -75,9 +135,6 @@ export default function RoomWaiting() {
       toast.error(t('room.delete_failed'), { description: error.message });
     },
   });
-
-  // Note: Auto-navigation removed because we don't have gameId when room status changes
-  // Navigation is handled in startGameMutation and startGameWithAIMutation onSuccess callbacks
 
   const myPlayer = roomDetail?.players.find(p => p.is_me);
   const isCreator = myPlayer?.is_creator || false;

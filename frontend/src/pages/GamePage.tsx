@@ -89,15 +89,21 @@ const GamePage = () => {
     if (!gameState) return [];
     return [...gameState.players]
       .sort((a, b) => a.seat_id - b.seat_id)  // Sort by seat_id to fix border highlighting
-      .map((p) => ({
-        id: p.seat_id,
-        name: p.is_human ? t('common:player.you') : p.name || t('common:player.default_name', { id: p.seat_id }),
-        isUser: p.is_human,
-        isAlive: p.is_alive,
-        // Show role for: 1) Human player always, 2) All players when game is finished
-        role: p.is_human ? gameState.my_role : (isGameOver ? (p.role ?? undefined) : undefined),
-        seatId: p.seat_id,
-      }));
+      .map((p) => {
+        // WL-008 Fix: Use my_seat to identify current player, not is_human
+        // is_human means "is this seat a human player" (multiple can be true in multiplayer)
+        // my_seat identifies "which seat belongs to the requesting player"
+        const isMe = p.seat_id === gameState.my_seat;
+        return {
+          id: p.seat_id,
+          name: isMe ? t('common:player.you') : p.name || t('common:player.default_name', { id: p.seat_id }),
+          isUser: isMe,
+          isAlive: p.is_alive,
+          // Show role for: 1) Current player always, 2) All players when game is finished
+          role: isMe ? gameState.my_role : (isGameOver ? (p.role ?? undefined) : undefined),
+          seatId: p.seat_id,
+        };
+      });
   }, [gameState, isGameOver, t]);
 
   // 预构建 seat_id -> player Map，避免 O(n) 线性查找
@@ -306,7 +312,7 @@ const GamePage = () => {
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden relative">
       {/* Atmospheric background */}
-      <div className="absolute inset-0 atmosphere-night pointer-events-none" />
+      <div className="absolute inset-0 atmosphere-game pointer-events-none" />
       <div className={`absolute inset-0 transition-opacity duration-1000 pointer-events-none ${isNight ? 'opacity-100' : 'opacity-0'}`}>
         <div className="absolute inset-0 atmosphere-moonlight" />
       </div>
@@ -335,7 +341,7 @@ const GamePage = () => {
       {/* Main Content */}
       <div className="relative z-10 flex flex-1 overflow-hidden flex-col md:flex-row p-3 gap-3 md:p-6 md:gap-6 max-w-[1920px] mx-auto w-full">
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0 shadow-2xl rounded-2xl overflow-hidden glass-panel border border-white/10 ring-1 ring-black/5">
+        <div className="flex-1 flex flex-col min-w-0 shadow-2xl rounded-2xl overflow-hidden glass-panel border border-border/20 ring-1 ring-border/10">
           <ChatLog messages={messages} isLoading={isLoading} />
         </div>
 

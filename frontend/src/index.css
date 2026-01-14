@@ -247,12 +247,22 @@
 
   /* Glass morphism utilities */
   .glass-panel {
-    @apply bg-card/30 backdrop-blur-md border border-white/5;
+    @apply bg-white/50 backdrop-blur-md border border-black/5;
+    box-shadow: var(--shadow-elevation-1);
+  }
+
+  .dark .glass-panel {
+    @apply bg-card/30 border-white/5;
     box-shadow: var(--shadow-inner-glow), var(--shadow-elevation-2);
   }
 
   .glass-panel-dark {
-    @apply bg-black/40 backdrop-blur-lg border border-white/5;
+    @apply bg-white/70 backdrop-blur-lg border border-black/5;
+    box-shadow: var(--shadow-elevation-2);
+  }
+
+  .dark .glass-panel-dark {
+    @apply bg-black/40 border-white/5;
     box-shadow: var(--shadow-inner-glow), var(--shadow-elevation-3);
   }
 
@@ -266,6 +276,14 @@
   }
 
   /* Atmospheric effects */
+  .atmosphere-game {
+    background: linear-gradient(to bottom, hsl(210 20% 96%), hsl(210 25% 92%));
+  }
+
+  .dark .atmosphere-game {
+    background: var(--gradient-night);
+  }
+
   .atmosphere-night {
     background: var(--gradient-night);
   }

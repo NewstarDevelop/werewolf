@@ -20,6 +20,7 @@ export interface Room {
   created_at: string;
   game_mode: GameMode;
   wolf_king_variant?: WolfKingVariant;
+  game_id?: string;  // FIX: 当房间状态为 PLAYING 时返回 game_id，用于非房主玩家导航
 }
 
 export interface RoomPlayer {

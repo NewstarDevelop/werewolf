@@ -66,6 +66,7 @@ class RoomResponse(BaseModel):
     game_mode: str
     wolf_king_variant: Optional[str]
     created_at: str
+    game_id: Optional[str] = None  # FIX: 当房间状态为 PLAYING 时返回 game_id，用于非房主玩家导航
 
 
 class RoomPlayerResponse(BaseModel):
@@ -308,7 +309,9 @@ def get_room_detail(
                 max_players=room.max_players,
                 game_mode=room.game_mode,
                 wolf_king_variant=room.wolf_king_variant,
-                created_at=room.created_at.isoformat()
+                created_at=room.created_at.isoformat(),
+                # FIX: 当房间状态为 PLAYING 时返回 game_id（game_id == room_id）
+                game_id=room.id if room.status == RoomStatus.PLAYING else None
             ),
             players=[
                 RoomPlayerResponse(
@@ -426,7 +429,7 @@ def toggle_ready(
 
 
 @router.post("/{room_id}/start")
-def start_game(
+async def start_game(
     room_id: str,
     request: StartGameRequest,
     db: Session = Depends(get_db),
@@ -440,7 +443,12 @@ def start_game(
     - fill_ai=true: AI填充模式，允许少于9人，剩余座位自动填充AI
 
     Requires: JWT authentication + room owner
+
+    FIX: 游戏开始后通过 WebSocket 广播 game_started 事件给房间内所有玩家，
+    解决非房主玩家无法获知游戏已开始的问题。
     """
+    from app.services.websocket_manager import websocket_manager
+
     try:
         # 验证玩家在该房间中
         player_id = current_player["player_id"]
@@ -454,6 +462,21 @@ def start_game(
             player_id,  # 使用认证的 player_id
             request.fill_ai
         )
+
+        # 广播 game_started 事件给房间内所有玩家
+        # 使用房间 WebSocket 的 key 格式: room_{room_id}
+        room_key = f"room_{room_id}"
+        try:
+            await websocket_manager.broadcast_to_game(
+                room_key,
+                "game_started",
+                {"room_id": room_id, "game_id": game_id}
+            )
+            logger.info(f"Broadcasted game_started to room {room_id}")
+        except Exception as e:
+            # WebSocket 广播失败不应阻止游戏开始
+            logger.warning(f"Failed to broadcast game_started to room {room_id}: {e}")
+
         mode = "AI填充" if request.fill_ai else "多人对战"
         return {
             "success": True,

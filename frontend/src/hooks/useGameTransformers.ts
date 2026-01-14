@@ -20,14 +20,20 @@ export function useGameTransformers(gameState: GameState | null | undefined) {
     if (!gameState) return [];
     return [...gameState.players]
       .sort((a, b) => a.seat_id - b.seat_id)
-      .map((p) => ({
-        id: p.seat_id,
-        name: p.is_human ? t('common:player.you') : p.name || t('common:player.default_name', { id: p.seat_id }),
-        isUser: p.is_human,
-        isAlive: p.is_alive,
-        role: p.is_human ? gameState.my_role : (isGameOver ? (p.role ?? undefined) : undefined),
-        seatId: p.seat_id,
-      }));
+      .map((p) => {
+        // WL-008 Fix: Use my_seat to identify current player, not is_human
+        // is_human means "is this seat a human player" (multiple can be true in multiplayer)
+        // my_seat identifies "which seat belongs to the requesting player"
+        const isMe = p.seat_id === gameState.my_seat;
+        return {
+          id: p.seat_id,
+          name: isMe ? t('common:player.you') : p.name || t('common:player.default_name', { id: p.seat_id }),
+          isUser: isMe,
+          isAlive: p.is_alive,
+          role: isMe ? gameState.my_role : (isGameOver ? (p.role ?? undefined) : undefined),
+          seatId: p.seat_id,
+        };
+      });
   }, [gameState, isGameOver, t]);
 
   const playerMap = useMemo(() => {

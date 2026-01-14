@@ -37,7 +37,7 @@ const GameStatusBar = ({
   const { t } = useTranslation(['common', 'game', 'roles']);
 
   return (
-    <header className="relative flex items-center justify-between px-3 py-2 md:px-6 md:py-4 glass-panel-dark border-b border-white/10 backdrop-blur-md z-50 transition-all duration-500 shadow-sm">
+    <header className="relative flex items-center justify-between px-3 py-2 md:px-6 md:py-4 glass-panel-dark border-b border-border/20 backdrop-blur-md z-50 transition-all duration-500 shadow-sm">
       {/* Decorative glow */}
       <div
         className={`absolute inset-0 opacity-40 transition-all duration-1000 ${
@@ -130,17 +130,17 @@ const GameStatusBar = ({
               className={`flex items-center gap-2 md:gap-3 px-3 py-1.5 md:px-5 md:py-2.5 rounded-full border transition-all duration-500 backdrop-blur-sm ${
                 isNight
                   ? "bg-slate-950/60 border-moonlight/40 shadow-[0_0_20px_rgba(56,189,248,0.25)]"
-                  : "bg-amber-100/20 border-day/40 shadow-[0_0_20px_rgba(251,191,36,0.25)]"
+                  : "bg-amber-50 dark:bg-amber-100/20 border-amber-400/50 dark:border-day/40 shadow-[0_0_20px_rgba(251,191,36,0.25)]"
               }`}
             >
               {isNight ? (
                 <Moon className="w-5 h-5 text-moonlight animate-glow-pulse" />
               ) : (
-                <Sun className="w-5 h-5 text-day animate-glow-pulse" />
+                <Sun className="w-5 h-5 text-amber-600 dark:text-day animate-glow-pulse" />
               )}
               <span
                 className={`font-display text-lg font-bold ${
-                  isNight ? "text-moonlight text-glow-blue" : "text-day"
+                  isNight ? "text-moonlight text-glow-blue" : "text-amber-700 dark:text-day"
                 }`}
               >
                 {isNight ? t('game:status.night') : t('game:status.day')}
