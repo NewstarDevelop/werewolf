@@ -46,6 +46,10 @@ class AIProviderConfig:
     max_retries: int = 2
     temperature: float = 0.7
     max_tokens: int = 500
+    # Rate limiting configuration
+    requests_per_minute: int = 60  # RPM limit for this provider
+    max_concurrency: int = 5  # Max concurrent in-flight requests
+    burst: int = 3  # Token bucket burst capacity (should match expected concurrency)
 
     @classmethod
     def from_env(cls, prefix: str, name: str) -> "AIProviderConfig":
@@ -58,6 +62,9 @@ class AIProviderConfig:
             max_retries=int(os.getenv(f"{prefix}_MAX_RETRIES", "2")),
             temperature=float(os.getenv(f"{prefix}_TEMPERATURE", "0.7")),
             max_tokens=int(os.getenv(f"{prefix}_MAX_TOKENS", "500")),
+            requests_per_minute=int(os.getenv(f"{prefix}_REQUESTS_PER_MINUTE", "60")),
+            max_concurrency=int(os.getenv(f"{prefix}_MAX_CONCURRENCY", "5")),
+            burst=int(os.getenv(f"{prefix}_BURST", "3")),
         )
 
     def is_valid(self) -> bool:
@@ -172,6 +179,9 @@ class Settings:
             base_url=self.OPENAI_BASE_URL,
             model=self.LLM_MODEL,
             max_retries=self.LLM_MAX_RETRIES,
+            requests_per_minute=int(os.getenv("DEFAULT_REQUESTS_PER_MINUTE", "60")),
+            max_concurrency=int(os.getenv("DEFAULT_MAX_CONCURRENCY", "5")),
+            burst=int(os.getenv("DEFAULT_BURST", "3")),
         )
         if default_provider.is_valid():
             self._providers["default"] = default_provider
@@ -189,6 +199,9 @@ class Settings:
                     max_retries=int(os.getenv(f"{provider_name}_MAX_RETRIES", "2")),
                     temperature=float(os.getenv(f"{provider_name}_TEMPERATURE", "0.7")),
                     max_tokens=int(os.getenv(f"{provider_name}_MAX_TOKENS", "500")),
+                    requests_per_minute=int(os.getenv(f"{provider_name}_REQUESTS_PER_MINUTE", "60")),
+                    max_concurrency=int(os.getenv(f"{provider_name}_MAX_CONCURRENCY", "5")),
+                    burst=int(os.getenv(f"{provider_name}_BURST", "1")),
                 )
                 self._providers[provider_name.lower()] = provider
 
@@ -221,6 +234,9 @@ class Settings:
                     max_retries=int(os.getenv(f"{prefix}_MAX_RETRIES", "2")),
                     temperature=float(os.getenv(f"{prefix}_TEMPERATURE", "0.7")),
                     max_tokens=int(os.getenv(f"{prefix}_MAX_TOKENS", "500")),
+                    requests_per_minute=int(os.getenv(f"{prefix}_REQUESTS_PER_MINUTE", "60")),
+                    max_concurrency=int(os.getenv(f"{prefix}_MAX_CONCURRENCY", "5")),
+                    burst=int(os.getenv(f"{prefix}_BURST", "1")),
                 )
                 if provider.is_valid():
                     self._providers[provider_name] = provider

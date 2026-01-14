@@ -1,4 +1,5 @@
 """LLM Service - Multi-provider AI implementation with retry and fallback."""
+import os
 import json
 import random
 import logging
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from openai import AsyncOpenAI
 
 from app.core.config import settings, AIProviderConfig
+from app.services.rate_limiter import TokenBucketLimiter, PerGameSoftLimiter, RateLimitTimeoutError
 from app.services.prompts import (
     build_system_prompt,
     build_context_prompt,
@@ -27,10 +29,10 @@ INITIAL_RETRY_DELAY = 60  # Initial delay: 1 minute between first and second cal
 MAX_RETRY_DELAY = 180  # Maximum delay: 3 minutes
 BACKOFF_INCREMENT = 60  # Add 1 minute on each failure
 
-# Delay between consecutive LLM calls to avoid truncation
-# Reduced from 15s to 2s for better game flow
-# Most API providers allow 60 requests/minute, so 2s is safe
-CALL_INTERVAL = 2  # seconds between calls
+# Rate limiting and fairness defaults (overridable via env)
+DEFAULT_MAX_WAIT_SECONDS = float(os.getenv("LLM_MAX_WAIT_SECONDS", "8"))
+DEFAULT_PER_GAME_MIN_INTERVAL = float(os.getenv("LLM_PER_GAME_MIN_INTERVAL", "0.5"))
+DEFAULT_PER_GAME_MAX_CONCURRENCY = int(os.getenv("LLM_PER_GAME_MAX_CONCURRENCY", "2"))
 
 # Custom User-Agent to bypass Cloudflare bot detection
 CUSTOM_USER_AGENT = (
@@ -209,7 +211,12 @@ class LLMService:
     def __init__(self):
         self.use_mock = settings.LLM_USE_MOCK
         self._clients: dict[str, AsyncOpenAI] = {}
-        self._last_call_time: float = 0  # Track last API call time
+        self._provider_limiters: dict[str, TokenBucketLimiter] = {}
+        self._per_game_limiter = PerGameSoftLimiter(
+            min_interval_seconds=DEFAULT_PER_GAME_MIN_INTERVAL,
+            max_concurrency_per_game=DEFAULT_PER_GAME_MAX_CONCURRENCY,
+        )
+        self._max_wait_seconds: float = DEFAULT_MAX_WAIT_SECONDS
 
         # Initialize clients for all configured providers
         for name, provider in settings.get_all_providers().items():
@@ -223,6 +230,19 @@ class LLMService:
                     )
                     self._clients[name] = client
                     logger.info(f"Initialized async LLM client for provider: {name} (model: {provider.model})")
+
+                    # Create rate limiter for this provider
+                    limiter = TokenBucketLimiter(
+                        requests_per_minute=provider.requests_per_minute,
+                        burst=provider.burst,
+                        max_concurrency=provider.max_concurrency,
+                    )
+                    limiter._provider_name = name  # For logging
+                    self._provider_limiters[name] = limiter
+                    logger.info(
+                        f"Rate limiter for {name}: RPM={provider.requests_per_minute}, "
+                        f"concurrency={provider.max_concurrency}, burst={provider.burst}"
+                    )
                 except Exception as e:
                     logger.error(f"Failed to initialize client for provider {name}: {e}")
 
@@ -230,13 +250,18 @@ class LLMService:
             logger.warning("No LLM providers configured - using mock mode")
             self.use_mock = True
 
-    async def _wait_for_rate_limit(self):
-        """Wait if needed to avoid calling API too frequently (WL-010: async)."""
-        elapsed = time.time() - self._last_call_time
-        if elapsed < CALL_INTERVAL:
-            wait_time = CALL_INTERVAL - elapsed
-            logger.info(f"Rate limiting: waiting {wait_time:.1f}s before next call")
-            await asyncio.sleep(wait_time)  # WL-010: Use async sleep
+    def _get_limiter(self, provider: AIProviderConfig) -> TokenBucketLimiter:
+        """Get or create rate limiter for a provider."""
+        limiter = self._provider_limiters.get(provider.name)
+        if limiter is None:
+            limiter = TokenBucketLimiter(
+                requests_per_minute=provider.requests_per_minute,
+                burst=provider.burst,
+                max_concurrency=provider.max_concurrency,
+            )
+            limiter._provider_name = provider.name
+            self._provider_limiters[provider.name] = limiter
+        return limiter
 
     def _get_client_for_player(self, seat_id: int) -> tuple[Optional[AsyncOpenAI], Optional[AIProviderConfig]]:
         """Get the appropriate client and config for a player."""
@@ -261,11 +286,26 @@ class LLMService:
         client: AsyncOpenAI,
         provider: AIProviderConfig,
         system_prompt: str,
-        user_prompt: str
+        user_prompt: str,
+        *,
+        game_id: Optional[str] = None,
+        max_wait_seconds: Optional[float] = None,
     ) -> str:
-        """Make actual LLM API call (WL-010: async)."""
-        # Wait for rate limit before making call
-        await self._wait_for_rate_limit()
+        """Make actual LLM API call with rate limiting (WL-010: async).
+
+        Args:
+            client: The OpenAI client to use
+            provider: Provider configuration
+            system_prompt: System prompt for the LLM
+            user_prompt: User prompt for the LLM
+            game_id: Optional game ID for per-game rate limiting
+            max_wait_seconds: Maximum time to wait for rate limit
+
+        Returns:
+            Raw response content from the LLM
+        """
+        limiter = self._get_limiter(provider)
+        effective_wait = self._max_wait_seconds if max_wait_seconds is None else float(max_wait_seconds)
 
         # Build request params - don't set max_tokens to let API use default
         request_params = {
@@ -278,10 +318,20 @@ class LLMService:
             "temperature": provider.temperature,
         }
 
-        response = await client.chat.completions.create(**request_params)
+        # Apply rate limiting: per-game soft limit + provider hard limit
+        # Use shared deadline to avoid wait time stacking
+        start_time = time.monotonic()
+        deadline = start_time + effective_wait
 
-        # Update last call time after successful call
-        self._last_call_time = time.time()
+        if game_id:
+            async with self._per_game_limiter.limit(game_id, max_wait_seconds=effective_wait):
+                # Calculate remaining time for provider limiter
+                remaining_wait = max(0.1, deadline - time.monotonic())
+                async with limiter.limit(max_wait_seconds=remaining_wait):
+                    response = await client.chat.completions.create(**request_params)
+        else:
+            async with limiter.limit(max_wait_seconds=effective_wait):
+                response = await client.chat.completions.create(**request_params)
 
         # Safely extract content from response with try-except
         try:
@@ -437,7 +487,11 @@ class LLMService:
                     f"using provider {provider.name} (model: {provider.model})"
                 )
 
-                raw_response = await self._call_llm(client, provider, system_prompt, context_prompt)
+                raw_response = await self._call_llm(
+                    client, provider, system_prompt, context_prompt,
+                    game_id=game.id,
+                    max_wait_seconds=self._max_wait_seconds,
+                )
                 response = self._parse_response(raw_response, provider.name)
 
                 # Validate action_target if needed
@@ -456,6 +510,14 @@ class LLMService:
                     f"{speak_preview}..."
                 )
                 return response
+
+            except RateLimitTimeoutError as e:
+                # Rate limiter timeout - go directly to fallback without retry
+                logger.warning(
+                    f"Rate limiter timeout for player {player.seat_id} "
+                    f"(provider={provider.name}, game={game.id}): {e}"
+                )
+                return self._get_fallback_response(player, action_type, targets, language=game.language)
 
             except Exception as e:
                 last_error = e
