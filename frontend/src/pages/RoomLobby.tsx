@@ -158,7 +158,7 @@ export default function RoomLobby() {
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Ambient background effect */}
       <div className="absolute inset-0 atmosphere-night z-0" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-transparent to-transparent z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-200/30 dark:from-indigo-900/20 via-transparent to-transparent z-0" />
       <div className="absolute inset-0 atmosphere-moonlight z-0 opacity-50" />
 
       <div className="container relative z-10 mx-auto px-4 py-8 animate-fade-in">

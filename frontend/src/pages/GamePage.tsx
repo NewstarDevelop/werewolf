@@ -33,6 +33,10 @@ const GamePage = () => {
   const { gameId: gameIdFromRoute } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
 
+  const handleReturnToLobby = useCallback(() => {
+    navigate('/lobby');
+  }, [navigate]);
+
   // Validate gameId exists - redirect to lobby if missing
   useEffect(() => {
     if (!gameIdFromRoute) {
@@ -280,7 +284,7 @@ const GamePage = () => {
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
           <p className="text-xl text-destructive mb-4">{error}</p>
-          <Button onClick={() => window.location.href = '/'}>
+          <Button onClick={handleReturnToLobby}>
             {t('common:return_to_lobby')}
           </Button>
         </div>
@@ -335,6 +339,7 @@ const GamePage = () => {
           onOpenLogs={() => setLogPanelOpen(true)}
           onOpenDebug={() => setDebugPanelOpen(true)}
           onOpenAnalysis={() => setAnalysisDialogOpen(true)}
+          onReturnToLobby={handleReturnToLobby}
         />
       </div>
 

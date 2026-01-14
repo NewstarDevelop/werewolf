@@ -1,4 +1,4 @@
-import { Moon, Sun, Trophy, FileText, Brain, TrendingUp, Menu } from "lucide-react";
+import { Moon, Sun, Trophy, FileText, Brain, TrendingUp, Menu, Home } from "lucide-react";
 import { GamePhase, Role, Winner } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -18,6 +18,7 @@ interface GameStatusBarProps {
   onOpenLogs?: () => void;
   onOpenDebug?: () => void;
   onOpenAnalysis?: () => void;
+  onReturnToLobby?: () => void;
 }
 
 const GameStatusBar = ({
@@ -33,6 +34,7 @@ const GameStatusBar = ({
   onOpenLogs,
   onOpenDebug,
   onOpenAnalysis,
+  onReturnToLobby,
 }: GameStatusBarProps) => {
   const { t } = useTranslation(['common', 'game', 'roles']);
 
@@ -72,6 +74,12 @@ const GameStatusBar = ({
               )}
               <LanguageSwitcher />
               <div className="flex flex-col gap-2">
+                {isGameOver && onReturnToLobby && (
+                  <Button variant="secondary" size="sm" onClick={onReturnToLobby} className="justify-start">
+                    <Home className="w-4 h-4 mr-2" />
+                    {t('common:return_to_lobby')}
+                  </Button>
+                )}
                 {isGameOver && onOpenAnalysis && (
                   <Button variant="outline" size="sm" onClick={onOpenAnalysis} className="justify-start">
                     <TrendingUp className="w-4 h-4 mr-2" />
@@ -161,6 +169,18 @@ const GameStatusBar = ({
       {/* Right: Player Count & Controls */}
       <div className="relative z-10 flex items-center gap-3">
         <div className="hidden md:block"><LanguageSwitcher /></div>
+
+        {isGameOver && onReturnToLobby && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onReturnToLobby}
+            className="hidden md:inline-flex items-center gap-2 rounded-full"
+          >
+            <Home className="w-4 h-4" />
+            {t('common:return_to_lobby')}
+          </Button>
+        )}
 
         {isGameOver && onOpenAnalysis && (
           <button

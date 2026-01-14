@@ -9,6 +9,7 @@
     "skip": "Skip",
     "close": "Close"
   },
+  "return_to_lobby": "Return to Lobby",
   "common": {
     "loading": "Loading...",
     "error": "Error occurred",

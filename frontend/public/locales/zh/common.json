@@ -9,6 +9,7 @@
     "skip": "跳过",
     "close": "关闭"
   },
+  "return_to_lobby": "返回大厅",
   "common": {
     "loading": "加载中...",
     "error": "出错了",
