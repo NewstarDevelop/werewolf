@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/layouts/AppLayout";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // Lazy load pages to reduce main bundle size
 const RoomLobby = lazy(() => import("./pages/RoomLobby"));
@@ -45,42 +46,50 @@ const LoadingFallback = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ErrorBoundary>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <Suspense fallback={<LoadingFallback />}>
-              <Routes>
-                {/* Public Auth routes - no sidebar */}
-                <Route path="/auth/login" element={<LoginPage />} />
-                <Route path="/auth/register" element={<RegisterPage />} />
-                <Route path="/auth/callback" element={<OAuthCallback />} />
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+      themes={["light", "dark", "gray"]}
+    >
+      <ErrorBoundary>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <Suspense fallback={<LoadingFallback />}>
+                <Routes>
+                  {/* Public Auth routes - no sidebar */}
+                  <Route path="/auth/login" element={<LoginPage />} />
+                  <Route path="/auth/register" element={<RegisterPage />} />
+                  <Route path="/auth/callback" element={<OAuthCallback />} />
 
-                {/* Protected routes with AppLayout (sidebar) */}
-                <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                  <Route index element={<Navigate to="/lobby" replace />} />
-                  <Route path="/lobby" element={<RoomLobby />} />
-                  <Route path="/room/:roomId/waiting" element={<RoomWaiting />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/history" element={<HistoryPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                </Route>
+                  {/* Protected routes with AppLayout (sidebar) */}
+                  <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                    <Route index element={<Navigate to="/lobby" replace />} />
+                    <Route path="/lobby" element={<RoomLobby />} />
+                    <Route path="/room/:roomId/waiting" element={<RoomWaiting />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/history" element={<HistoryPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                  </Route>
 
-                {/* Game page - protected but without sidebar for immersive experience */}
-                <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-                  <Route path="/game/:gameId" element={<GamePage />} />
-                </Route>
+                  {/* Game page - protected but without sidebar for immersive experience */}
+                  <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
+                    <Route path="/game/:gameId" element={<GamePage />} />
+                  </Route>
 
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ErrorBoundary>
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ErrorBoundary>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

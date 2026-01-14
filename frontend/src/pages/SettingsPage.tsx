@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { Moon, Globe, Volume2, Bell } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -42,13 +43,10 @@ export default function SettingsPage() {
                   {t('settings.theme', 'Theme')}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {t('settings.theme_desc', 'Dark mode is currently active')}
+                  {t('settings.theme_desc', 'Choose your preferred color theme')}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-4 rounded-full bg-primary" />
-                <span className="text-sm text-muted-foreground">{t("settings.dark_theme", "Dark")}</span>
-              </div>
+              <ThemeSwitcher />
             </div>
           </CardContent>
         </Card>

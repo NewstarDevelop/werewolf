@@ -17,6 +17,7 @@ import {
 } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { translateSystemMessage, translateActionMessage } from "@/utils/messageTranslator";
+import { saveLastGameId, clearLastRoomId, clearLastGameId } from "@/hooks/useActiveGame";
 
 interface UIPlayer {
   id: number;
@@ -38,6 +39,14 @@ const GamePage = () => {
       navigate('/lobby', { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameIdFromRoute]);
+
+  // Save gameId to localStorage so sidebar "Current Game" can navigate back
+  useEffect(() => {
+    if (gameIdFromRoute) {
+      saveLastGameId(gameIdFromRoute);
+      clearLastRoomId();
+    }
   }, [gameIdFromRoute]);
 
   const {
@@ -62,6 +71,13 @@ const GamePage = () => {
     skip,
     isSubmitting,
   } = useGame({ autoStep: true, gameId: gameIdFromRoute });  // Use gameId from route
+
+  // Clear lastGameId when game is over (no longer an active game)
+  useEffect(() => {
+    if (isGameOver) {
+      clearLastGameId();
+    }
+  }, [isGameOver]);
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [logPanelOpen, setLogPanelOpen] = useState(false);

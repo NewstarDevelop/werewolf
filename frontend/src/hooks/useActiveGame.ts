@@ -26,11 +26,18 @@ function isValidNumericId(id: string): boolean {
 /**
  * Save last game ID to localStorage
  */
-export function saveLastGameId(gameId: string): void {
+export function saveLastGameId(gameId: string): boolean {
   if (isValidUUID(gameId) || isValidNumericId(gameId)) {
-    localStorage.setItem(LAST_GAME_ID_KEY, gameId);
+    try {
+      localStorage.setItem(LAST_GAME_ID_KEY, gameId);
+      return true;
+    } catch (e) {
+      console.warn('Failed to save game ID to localStorage:', e);
+      return false;
+    }
   } else {
     console.warn('Invalid game ID format:', gameId);
+    return false;
   }
 }
 
@@ -38,28 +45,44 @@ export function saveLastGameId(gameId: string): void {
  * Get last game ID from localStorage
  */
 export function getLastGameId(): string | null {
-  const id = localStorage.getItem(LAST_GAME_ID_KEY);
-  if (id && (isValidUUID(id) || isValidNumericId(id))) {
-    return id;
+  try {
+    const id = localStorage.getItem(LAST_GAME_ID_KEY);
+    if (id && (isValidUUID(id) || isValidNumericId(id))) {
+      return id;
+    }
+    return null;
+  } catch (e) {
+    console.warn('Failed to get game ID from localStorage:', e);
+    return null;
   }
-  return null;
 }
 
 /**
  * Clear last game ID
  */
 export function clearLastGameId(): void {
-  localStorage.removeItem(LAST_GAME_ID_KEY);
+  try {
+    localStorage.removeItem(LAST_GAME_ID_KEY);
+  } catch (e) {
+    console.warn('Failed to clear game ID from localStorage:', e);
+  }
 }
 
 /**
  * Save last room ID to localStorage
  */
-export function saveLastRoomId(roomId: string): void {
+export function saveLastRoomId(roomId: string): boolean {
   if (isValidUUID(roomId) || isValidNumericId(roomId)) {
-    localStorage.setItem(LAST_ROOM_ID_KEY, roomId);
+    try {
+      localStorage.setItem(LAST_ROOM_ID_KEY, roomId);
+      return true;
+    } catch (e) {
+      console.warn('Failed to save room ID to localStorage:', e);
+      return false;
+    }
   } else {
     console.warn('Invalid room ID format:', roomId);
+    return false;
   }
 }
 
@@ -67,18 +90,27 @@ export function saveLastRoomId(roomId: string): void {
  * Get last room ID from localStorage
  */
 export function getLastRoomId(): string | null {
-  const id = localStorage.getItem(LAST_ROOM_ID_KEY);
-  if (id && (isValidUUID(id) || isValidNumericId(id))) {
-    return id;
+  try {
+    const id = localStorage.getItem(LAST_ROOM_ID_KEY);
+    if (id && (isValidUUID(id) || isValidNumericId(id))) {
+      return id;
+    }
+    return null;
+  } catch (e) {
+    console.warn('Failed to get room ID from localStorage:', e);
+    return null;
   }
-  return null;
 }
 
 /**
  * Clear last room ID
  */
 export function clearLastRoomId(): void {
-  localStorage.removeItem(LAST_ROOM_ID_KEY);
+  try {
+    localStorage.removeItem(LAST_ROOM_ID_KEY);
+  } catch (e) {
+    console.warn('Failed to clear room ID from localStorage:', e);
+  }
 }
 
 interface UseActiveGameReturn {

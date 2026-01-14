@@ -116,6 +116,13 @@
   "language": {
     "switch_hint": "Switch Language"
   },
+  "nav": {
+    "menu": "Menu",
+    "lobby": "Room Lobby",
+    "profile": "Profile",
+    "history": "History",
+    "settings": "Settings"
+  },
   "auth": {
     "login_required": "Login Required",
     "login_required_desc": "Please login to create or join a room",
@@ -222,7 +229,12 @@
     "appearance": "Appearance",
     "appearance_desc": "Customize the look and feel of the interface",
     "theme": "Theme",
-    "theme_desc": "Currently using dark mode",
+    "theme_desc": "Choose your preferred color theme",
+    "select_theme": "Select theme",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_gray": "Gray",
+    "theme_system": "System",
     "dark_theme": "Dark",
     "language": "Language",
     "language_desc": "Choose your preferred language",

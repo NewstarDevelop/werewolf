@@ -116,6 +116,13 @@
   "language": {
     "switch_hint": "切换语言"
   },
+  "nav": {
+    "menu": "菜单",
+    "lobby": "游戏大厅",
+    "profile": "个人资料",
+    "history": "历史记录",
+    "settings": "设置"
+  },
   "auth": {
     "login_required": "请先登录",
     "login_required_desc": "创建或加入房间需要先登录账号",
@@ -222,7 +229,12 @@
     "appearance": "外观",
     "appearance_desc": "自定义界面外观和感觉",
     "theme": "主题",
-    "theme_desc": "当前使用深色模式",
+    "theme_desc": "选择您喜欢的颜色主题",
+    "select_theme": "选择主题",
+    "theme_light": "浅色",
+    "theme_dark": "深色",
+    "theme_gray": "灰色",
+    "theme_system": "跟随系统",
     "dark_theme": "深色",
     "language": "语言",
     "language_desc": "选择您的首选语言",

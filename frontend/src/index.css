@@ -6,6 +6,81 @@
 
 @layer base {
   :root {
+    /* Light theme (default) */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 0 72% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 0 72% 51%;
+
+    --radius: 0.75rem;
+
+    /* Custom game colors */
+    --werewolf: 0 72% 45%;
+    --werewolf-glow: 0 80% 50%;
+    --moonlight: 215 80% 45%;
+    --moonlight-dim: 215 50% 35%;
+    --night: 222 30% 8%;
+    --day: 45 90% 55%;
+    --day-dim: 40 70% 35%;
+    --villager: 140 50% 45%;
+    --chat-user: 215 80% 45%;
+    --chat-other: 210 40% 96%;
+
+    /* Gradients */
+    --gradient-night: linear-gradient(to bottom, hsl(222 30% 5%), hsl(222 35% 8%));
+    --gradient-deep-space: radial-gradient(circle at center, hsl(222 30% 10%) 0%, hsl(222 30% 4%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
+    --gradient-glow: radial-gradient(circle, hsl(0 72% 51% / 0.18) 0%, transparent 70%);
+    --gradient-glass: linear-gradient(145deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.01) 100%);
+    --gradient-moonlight: radial-gradient(ellipse at top, hsl(215 80% 45% / 0.10) 0%, transparent 60%);
+    --gradient-blood: radial-gradient(circle at center, hsl(0 72% 45% / 0.18) 0%, transparent 70%);
+
+    /* Shadows */
+    --shadow-card: 0 8px 32px hsl(222 47% 11% / 0.12);
+    --shadow-glow-red: 0 0 20px hsl(0 72% 51% / 0.25);
+    --shadow-glow-blue: 0 0 20px hsl(215 80% 45% / 0.18);
+    --shadow-inner-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+    --shadow-elevation-1: 0 2px 8px hsl(222 47% 11% / 0.08);
+    --shadow-elevation-2: 0 4px 16px hsl(222 47% 11% / 0.10);
+    --shadow-elevation-3: 0 8px 32px hsl(222 47% 11% / 0.12);
+    --shadow-message-user: 0 2px 8px rgba(59, 130, 246, 0.18);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 0 72% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 0 72% 51%;
+  }
+
+  .dark {
+    /* Dark theme */
     --background: 222 25% 6%;
     --foreground: 210 20% 92%;
 
@@ -67,6 +142,7 @@
     --shadow-elevation-3: 0 8px 32px hsl(0 0% 0% / 0.5);
     --shadow-message-user: 0 2px 8px rgba(59, 130, 246, 0.15);
 
+    /* Sidebar */
     --sidebar-background: 222 25% 6%;
     --sidebar-foreground: 210 20% 92%;
     --sidebar-primary: 0 72% 51%;
@@ -74,6 +150,80 @@
     --sidebar-accent: 220 18% 16%;
     --sidebar-accent-foreground: 210 20% 92%;
     --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 0 72% 51%;
+  }
+
+  .gray {
+    /* Gray theme */
+    --background: 220 14% 96%;
+    --foreground: 220 9% 20%;
+
+    --card: 220 13% 91%;
+    --card-foreground: 220 9% 20%;
+
+    --popover: 220 13% 91%;
+    --popover-foreground: 220 9% 20%;
+
+    --primary: 0 72% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 85%;
+    --secondary-foreground: 220 9% 20%;
+
+    --muted: 220 14% 85%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 85%;
+    --accent-foreground: 220 9% 20%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 13% 85%;
+    --input: 220 13% 85%;
+    --ring: 0 72% 51%;
+
+    --radius: 0.75rem;
+
+    /* Custom game colors */
+    --werewolf: 0 72% 45%;
+    --werewolf-glow: 0 80% 50%;
+    --moonlight: 215 70% 45%;
+    --moonlight-dim: 215 45% 35%;
+    --night: 222 30% 8%;
+    --day: 45 90% 55%;
+    --day-dim: 40 70% 35%;
+    --villager: 140 50% 45%;
+    --chat-user: 215 70% 40%;
+    --chat-other: 220 14% 85%;
+
+    /* Gradients */
+    --gradient-night: linear-gradient(to bottom, hsl(222 30% 5%), hsl(222 35% 8%));
+    --gradient-deep-space: radial-gradient(circle at center, hsl(222 30% 10%) 0%, hsl(222 30% 4%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(220 13% 93%) 0%, hsl(220 14% 96%) 100%);
+    --gradient-glow: radial-gradient(circle, hsl(0 72% 51% / 0.16) 0%, transparent 70%);
+    --gradient-glass: linear-gradient(145deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.08) 100%);
+    --gradient-moonlight: radial-gradient(ellipse at top, hsl(215 70% 45% / 0.08) 0%, transparent 60%);
+    --gradient-blood: radial-gradient(circle at center, hsl(0 72% 45% / 0.16) 0%, transparent 70%);
+
+    /* Shadows */
+    --shadow-card: 0 8px 32px hsl(220 9% 20% / 0.16);
+    --shadow-glow-red: 0 0 20px hsl(0 72% 51% / 0.22);
+    --shadow-glow-blue: 0 0 20px hsl(215 70% 45% / 0.16);
+    --shadow-inner-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+    --shadow-elevation-1: 0 2px 8px hsl(220 9% 20% / 0.10);
+    --shadow-elevation-2: 0 4px 16px hsl(220 9% 20% / 0.14);
+    --shadow-elevation-3: 0 8px 32px hsl(220 9% 20% / 0.18);
+    --shadow-message-user: 0 2px 8px rgba(59, 130, 246, 0.16);
+
+    /* Sidebar */
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 220 9% 20%;
+    --sidebar-primary: 0 72% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 85%;
+    --sidebar-accent-foreground: 220 9% 20%;
+    --sidebar-border: 220 13% 85%;
     --sidebar-ring: 0 72% 51%;
   }
 }

@@ -32,7 +32,7 @@ type ProfileFormData = z.infer<typeof profileSchema>;
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { t } = useTranslation('profile');
-  const { user, logout, updateUser, refreshUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
@@ -90,11 +90,6 @@ export default function ProfilePage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/auth/login');
   };
 
   if (!user) {
@@ -241,17 +236,6 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Danger Zone */}
-        <Card className="border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive">{t('danger_zone.title')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive" onClick={handleLogout}>
-              {t('danger_zone.logout')}
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

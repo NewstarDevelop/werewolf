@@ -25,10 +25,6 @@
     "win_rate": "Win Rate",
     "no_data": "No data"
   },
-  "danger_zone": {
-    "title": "Danger Zone",
-    "logout": "Logout"
-  },
   "toast": {
     "update_success": "Update Successful",
     "profile_updated": "Your profile has been updated",

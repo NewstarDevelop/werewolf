@@ -25,10 +25,6 @@
     "win_rate": "胜率",
     "no_data": "暂无数据"
   },
-  "danger_zone": {
-    "title": "危险区域",
-    "logout": "退出登录"
-  },
   "toast": {
     "update_success": "更新成功",
     "profile_updated": "您的个人资料已更新",
