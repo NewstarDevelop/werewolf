@@ -123,14 +123,17 @@ class RoomManager:
                 if room.status != RoomStatus.WAITING:
                     raise ValueError("房间已开始游戏，无法加入")
 
-                # 对已登录用户，检查user_id是否已在房间（防止重复加入）
+                # 对已登录用户，检查user_id是否已在房间
+                # FIX: 如果用户已在房间中，返回现有记录而不是抛出错误
+                # 这样用户可以重新获取 room token（解决返回大厅后丢失权限的问题）
                 if user_id:
                     existing_user = db.query(RoomPlayer).filter(
                         RoomPlayer.room_id == room_id,
                         RoomPlayer.user_id == user_id
                     ).first()
                     if existing_user:
-                        raise ValueError(f"您已在该房间中（房间ID: {room_id}），无法重复加入")
+                        logger.info(f"User {user_id} reconnecting to room {room_id}, returning existing player")
+                        return existing_user
 
                 # 检查是否已加入
                 existing = db.query(RoomPlayer).filter(

@@ -320,7 +320,8 @@ def get_room_detail(
                     seat_id=p.seat_id,
                     is_ready=p.is_ready,
                     is_creator=p.is_creator,
-                    is_me=(p.player_id == current_player_id),
+                    # FIX: 同时支持 player_id 和 user_id 匹配，解决房主返回大厅后重新进入房间丢失权限的问题
+                    is_me=(p.player_id == current_player_id) or (current_user_id is not None and p.user_id == current_user_id),
                     joined_at=p.joined_at.isoformat()
                 )
                 for p in players

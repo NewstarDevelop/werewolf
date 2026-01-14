@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { createRoom, getRooms, joinRoom, getRoomDetail } from '@/services/roomApi';
+import { createRoom, getRooms, joinRoom } from '@/services/roomApi';
 import { getPlayerId } from '@/utils/player';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { useAuth } from '@/contexts/AuthContext';
@@ -121,26 +121,9 @@ export default function RoomLobby() {
       return;
     }
 
-    // 检查已登录用户是否已在房间中
-    try {
-      // 获取房间详情
-      const roomDetail = await getRoomDetail(roomId);
-
-      // P1-SEC-004: 使用后端返回的 has_same_user 字段检测重复加入
-      if (roomDetail.has_same_user) {
-        toast.error(t('room.already_in_room'), {
-          description: t('room.cannot_join_twice'),
-          action: {
-            label: t('room.enter_room'),
-            onClick: () => navigate(`/room/${roomId}/waiting`),
-          },
-        });
-        return;
-      }
-    } catch (error) {
-      console.error('Failed to get room detail:', error);
-    }
-
+    // FIX: 移除 has_same_user 检查，直接调用 joinRoom
+    // 后端已修改为：如果用户已在房间中，返回现有记录并签发新 token
+    // 这样用户可以重新获取 room token（解决返回大厅后丢失权限的问题）
     joinRoomMutation.mutate({ roomId, nickname: user.nickname });
   };
 
