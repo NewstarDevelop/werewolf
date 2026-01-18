@@ -9,10 +9,15 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# Resolved .env path used at startup (if any). Used by admin tooling to avoid read/write mismatch.
+ENV_FILE_PATH: Optional[Path] = None
+ENV_FILE_LOADED: bool = False
+
 # Smart .env loading with fallback support
 # Priority: environment variables (docker-compose) > .env file (local dev) > defaults
 def _load_env_file():
     """Load .env file from multiple possible locations with error handling."""
+    global ENV_FILE_PATH, ENV_FILE_LOADED
     # Possible .env locations (in priority order)
     current_file = Path(__file__).resolve()
     possible_paths = [
@@ -27,6 +32,8 @@ def _load_env_file():
     for env_path in possible_paths:
         if env_path.exists():
             load_dotenv(dotenv_path=env_path, override=False)  # Don't override existing env vars
+            ENV_FILE_PATH = env_path
+            ENV_FILE_LOADED = True
             logger.info(f"Loaded .env from: {env_path}")
             return True
 
@@ -96,6 +103,9 @@ class Settings:
         self.DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
         self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
         self.DATA_DIR: str = os.getenv("DATA_DIR", "data")  # 数据存储目录（用于SQLite等）
+
+        # Admin-only runtime config management (disabled by default; enable explicitly in .env)
+        self.ENV_MANAGEMENT_ENABLED: bool = os.getenv("ENV_MANAGEMENT_ENABLED", "false").lower() == "true"
 
         # Security settings
         self.DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "false").lower() == "true"

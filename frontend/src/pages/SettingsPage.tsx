@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
+import { EnvManagerCard } from '@/components/settings/EnvManagerCard';
 import { Moon, Globe, Volume2, Bell } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -133,6 +134,10 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Environment Variables Management (Admin Only) */}
+      <Separator className="bg-border" />
+      <EnvManagerCard />
     </div>
   );
 }

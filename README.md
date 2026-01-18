@@ -160,6 +160,31 @@ werewolf/
 | `LLM_MODEL` | 使用的模型 | `gpt-4o-mini` |
 | `DEBUG` | 调试模式 | `false` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
+| `ENV_MANAGEMENT_ENABLED` | 启用环境变量管理功能 | `false` |
+
+### 环境变量管理功能
+
+从设置页面可以直接编辑 `.env` 文件中的环境变量（需要管理员权限）。
+
+**启用方式**:
+```bash
+# 在 .env 文件中添加
+ENV_MANAGEMENT_ENABLED=true
+```
+
+**⚠️ 重要限制**:
+- 该功能使用进程内锁（`threading.Lock`），**仅支持单进程部署**
+- 使用多进程模式（如 `gunicorn --workers=2` 或 Kubernetes 多副本）会导致并发写入冲突和数据丢失
+- 修改环境变量后需要重启服务才能生效
+
+**生产环境部署建议**:
+1. **单进程部署**: 使用 `uvicorn app.main:app --workers=1` 或 `gunicorn --workers=1`
+2. **多进程部署**:
+   - 禁用该功能（保持 `ENV_MANAGEMENT_ENABLED=false`）
+   - 或实现文件级锁（如 `portalocker` 库）替代进程锁
+   - 或使用专业的配置管理服务（AWS Secrets Manager、Kubernetes ConfigMap 等）
+
+详见 `backend/app/services/env_file_manager.py` 模块文档。
 
 ### 多 Provider 配置
 
