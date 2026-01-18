@@ -150,15 +150,41 @@ export class ApiError extends Error {
   }
 }
 
-// Generic fetch wrapper with error handling, timeout, and retry
-// CRITICAL FIXES APPLIED:
-// - C1: Only retry idempotent methods (GET/HEAD) to prevent duplicate POST actions
-// - C2: Always clear timeout in finally block to prevent timer leaks
-// - C3: Support external AbortSignal and distinguish from timeout aborts
-async function fetchApi<T>(
+/**
+ * Core internal fetch wrapper with retry, timeout, and error handling.
+ *
+ * Features:
+ * - Automatic JWT token injection via getAuthHeader()
+ * - 10s timeout with AbortSignal support
+ * - Retry logic for idempotent methods (GET/HEAD) only
+ * - Unified error handling via ApiError
+ *
+ * Security:
+ * - Endpoint must be a relative path starting with '/'
+ * - Rejects absolute URLs and protocol-relative URLs ('//')
+ *
+ * CRITICAL FIXES APPLIED:
+ * - C1: Only retry idempotent methods (GET/HEAD) to prevent duplicate POST actions
+ * - C2: Always clear timeout in finally block to prevent timer leaks
+ * - C3: Support external AbortSignal and distinguish from timeout aborts
+ *
+ * @internal Recommended for use within service modules only
+ * @param endpoint - Relative API path (must start with '/')
+ * @param options - Standard fetch options
+ * @returns Promise resolving to the parsed JSON response
+ * @throws {ApiError} When the request fails or endpoint is invalid
+ */
+export async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Security: Validate endpoint to prevent token leakage to external domains
+  if (!endpoint.startsWith('/')) {
+    throw new ApiError(400, 'Endpoint must be a relative path starting with "/"');
+  }
+  if (endpoint.startsWith('//')) {
+    throw new ApiError(400, 'Protocol-relative URLs are not allowed');
+  }
   const url = `${API_BASE_URL}${endpoint}`;
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
