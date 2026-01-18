@@ -7,7 +7,8 @@ import { Separator } from '@/components/ui/separator';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { EnvManagerCard } from '@/components/settings/EnvManagerCard';
-import { Moon, Globe, Volume2, Bell } from 'lucide-react';
+import { SoundSettings } from '@/components/settings/SoundSettings';
+import { Moon, Globe, Bell } from 'lucide-react';
 
 export default function SettingsPage() {
   const { t } = useTranslation('common');
@@ -79,32 +80,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* Sound Settings */}
-        <Card className="glass-panel">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-accent-foreground">
-              <Volume2 className="h-5 w-5" aria-hidden="true" />
-              {t('settings.sound', 'Sound')}
-            </CardTitle>
-            <CardDescription>
-              {t('settings.sound_desc', 'Configure audio preferences.')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-border p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {t('settings.sound_effects', 'Sound Effects')}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.sound_effects_desc', 'Game sound effects and notifications')}
-                </p>
-              </div>
-              <span className="text-sm text-muted-foreground">
-                {t('settings.coming_soon', 'Coming Soon')}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <SoundSettings />
 
         {/* Notification Settings */}
         <Card className="glass-panel">

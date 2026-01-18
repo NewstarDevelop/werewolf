@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Send, Vote, Sparkles, Loader2, SkipForward, Shield, Bomb } from "lucide-react";
 import { PendingAction } from "@/services/api";
 import { useTranslation } from "react-i18next";
+import { useSound } from "@/contexts/SoundContext";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ const GameActions = ({
 }: GameActionsProps) => {
   const [message, setMessage] = useState("");
   const { t } = useTranslation('game');
+  const { play } = useSound();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,8 +51,19 @@ const GameActions = ({
       return;
     }
 
+    play('CLICK');
     onSendMessage(result.data);
     setMessage("");
+  };
+
+  const handleVoteClick = () => {
+    play('VOTE');
+    onVote();
+  };
+
+  const handleSkillClick = () => {
+    play('CLICK');
+    onUseSkill();
   };
 
   // Get action button label based on pending action type
@@ -139,7 +152,7 @@ const GameActions = ({
         <div className="flex gap-3">
           <Button
             variant="vote"
-            onClick={onVote}
+            onClick={handleVoteClick}
             disabled={!canVote || isSubmitting}
             className="flex-1 h-11 md:h-10"
           >
@@ -153,7 +166,7 @@ const GameActions = ({
 
           <Button
             variant="skill"
-            onClick={onUseSkill}
+            onClick={handleSkillClick}
             disabled={(!canUseSkill && pendingAction?.type !== 'self_destruct') || isSubmitting}
             className="flex-1 h-11 md:h-10"
           >

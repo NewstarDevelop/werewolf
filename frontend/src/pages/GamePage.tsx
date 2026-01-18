@@ -10,6 +10,7 @@ import DebugPanel from "@/components/game/DebugPanel";
 import GameAnalysisDialog from "@/components/game/GameAnalysisDialog";
 import { toast } from "sonner";
 import { useGame } from "@/hooks/useGame";
+import { useGameSound } from "@/hooks/useGameSound";
 import {
   isNightPhase,
   type Role,
@@ -75,6 +76,9 @@ const GamePage = () => {
     skip,
     isSubmitting,
   } = useGame({ autoStep: true, gameId: gameIdFromRoute });  // Use gameId from route
+
+  // Enable game sounds
+  useGameSound({ gameState, isEnabled: true });
 
   // Clear lastGameId when game is over (no longer an active game)
   useEffect(() => {

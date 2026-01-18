@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { SoundProvider } from "@/contexts/SoundContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/layouts/AppLayout";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -53,14 +54,15 @@ const App = () => (
       disableTransitionOnChange
       themes={["light", "dark"]}
     >
-      <ErrorBoundary>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AuthProvider>
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
+      <SoundProvider>
+        <ErrorBoundary>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AuthProvider>
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
                   {/* Public Auth routes - no sidebar */}
                   <Route path="/auth/login" element={<LoginPage />} />
                   <Route path="/auth/register" element={<RegisterPage />} />
@@ -89,6 +91,7 @@ const App = () => (
           </BrowserRouter>
         </TooltipProvider>
       </ErrorBoundary>
+      </SoundProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );
