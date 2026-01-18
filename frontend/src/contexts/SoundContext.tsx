@@ -82,6 +82,11 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Load from localStorage on initial mount to prevent volume jumps
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, []);
+
   // Save preferences to localStorage whenever they change
   useEffect(() => {
     const prefs = {
