@@ -27,6 +27,22 @@ function buildHeaders(adminToken?: string): HeadersInit {
   return headers;
 }
 
+/**
+ * API Error type with HTTP status code
+ */
+type ApiError = Error & { status?: number };
+
+/**
+ * Build an error object with HTTP status for better error handling
+ */
+async function buildApiError(response: Response, fallbackMessage: string): Promise<ApiError> {
+  const error = await response.json().catch(() => ({ detail: fallbackMessage }));
+  const message = error.detail || fallbackMessage;
+  const apiError = new Error(message) as ApiError;
+  apiError.status = response.status;
+  return apiError;
+}
+
 export const configService = {
   /**
    * Get all environment variables
@@ -39,8 +55,7 @@ export const configService = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to fetch environment variables' }));
-      throw new Error(error.detail || 'Failed to fetch environment variables');
+      throw await buildApiError(response, 'Failed to fetch environment variables');
     }
 
     return response.json();
@@ -57,8 +72,7 @@ export const configService = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to fetch merged environment variables' }));
-      throw new Error(error.detail || 'Failed to fetch merged environment variables');
+      throw await buildApiError(response, 'Failed to fetch merged environment variables');
     }
 
     return response.json();
@@ -80,8 +94,7 @@ export const configService = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to update environment variables' }));
-      throw new Error(error.detail || 'Failed to update environment variables');
+      throw await buildApiError(response, 'Failed to update environment variables');
     }
 
     return response.json();
@@ -99,8 +112,7 @@ export const configService = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Failed to restart service' }));
-      throw new Error(error.detail || 'Failed to restart service');
+      throw await buildApiError(response, 'Failed to restart service');
     }
 
     return response.json();

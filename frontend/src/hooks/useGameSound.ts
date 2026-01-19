@@ -23,8 +23,9 @@ export function useGameSound({ gameState, isEnabled = true }: UseGameSoundOption
     const prevPhase = prevPhaseRef.current;
 
     // Phase transition sound (Day/Night)
-    if (prevPhase && gameState.phase !== prevPhase) {
-      // Stop previous BGM
+    // Also play on initial load (when prevPhase is null)
+    if (prevPhase !== gameState.phase) {
+      // Stop previous BGM (only if prevPhase exists)
       if (prevPhase === 'DAY') {
         stop('PHASE_DAY');
       } else if (prevPhase === 'NIGHT') {

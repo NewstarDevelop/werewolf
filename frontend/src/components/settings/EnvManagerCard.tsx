@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, AlertTriangle, Loader2, Key, RefreshCcw } from 'lucide-react';
+import { Plus, AlertTriangle, Loader2, Key, RefreshCcw, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { configService } from '@/services/configService';
 import { EnvVariable } from '@/types/config';
@@ -41,6 +41,7 @@ export function EnvManagerCard() {
     sessionStorage.getItem(ADMIN_TOKEN_KEY) || ''
   );
   const [authError, setAuthError] = useState(false);
+  const [envNotFound, setEnvNotFound] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
 
@@ -52,14 +53,33 @@ export function EnvManagerCard() {
     try {
       setLoading(true);
       setAuthError(false);
+      setEnvNotFound(false);
       const token = getAdminToken();
       const data = await configService.getMergedEnvVars(token);
       setVariables(data);
     } catch (error) {
+      const status =
+        typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined;
+
+      if (status === 404) {
+        setEnvNotFound(true);
+        setVariables([]);
+        return;
+      }
+
       const message = getErrorMessage(error, '');
-      if (message.includes('Admin access required') || message.includes('403') || message.includes('401')) {
+      if (
+        status === 401 ||
+        status === 403 ||
+        message.includes('Admin access required') ||
+        message.includes('403') ||
+        message.includes('401')
+      ) {
         setAuthError(true);
       }
+
       toast.error(getErrorMessage(error, 'Failed to load environment variables'));
     } finally {
       setLoading(false);
@@ -71,11 +91,14 @@ export function EnvManagerCard() {
   }, [loadVariables]);
 
   const handleTokenSubmit = async () => {
+    // Save token to session storage regardless of loading state
     if (adminToken) {
       sessionStorage.setItem(ADMIN_TOKEN_KEY, adminToken);
     } else {
       sessionStorage.removeItem(ADMIN_TOKEN_KEY);
     }
+    // Don't trigger reload if already loading
+    if (loading) return;
     await loadVariables();
   };
 
@@ -173,23 +196,39 @@ export function EnvManagerCard() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Admin Token Input */}
-            <div className="relative">
-              <Key className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="password"
-                placeholder="Admin Token / Key"
-                aria-label="Admin Token"
-                value={adminToken}
-                onChange={(e) => {
-                  setAdminToken(e.target.value);
-                  setAuthError(false);
-                }}
-                onBlur={handleTokenSubmit}
-                onKeyDown={(e) => e.key === 'Enter' && handleTokenSubmit()}
-                className={`pl-8 w-[180px] ${authError ? 'border-destructive' : ''}`}
-              />
+            {/* Admin Token Input Group */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Key className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="Admin Token / Key"
+                  aria-label="Admin Token"
+                  value={adminToken}
+                  onChange={(e) => {
+                    setAdminToken(e.target.value);
+                    setAuthError(false);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleTokenSubmit()}
+                  className={`pl-8 w-[180px] ${authError ? 'border-destructive' : ''}`}
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTokenSubmit}
+                disabled={loading}
+                aria-label="Confirm Token"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 sm:mr-1" />
+                )}
+                <span className="hidden sm:inline">Confirm</span>
+              </Button>
             </div>
+            
             {/* Restart Button */}
             <Button
               variant="outline"
@@ -219,6 +258,15 @@ export function EnvManagerCard() {
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <strong>Authentication failed.</strong> Please enter a valid Admin Token (JWT admin token or X-Admin-Key).
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {envNotFound && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>No .env file found.</strong> Create variables below to generate one.
             </AlertDescription>
           </Alert>
         )}
