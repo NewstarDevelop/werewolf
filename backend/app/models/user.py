@@ -19,6 +19,7 @@ class User(Base):
     bio = Column(String(500), nullable=True)  # 个人简介
     is_active = Column(Boolean, default=True, nullable=False)  # 是否激活
     is_email_verified = Column(Boolean, default=False, nullable=False)  # 邮箱是否验证
+    is_admin = Column(Boolean, default=False, nullable=False)  # 是否管理员
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)  # 最后登录时间

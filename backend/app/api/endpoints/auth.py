@@ -112,8 +112,8 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
         else:
             raise HTTPException(status_code=409, detail="Registration failed due to conflict")
 
-    # Generate token
-    access_token = create_user_token(user_id=user.id)
+    # Generate token (include is_admin flag from user model)
+    access_token = create_user_token(user_id=user.id, is_admin=user.is_admin)
 
     # Create response data
     response_data = AuthResponse(
@@ -162,8 +162,8 @@ async def login(body: LoginRequest, db: Session = Depends(get_db)):
     user.last_login_at = datetime.utcnow()
     db.commit()
 
-    # Generate token
-    access_token = create_user_token(user_id=user.id)
+    # Generate token (include is_admin flag from user model)
+    access_token = create_user_token(user_id=user.id, is_admin=user.is_admin)
 
     # Create response data
     response_data = AuthResponse(
@@ -286,8 +286,8 @@ async def oauth_callback(
         user.last_login_at = datetime.utcnow()
         db.commit()
 
-        # Generate JWT token
-        jwt_token = create_user_token(user_id=user.id)
+        # Generate JWT token (include is_admin flag from user model)
+        jwt_token = create_user_token(user_id=user.id, is_admin=user.is_admin)
 
         # Validate and sanitize redirect URL
         next_url = sanitize_next_url(oauth_state.next_url or "/lobby")
