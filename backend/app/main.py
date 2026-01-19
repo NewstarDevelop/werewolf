@@ -101,12 +101,11 @@ async def startup_event():
     else:
         logger.warning("OpenAI API Key: NOT configured - using mock mode")
 
-    # Initialize database
-    from app.init_db import init_database
-    init_database()
-
-    # NOTE: Database migrations are now handled in entrypoint.sh before server startup
-    # This ensures migrations complete before health checks begin
+    # NOTE: Database initialization and migrations are now handled in entrypoint.sh
+    # before server startup. This ensures:
+    # 1. Base tables are created (init_database)
+    # 2. Schema migrations are applied (alembic upgrade head)
+    # 3. Health checks don't fail during migration
 
     # WL-011 Fix: Reset orphaned rooms after restart
     # Since game state is stored in-memory, rooms in PLAYING state

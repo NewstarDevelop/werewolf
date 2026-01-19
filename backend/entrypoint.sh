@@ -8,12 +8,17 @@ echo "===================================="
 echo "Werewolf Backend Container Starting"
 echo "===================================="
 
+# Initialize database tables first (creates base schema if not exists)
+echo "Initializing database..."
+python -c "from app.init_db import init_database; init_database()"
+echo "Database initialization completed"
+
 # Check if migrations are disabled
 RUN_MIGRATIONS="${RUN_DB_MIGRATIONS:-true}"
 if [ "$RUN_MIGRATIONS" = "true" ] || [ "$RUN_MIGRATIONS" = "1" ] || [ "$RUN_MIGRATIONS" = "yes" ]; then
     echo "Running database migrations..."
 
-    # Execute Alembic migrations
+    # Execute Alembic migrations (schema upgrades)
     alembic upgrade head
 
     echo "Database migrations completed successfully"
