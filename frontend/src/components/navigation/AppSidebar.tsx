@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   History,
+  ShieldAlert,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -175,6 +176,11 @@ export function AppSidebar() {
                 title={t('nav.settings', 'Settings')}
                 url="/settings"
                 icon={Settings}
+              />
+              <SidebarNavItem
+                title={t('nav.admin', 'Admin Panel')}
+                url="/admin"
+                icon={ShieldAlert}
               />
             </SidebarMenu>
           </SidebarGroupContent>

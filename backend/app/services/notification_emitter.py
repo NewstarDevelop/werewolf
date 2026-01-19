@@ -178,4 +178,5 @@ async def emit_to_users(
                 idempotency_key=idem_key,
             )
         except Exception as e:
+            db.rollback()
             logger.warning(f"[notifications] failed to emit to user={user_id}: {e}")

@@ -21,6 +21,7 @@ const OAuthCallback = lazy(() => import("./pages/auth/OAuthCallback"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // H1 FIX: Disable React Query retry to prevent double-retry with fetchApi
@@ -76,6 +77,7 @@ const App = () => (
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/history" element={<HistoryPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/admin" element={<AdminPage />} />
                   </Route>
 
                   {/* Game page - protected but without sidebar for immersive experience */}
