@@ -50,7 +50,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      # Increased start_period to allow time for database migrations to complete
+      # Migrations run in entrypoint.sh before the FastAPI server starts
+      start_period: 30s
 
   # Frontend Web Service
   frontend:

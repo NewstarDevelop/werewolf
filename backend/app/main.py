@@ -105,9 +105,8 @@ async def startup_event():
     from app.init_db import init_database
     init_database()
 
-    # Apply Alembic migrations (schema upgrades)
-    from app.core.migrations import upgrade_head
-    upgrade_head()
+    # NOTE: Database migrations are now handled in entrypoint.sh before server startup
+    # This ensures migrations complete before health checks begin
 
     # WL-011 Fix: Reset orphaned rooms after restart
     # Since game state is stored in-memory, rooms in PLAYING state

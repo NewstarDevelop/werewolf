@@ -24,10 +24,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Copy and make entrypoint script executable (before switching user)
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # Create non-root user for security and pre-create data directory
 RUN mkdir -p /app/data && \
     adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app
+
 USER appuser
 
 # Expose port
@@ -36,6 +41,9 @@ EXPOSE 8000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
+
+# Set entrypoint to run migrations before starting the app
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # T-STAB-006: Run with single worker only
 # IMPORTANT: Game state is stored in-memory (GameStore), so multi-worker/multi-instance
