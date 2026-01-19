@@ -433,6 +433,62 @@ async def join_room(
         raise HTTPException(status_code=500, detail="Failed to join room")
 
 
+@router.post("/{room_id}/leave")
+async def leave_room(
+    room_id: str,
+    db: Session = Depends(get_db),
+    current_player: Dict = Depends(get_current_player)
+):
+    """
+    退出房间（仅非房主可调用）
+    POST /api/rooms/{room_id}/leave
+
+    Requires: JWT authentication
+
+    广播 player_left 事件给房间内其他玩家。
+    """
+    from app.services.websocket_manager import websocket_manager
+
+    try:
+        # 验证玩家在该房间中
+        player_id = current_player["player_id"]
+        if current_player.get("room_id") != room_id:
+            raise HTTPException(status_code=403, detail="You are not in this room")
+
+        # 调用服务层离开房间，获取广播信息
+        result = room_manager.leave_room(db, room_id, player_id)
+
+        # WebSocket 广播 player_left 事件（失败不阻断主流程）
+        room_key = f"room_{room_id}"
+        try:
+            await websocket_manager.broadcast_to_game(
+                room_key,
+                "player_left",
+                {
+                    "room_id": room_id,
+                    "player_id": player_id,
+                    "nickname": result["nickname"],
+                    "current_players": result["current_players"]
+                }
+            )
+            logger.info(f"Broadcasted player_left to room {room_id}")
+        except Exception as e:
+            logger.warning(f"Failed to broadcast player_left to room {room_id}: {e}")
+
+        return {"success": True, "message": "已退出房间"}
+    except ValueError as e:
+        error_msg = str(e)
+        # 房间不存在应返回 404，其他业务错误返回 400
+        if "房间不存在" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to leave room {room_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to leave room")
+
+
 @router.post("/{room_id}/ready")
 def toggle_ready(
     room_id: str,

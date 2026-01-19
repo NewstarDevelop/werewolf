@@ -182,6 +182,23 @@ export async function startGame(roomId: string, playerId: string, fillAi: boolea
 }
 
 /**
+ * Leave a room (non-creator only)
+ */
+export async function leaveRoom(roomId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/leave`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeader()
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed to leave room' }));
+    throw new ApiError(response.status, error.detail || 'Failed to leave room');
+  }
+}
+
+/**
  * Delete a room
  */
 export async function deleteRoom(roomId: string): Promise<void> {

@@ -199,6 +199,99 @@ class RoomManager:
 
         raise ValueError("加入房间失败，请重试")
 
+    def leave_room(
+        self,
+        db: Session,
+        room_id: str,
+        player_id: str
+    ) -> dict:
+        """玩家退出房间
+
+        与 join_room 对称的并发处理：
+        - 使用 with_for_update 锁房间行
+        - 真实计数回写 current_players
+        - 处理 OperationalError 并重试
+
+        Args:
+            player_id: 退出房间的玩家ID
+
+        Returns:
+            dict: 包含 nickname 和 current_players 信息用于广播
+
+        Raises:
+            ValueError: 房间不存在、游戏已开始、房主尝试离开
+        """
+        from sqlalchemy.exc import OperationalError
+        import time
+
+        max_retries = 5
+        retry_delay = 0.2
+
+        for attempt in range(max_retries):
+            try:
+                # Lock room to prevent concurrency issues
+                room = db.query(Room).filter(Room.id == room_id).with_for_update().first()
+                if not room:
+                    raise ValueError("房间不存在")
+
+                # Get player first for idempotency check
+                player = db.query(RoomPlayer).filter(
+                    RoomPlayer.room_id == room_id,
+                    RoomPlayer.player_id == player_id
+                ).first()
+
+                if not player:
+                    # Player already gone, consider success (幂等性)
+                    # 重算真实计数以确保一致性
+                    current_count = db.query(RoomPlayer).filter(
+                        RoomPlayer.room_id == room_id
+                    ).count()
+                    if room.current_players != current_count:
+                        room.current_players = current_count
+                        db.commit()
+                    return {"nickname": "Unknown", "current_players": current_count}
+
+                # Check room status after confirming player exists
+                if room.status != RoomStatus.WAITING:
+                    raise ValueError("游戏已开始，无法退出")
+
+                # Creator cannot leave, must delete room
+                if player.is_creator:
+                    raise ValueError("房主无法退出房间，请使用删除房间功能")
+
+                # 保存昵称用于广播
+                nickname = player.nickname
+
+                # Remove player
+                db.delete(player)
+                db.flush()  # Ensure delete is processed for the transaction
+
+                # Update player count (真实计数回写)
+                current_count = db.query(RoomPlayer).filter(
+                    RoomPlayer.room_id == room_id
+                ).count()
+
+                room.current_players = current_count
+                db.commit()
+
+                logger.info(f"Player {nickname} left room {room_id}")
+                return {"nickname": nickname, "current_players": current_count}
+
+            except OperationalError:
+                # Database locked - retry with exponential backoff
+                db.rollback()
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(
+                        f"Database locked on leave_room attempt {attempt + 1}/{max_retries}, "
+                        f"retrying in {wait_time:.2f}s..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+                raise ValueError("服务器繁忙，请稍后重试")
+
+        raise ValueError("退出房间失败，请重试")
+
     def toggle_ready(
         self,
         db: Session,

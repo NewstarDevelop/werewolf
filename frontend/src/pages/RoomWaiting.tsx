@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { getRoomDetail, toggleReady, startGame, deleteRoom } from '@/services/roomApi';
+import { getRoomDetail, toggleReady, startGame, deleteRoom, leaveRoom } from '@/services/roomApi';
 import { getPlayerId } from '@/utils/player';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -136,6 +136,18 @@ export default function RoomWaiting() {
     },
   });
 
+  // Leave room mutation
+  const leaveRoomMutation = useMutation({
+    mutationFn: () => leaveRoom(roomId!),
+    onSuccess: () => {
+      toast.success(t('room.left_room'));
+      navigate('/');
+    },
+    onError: (error: Error) => {
+      toast.error(t('room.leave_failed'), { description: error.message });
+    },
+  });
+
   const myPlayer = roomDetail?.players.find(p => p.is_me);
   const isCreator = myPlayer?.is_creator || false;
   const allReady = roomDetail?.players.every(p => p.is_ready) || false;
@@ -164,6 +176,12 @@ export default function RoomWaiting() {
   const handleDeleteRoom = () => {
     if (confirm(t('room.confirm_delete'))) {
       deleteRoomMutation.mutate();
+    }
+  };
+
+  const handleExitRoom = () => {
+    if (confirm(t('room.confirm_exit'))) {
+      leaveRoomMutation.mutate();
     }
   };
 
@@ -209,7 +227,7 @@ export default function RoomWaiting() {
             >
               {t('room.back_to_lobby')}
             </Button>
-            {isCreator && (
+            {isCreator ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -218,6 +236,16 @@ export default function RoomWaiting() {
                 className="border-red-600 text-red-400 hover:bg-red-900/20"
               >
                 {deleteRoomMutation.isPending ? t('room.deleting') : t('room.delete_room')}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExitRoom}
+                disabled={leaveRoomMutation.isPending}
+                className="border-red-600 text-red-400 hover:bg-red-900/20"
+              >
+                {leaveRoomMutation.isPending ? t('room.exiting') : t('room.exit_room')}
               </Button>
             )}
           </div>
