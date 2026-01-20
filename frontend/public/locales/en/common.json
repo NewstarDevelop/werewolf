@@ -269,7 +269,7 @@
     "access_description": "Enter your admin token or use your admin account to access this panel",
     "token_placeholder": "Admin Token / JWT",
     "token_required": "Please enter an admin token",
-    "token_hint": "Supports JWT admin token or X-Admin-Key",
+    "token_hint": "Supports JWT admin token",
     "token_input_label": "Admin access token",
     "invalid_token": "Invalid admin token. Please try again.",
     "validating": "Validating...",

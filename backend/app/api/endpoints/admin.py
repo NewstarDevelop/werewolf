@@ -46,7 +46,7 @@ async def restart_service(
     Trigger graceful service restart.
     POST /api/admin/restart
 
-    Security: Admin only (JWT admin or X-Admin-Key)
+    Security: Admin only (JWT admin token)
     The actual restart is handled by external process manager (docker/systemd).
     """
     client_ip: Optional[str] = None
@@ -84,7 +84,7 @@ async def broadcast_notifications(
     Broadcast a notification to all registered users.
     POST /api/admin/notifications/broadcast
 
-    Security: Admin only (JWT admin or X-Admin-Key)
+    Security: Admin only (JWT admin token)
     """
     client_ip: Optional[str] = None
     try:

@@ -8,19 +8,13 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 /**
  * Build headers with optional admin token.
- * JWT tokens (starting with 'ey') use Authorization header.
- * Other tokens use X-Admin-Key header.
+ * All tokens use Authorization header with Bearer scheme.
  */
 function buildHeaders(adminToken?: string): HeadersInit {
   const headers: HeadersInit = { ...getAuthHeader() };
 
   if (adminToken) {
-    // JWT tokens start with 'ey', otherwise treat as X-Admin-Key
-    if (adminToken.startsWith('ey')) {
-      headers['Authorization'] = `Bearer ${adminToken}`;
-    } else {
-      headers['X-Admin-Key'] = adminToken;
-    }
+    headers['Authorization'] = `Bearer ${adminToken}`;
   }
 
   return headers;
@@ -65,6 +59,27 @@ export interface BroadcastNotificationResponse {
 }
 
 export const adminService = {
+  /**
+   * Login with admin password
+   * POST /api/auth/admin-login
+   * Returns JWT admin token on success
+   */
+  async adminLogin(password: string): Promise<{ access_token: string; token_type: string }> {
+    const response = await fetch(`${API_BASE}/api/auth/admin-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    if (!response.ok) {
+      throw await buildApiError(response, 'Admin login failed');
+    }
+
+    return response.json();
+  },
+
   /**
    * Validate admin access by attempting to fetch env vars
    * Returns true if the token is valid, false otherwise

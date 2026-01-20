@@ -49,7 +49,7 @@ async def get_env_vars(
     Get all environment variables from .env file.
     GET /api/config/env
 
-    Security: Admin only (JWT admin or X-Admin-Key)
+    Security: Admin only (JWT admin token)
     Sensitive variables return value=null
     """
     _require_env_management_enabled()
@@ -91,7 +91,7 @@ async def get_env_vars_merged(
 
     GET /api/config/env/merged
 
-    Security: Admin only (JWT admin or X-Admin-Key)
+    Security: Admin only (JWT admin token)
     Sensitive variables return value=null
     """
     _require_env_management_enabled()
@@ -162,7 +162,7 @@ async def put_env_vars(
     Update environment variables in .env file.
     PUT /api/config/env
 
-    Security: Admin only (JWT admin or X-Admin-Key)
+    Security: Admin only (JWT admin token)
     Sensitive variables require confirm_sensitive=true
     All changes require server restart to take effect
     """

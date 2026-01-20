@@ -109,9 +109,8 @@ class Settings:
 
         # Security settings
         self.DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "false").lower() == "true"
-        self.ADMIN_KEY: str = os.getenv("ADMIN_KEY", "")
-        # P1-SEC-002: Control X-Admin-Key availability (default disabled in production)
-        self.ADMIN_KEY_ENABLED: bool = os.getenv("ADMIN_KEY_ENABLED", "false").lower() == "true"
+        # Admin panel password authentication (simple password login)
+        self.ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
 
         # P1-SEC-003: Trusted proxies for X-Forwarded-For header
         # Only trust forwarded headers when request comes from these IPs

@@ -1,14 +1,16 @@
 """Authentication API endpoints."""
 import logging
+import secrets
 import uuid
 from datetime import datetime
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import create_user_token
+from app.core.auth import create_user_token, create_admin_token
 from app.core.security import hash_password, verify_password
 from app.core.config import settings
 from app.models.user import User
@@ -324,3 +326,49 @@ async def reset_password(body: PasswordResetRequest, db: Session = Depends(get_d
     # In production, send email with reset link here
 
     return {"message": "If the email exists, a password reset link has been sent"}
+
+
+class AdminLoginRequest(BaseModel):
+    """Request body for admin password login."""
+    password: str
+
+
+class AdminLoginResponse(BaseModel):
+    """Response for admin login."""
+    access_token: str
+    token_type: str = "bearer"
+
+
+@router.post("/admin-login", response_model=AdminLoginResponse)
+async def admin_login(body: AdminLoginRequest):
+    """
+    Login to admin panel with password.
+
+    This endpoint validates the admin password configured in ADMIN_PASSWORD
+    environment variable and returns a JWT admin token.
+
+    Security:
+    - Uses constant-time comparison to prevent timing attacks
+    - Returns generic error message to prevent password enumeration
+    """
+    # Check if ADMIN_PASSWORD is configured
+    if not settings.ADMIN_PASSWORD:
+        logger.warning("Admin login attempted but ADMIN_PASSWORD is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Admin password authentication is not configured"
+        )
+
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(body.password, settings.ADMIN_PASSWORD):
+        logger.warning("Admin login failed: invalid password")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin password"
+        )
+
+    # Generate admin JWT token
+    admin_token = create_admin_token()
+    logger.info("Admin login successful via password authentication")
+
+    return AdminLoginResponse(access_token=admin_token)

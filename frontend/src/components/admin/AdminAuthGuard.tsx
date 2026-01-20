@@ -2,8 +2,8 @@
  * AdminAuthGuard - Page-level authentication guard for admin panel
  *
  * Features:
- * - Auto-validates JWT token on mount
- * - Falls back to manual admin token input
+ * - Auto-validates JWT token on mount (for logged-in admin users)
+ * - Falls back to admin password authentication
  * - Stores admin token in sessionStorage for session persistence
  */
 
@@ -27,7 +27,7 @@ type AuthState = 'checking' | 'locked' | 'authenticated';
 export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   const { t } = useTranslation('common');
   const [authState, setAuthState] = useState<AuthState>('checking');
-  const [tokenInput, setTokenInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [activeToken, setActiveToken] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -45,16 +45,13 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
         }
       } else {
         setAuthState('locked');
-        if (token) {
-          setError(t('admin.invalid_token', 'Invalid admin token. Please try again.'));
-        }
       }
     } catch {
       setAuthState('locked');
     } finally {
       setIsValidating(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -88,11 +85,41 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
   }, [validateToken]);
 
   const handleUnlock = async () => {
-    if (!tokenInput.trim()) {
-      setError(t('admin.token_required', 'Please enter an admin token.'));
+    if (!passwordInput.trim()) {
+      setError(t('admin.password_required', 'Please enter the admin password.'));
       return;
     }
-    await validateToken(tokenInput.trim());
+
+    setIsValidating(true);
+    setError(null);
+
+    try {
+      // Try password authentication first
+      const result = await adminService.adminLogin(passwordInput.trim());
+      const token = result.access_token;
+
+      // Validate the received token
+      const isValid = await adminService.validateAccess(token);
+      if (isValid) {
+        setActiveToken(token);
+        setAuthState('authenticated');
+        sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+      } else {
+        setError(t('admin.invalid_password', 'Invalid admin password. Please try again.'));
+      }
+    } catch (err) {
+      // Handle specific error cases
+      const error = err as Error & { status?: number };
+      if (error.status === 503) {
+        setError(t('admin.password_not_configured', 'Admin password is not configured. Please contact the administrator.'));
+      } else if (error.status === 401) {
+        setError(t('admin.invalid_password', 'Invalid admin password. Please try again.'));
+      } else {
+        setError(error.message || t('admin.login_failed', 'Login failed. Please try again.'));
+      }
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -122,7 +149,7 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
               {t('admin.access_required', 'Administrator Access Required')}
             </CardTitle>
             <CardDescription>
-              {t('admin.access_description', 'Enter your admin token or use your admin account to access this panel.')}
+              {t('admin.password_description', 'Enter the admin password to access this panel.')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -135,17 +162,17 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
               <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="password"
-                placeholder={t('admin.token_placeholder', 'Admin Token / JWT')}
-                value={tokenInput}
+                placeholder={t('admin.password_placeholder', 'Admin Password')}
+                value={passwordInput}
                 onChange={(e) => {
-                  setTokenInput(e.target.value);
+                  setPasswordInput(e.target.value);
                   setError(null);
                 }}
                 onKeyDown={handleKeyDown}
                 className="pl-10"
                 disabled={isValidating}
                 autoComplete="current-password"
-                aria-label={t('admin.token_input_label', 'Admin access token')}
+                aria-label={t('admin.password_input_label', 'Admin password')}
               />
             </div>
             <Button
@@ -162,9 +189,6 @@ export function AdminAuthGuard({ children }: AdminAuthGuardProps) {
                 t('admin.unlock', 'Unlock')
               )}
             </Button>
-            <p className="text-xs text-center text-muted-foreground">
-              {t('admin.token_hint', 'Supports JWT admin token or X-Admin-Key')}
-            </p>
           </CardContent>
         </Card>
       </div>

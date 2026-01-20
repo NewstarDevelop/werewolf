@@ -269,7 +269,7 @@
     "access_description": "请输入管理员令牌或使用管理员账户访问此面板",
     "token_placeholder": "管理员令牌 / JWT",
     "token_required": "请输入管理员令牌",
-    "token_hint": "支持 JWT 管理员令牌或 X-Admin-Key",
+    "token_hint": "支持 JWT 管理员令牌",
     "token_input_label": "管理员访问令牌",
     "invalid_token": "令牌无效，请重试",
     "validating": "验证中...",

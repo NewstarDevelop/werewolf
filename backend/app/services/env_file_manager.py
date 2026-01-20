@@ -93,9 +93,6 @@ class EnvFileManager:
         "JWT_SECRET_KEY",
         "JWT_ALGORITHM",
         "JWT_EXPIRE_MINUTES",
-        # Admin emergency access
-        "ADMIN_KEY",
-        "ADMIN_KEY_ENABLED",
         # Proxy trust boundary
         "TRUSTED_PROXIES",
     }

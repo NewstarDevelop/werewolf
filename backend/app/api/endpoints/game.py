@@ -1,8 +1,6 @@
 """Game API endpoints."""
-import secrets
-import time
 import logging
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, HTTPException, Header, Depends
 from fastapi.concurrency import run_in_threadpool
 from typing import List, Dict, Optional
 
@@ -92,142 +90,31 @@ async def _persist_game_over(
     # Execute entire DB operation (including potential rollback) in a single thread
     await run_in_threadpool(_persist_game_over_sync, db, game_id)
 
-# P1-SEC-002: Rate limiting for admin key authentication
-_admin_key_failures: Dict[str, Dict] = {}  # ip -> {"count": int, "locked_until": float}
-ADMIN_KEY_MAX_FAILURES = 5
-ADMIN_KEY_LOCKOUT_SECONDS = 600  # 10 minutes
 
-
-def _is_trusted_proxy(ip: str) -> bool:
-    """Check if the given IP is in the trusted proxies list."""
-    import ipaddress
-    if not settings.TRUSTED_PROXIES:
-        return False
-    try:
-        client_ip = ipaddress.ip_address(ip)
-        for proxy in settings.TRUSTED_PROXIES:
-            try:
-                # Support both single IPs and CIDR notation
-                if '/' in proxy:
-                    if client_ip in ipaddress.ip_network(proxy, strict=False):
-                        return True
-                else:
-                    if client_ip == ipaddress.ip_address(proxy):
-                        return True
-            except ValueError:
-                continue
-    except ValueError:
-        return False
-    return False
-
-
-def _get_client_ip(request: Request) -> str:
-    """
-    Extract client IP from request, handling proxies securely.
-
-    P1-SEC-003: Only trust X-Forwarded-For/X-Real-IP headers when the
-    direct client IP is in TRUSTED_PROXIES. This prevents IP spoofing
-    attacks where malicious clients forge these headers.
-    """
-    # Get direct client IP first
-    direct_ip = request.client.host if request.client else "unknown"
-
-    # Only trust forwarded headers if request comes from a trusted proxy
-    if direct_ip != "unknown" and _is_trusted_proxy(direct_ip):
-        # Check X-Forwarded-For header (set by reverse proxies)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            # Take the first IP (original client)
-            return forwarded_for.split(",")[0].strip()
-        # Check X-Real-IP header (set by some proxies)
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
-
-    # Fall back to direct client IP (don't trust forwarded headers)
-    return direct_ip
-
-
-# T-SEC-004: Unified admin verification
-# Supports both JWT admin (primary) and X-Admin-Key (emergency fallback)
+# T-SEC-004: Admin verification (JWT admin token only)
 async def verify_admin(
-    request: Request,
     authorization: Optional[str] = Header(None),
-    admin_key: Optional[str] = Header(None, alias="X-Admin-Key")
 ):
     """
-    Unified admin verification supporting two methods:
+    Admin verification using JWT admin token.
 
-    1. JWT Admin (primary): Authorization header with admin token
-       - Created via create_admin_token()
-       - Token must have is_admin=True
-
-    2. X-Admin-Key (fallback): Legacy header-based auth
-       - Only works if ADMIN_KEY_ENABLED=true (P1-SEC-002)
-       - Intended for emergency/maintenance access
-       - Rate limited with lockout after failures
-
-    Priority: JWT > X-Admin-Key
+    Authorization header must contain an admin token:
+    - Created via create_admin_token()
+    - Token must have is_admin=True
     """
-    # Method 1: Try JWT admin token first
-    if authorization:
-        try:
-            player = await get_current_player(authorization, user_access_token=None)
-            if player.get("is_admin", False):
-                return player
-        except HTTPException:
-            pass  # Fall through to X-Admin-Key
+    detail = "Admin access required. Provide JWT admin token."
+    if not authorization:
+        raise HTTPException(status_code=403, detail=detail)
 
-    # Method 2: Fallback to X-Admin-Key (P1-SEC-002: with restrictions)
-    if admin_key:
-        # P1-SEC-002: Check if X-Admin-Key is enabled
-        if not settings.ADMIN_KEY_ENABLED:
-            logger.warning("X-Admin-Key auth attempted but ADMIN_KEY_ENABLED=false")
-            raise HTTPException(
-                status_code=403,
-                detail="X-Admin-Key authentication is disabled. Use JWT admin token."
-            )
+    try:
+        player = await get_current_player(authorization, user_access_token=None)
+    except HTTPException:
+        raise HTTPException(status_code=403, detail=detail)
 
-        # P1-SEC-002: Check rate limit using real client IP
-        client_ip = _get_client_ip(request)
-        now = time.time()
+    if not player.get("is_admin", False):
+        raise HTTPException(status_code=403, detail=detail)
 
-        if client_ip in _admin_key_failures:
-            failure_info = _admin_key_failures[client_ip]
-            if failure_info.get("locked_until", 0) > now:
-                remaining = int(failure_info["locked_until"] - now)
-                logger.warning(f"Admin key auth blocked for {client_ip}, locked for {remaining}s")
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Too many failed attempts. Try again in {remaining} seconds."
-                )
-
-        # P0-3 Fix: Use constant-time comparison to prevent timing attacks
-        if settings.ADMIN_KEY and secrets.compare_digest(admin_key, settings.ADMIN_KEY):
-            # Success - clear failure count
-            if client_ip in _admin_key_failures:
-                del _admin_key_failures[client_ip]
-            logger.info(f"Admin key auth successful from {client_ip}")
-            return {"player_id": "admin_key", "is_admin": True}
-
-        # P1-SEC-002: Record failure
-        if client_ip not in _admin_key_failures:
-            _admin_key_failures[client_ip] = {"count": 0, "locked_until": 0}
-
-        _admin_key_failures[client_ip]["count"] += 1
-        failure_count = _admin_key_failures[client_ip]["count"]
-
-        if failure_count >= ADMIN_KEY_MAX_FAILURES:
-            _admin_key_failures[client_ip]["locked_until"] = now + ADMIN_KEY_LOCKOUT_SECONDS
-            logger.warning(f"Admin key auth locked for {client_ip} after {failure_count} failures")
-
-        logger.warning(f"Admin key auth failed from {client_ip} (attempt {failure_count})")
-
-    # Neither method succeeded
-    raise HTTPException(
-        status_code=403,
-        detail="Admin access required. Provide JWT admin token or X-Admin-Key header."
-    )
+    return player
 
 
 def verify_game_membership(game_id: str, current_player: Dict):
@@ -625,7 +512,7 @@ async def delete_game(
     Delete a game.
     DELETE /api/game/{game_id}
 
-    Security: T-SEC-004 - Unified admin auth (JWT admin or X-Admin-Key)
+    Security: T-SEC-004 - Admin auth (JWT admin token)
     """
     if game_store.delete_game(game_id):
         return {"success": True, "message": "Game deleted"}
@@ -734,7 +621,7 @@ async def clear_game_analysis_cache(
     Clear cached analysis for specific game.
     DELETE /api/game/{game_id}/analysis-cache
 
-    Security: T-SEC-004 - Unified admin auth (JWT admin or X-Admin-Key)
+    Security: T-SEC-004 - Admin auth (JWT admin token)
     """
     count = AnalysisCache.clear(game_id)
     return {
@@ -751,7 +638,7 @@ async def clear_all_analysis_cache(
     Clear all cached analyses.
     DELETE /api/game/analysis-cache/all
 
-    Security: T-SEC-004 - Unified admin auth (JWT admin or X-Admin-Key)
+    Security: T-SEC-004 - Admin auth (JWT admin token)
     """
     count = AnalysisCache.clear()
     return {

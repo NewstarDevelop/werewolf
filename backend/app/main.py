@@ -69,13 +69,6 @@ async def startup_event():
             "2) Configure another provider (e.g., DEEPSEEK_API_KEY) and set ANALYSIS_PROVIDER=deepseek"
         )
 
-    # Check ADMIN_KEY (optional but recommended)
-    if not settings.ADMIN_KEY:
-        config_warnings.append(
-            "ADMIN_KEY is not configured. "
-            "Admin endpoints will only work via JWT admin token."
-        )
-
     # Log warnings
     for warning in config_warnings:
         logger.warning(f"⚠️ Config Warning: {warning}")

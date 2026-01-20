@@ -202,7 +202,7 @@ export function EnvManagerCard() {
                 <Key className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="password"
-                  placeholder="Admin Token / Key"
+                  placeholder="Admin Token"
                   aria-label="Admin Token"
                   value={adminToken}
                   onChange={(e) => {
@@ -257,7 +257,7 @@ export function EnvManagerCard() {
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Authentication failed.</strong> Please enter a valid Admin Token (JWT admin token or X-Admin-Key).
+              <strong>Authentication failed.</strong> Please enter a valid Admin Token (JWT admin token).
             </AlertDescription>
           </Alert>
         )}
