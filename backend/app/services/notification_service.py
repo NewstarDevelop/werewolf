@@ -61,13 +61,13 @@ class NotificationService:
         if persisted:
             return {
                 "persisted": True,
-                "notification": notification.model_dump(),
+                "notification": notification.model_dump(mode="json"),
             }
 
         return {
             "persisted": False,
             "event_id": str(uuid.uuid4()),
-            "notification": notification.model_dump() if notification else None,
+            "notification": notification.model_dump(mode="json") if notification else None,
         }
 
     async def emit(
