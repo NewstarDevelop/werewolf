@@ -17,6 +17,8 @@ services:
     volumes:
       # Persist database and data files
       - ./data:/app/data
+      # Mount .env file for runtime management via admin panel
+      - ./.env:/app/.env
     env_file:
       # 自动加载项目根目录的 .env 文件
       # 包含所有环境变量：AI分析配置、多Provider配置、座位映射等
