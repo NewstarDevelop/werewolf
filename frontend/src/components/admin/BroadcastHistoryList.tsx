@@ -16,6 +16,7 @@ import {
   Clock,
   XCircle,
   Users,
+  AlertTriangle,
 } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,14 +31,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import type { BroadcastListItem } from '@/types/broadcast';
-import { BroadcastStatus } from '@/types/broadcast';
+import { BroadcastStatus, DeleteMode } from '@/types/broadcast';
 
 interface BroadcastHistoryListProps {
   items: BroadcastListItem[];
   onView: (item: BroadcastListItem) => void;
   onResend: (item: BroadcastListItem) => void;
   onUseTemplate: (item: BroadcastListItem) => void;
-  onDelete: (item: BroadcastListItem) => void;
+  onDelete: (item: BroadcastListItem, mode: DeleteMode) => void;
 }
 
 const statusConfig: Record<
@@ -138,11 +139,17 @@ export function BroadcastHistoryList({
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => onDelete(item)}
-                      className="text-destructive focus:text-destructive"
+                      onClick={() => onDelete(item, DeleteMode.HISTORY)}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      {t('admin.action_delete', 'Delete')}
+                      {t('admin.action_delete_history', 'Delete Record')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onDelete(item, DeleteMode.CASCADE)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      {t('admin.action_delete_cascade', 'Delete Everywhere')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

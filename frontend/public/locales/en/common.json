@@ -336,6 +336,16 @@
     "job_state_queued": "Queued",
     "job_state_running": "Running",
     "job_state_success": "Success",
-    "job_state_error": "Error"
+    "job_state_error": "Error",
+    "update_feature_disabled": "Update feature is disabled. Enable UPDATE_AGENT_ENABLED in .env to use this feature.",
+    "update_agent_unreachable": "Update Agent is unreachable. Ensure the agent is running and UPDATE_AGENT_URL is correctly configured.",
+    "update_check_failed": "Failed to check for updates",
+    "action_delete_history": "Delete Record",
+    "action_delete_cascade": "Delete Everywhere",
+    "dialog_delete_history_title": "Delete History Record?",
+    "dialog_delete_history_desc": "This will remove the record from the admin history. The message will remain in users' inboxes.",
+    "dialog_delete_cascade_title": "Permanently Delete?",
+    "dialog_delete_cascade_desc": "WARNING: This will remove the notification from ALL user inboxes. This action cannot be undone.",
+    "cascade_delete_success": "Broadcast and all user notifications deleted"
   }
 }

@@ -21,6 +21,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useBroadcastHistory } from '@/hooks/useBroadcastHistory';
 import { getErrorMessage } from '@/utils/errorHandler';
@@ -31,7 +41,7 @@ import { BroadcastHistoryList } from './BroadcastHistoryList';
 import { BroadcastDetailDialog } from './BroadcastDetailDialog';
 
 import type { BroadcastListParams, BroadcastListItem } from '@/types/broadcast';
-import { BroadcastStatus, NotificationCategory } from '@/types/broadcast';
+import { BroadcastStatus, NotificationCategory, DeleteMode } from '@/types/broadcast';
 
 export interface BroadcastTemplate {
   title: string;
@@ -62,6 +72,13 @@ export function BroadcastHistoryPanel({
 
   // Detail dialog state
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // Delete confirmation dialog state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    item: BroadcastListItem | null;
+    mode: DeleteMode;
+  }>({ open: false, item: null, mode: DeleteMode.HISTORY });
 
   // Fetch data
   const {
@@ -131,16 +148,29 @@ export function BroadcastHistoryPanel({
   );
 
   const handleDelete = useCallback(
-    async (item: BroadcastListItem) => {
-      try {
-        await deleteBroadcast(item.id);
-        toast.success(t('admin.delete_success', 'Broadcast deleted'));
-      } catch (error) {
-        toast.error(getErrorMessage(error, t('admin.delete_failed', 'Failed to delete')));
-      }
+    (item: BroadcastListItem, mode: DeleteMode) => {
+      setDeleteConfirm({ open: true, item, mode });
     },
-    [deleteBroadcast, t]
+    []
   );
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteConfirm.item) return;
+    try {
+      await deleteBroadcast(deleteConfirm.item.id, deleteConfirm.mode);
+      const successKey = deleteConfirm.mode === DeleteMode.CASCADE
+        ? 'admin.cascade_delete_success'
+        : 'admin.delete_success';
+      const successDefault = deleteConfirm.mode === DeleteMode.CASCADE
+        ? 'Broadcast and all user notifications deleted'
+        : 'Broadcast deleted';
+      toast.success(t(successKey, successDefault));
+    } catch (error) {
+      toast.error(getErrorMessage(error, t('admin.delete_failed', 'Failed to delete')));
+    } finally {
+      setDeleteConfirm((prev) => ({ ...prev, open: false }));
+    }
+  }, [deleteConfirm, deleteBroadcast, t]);
 
   const handleBatchDelete = useCallback(async () => {
     if (selectedIds.length === 0) return;
@@ -273,6 +303,51 @@ export function BroadcastHistoryPanel({
         onOpenChange={(open) => !open && setDetailId(null)}
         onUseTemplate={onUseTemplate}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm((prev) => ({ ...prev, open }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteConfirm.mode === DeleteMode.CASCADE
+                ? t('admin.dialog_delete_cascade_title', 'Permanently Delete?')
+                : t('admin.dialog_delete_history_title', 'Delete History Record?')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirm.mode === DeleteMode.CASCADE
+                ? t(
+                    'admin.dialog_delete_cascade_desc',
+                    'WARNING: This will remove the notification from ALL user inboxes. This action cannot be undone.'
+                  )
+                : t(
+                    'admin.dialog_delete_history_desc',
+                    'This will remove the record from the admin history. The message will remain in users\' inboxes.'
+                  )}
+              {deleteConfirm.item && (
+                <div className="mt-2 p-2 bg-muted rounded text-sm font-medium">
+                  {deleteConfirm.item.title}
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className={
+                deleteConfirm.mode === DeleteMode.CASCADE
+                  ? 'bg-destructive hover:bg-destructive/90'
+                  : ''
+              }
+            >
+              {t('common.confirm', 'Confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

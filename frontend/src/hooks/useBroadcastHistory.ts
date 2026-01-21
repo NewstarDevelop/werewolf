@@ -46,9 +46,9 @@ export interface UseBroadcastHistoryReturn {
 
   // Actions
   refetch: () => void;
-  deleteBroadcast: (id: string) => Promise<void>;
+  deleteBroadcast: (id: string, mode?: DeleteMode) => Promise<void>;
   resendBroadcast: (id: string, idempotencyKey: string) => Promise<void>;
-  batchDelete: (ids: string[]) => Promise<void>;
+  batchDelete: (ids: string[], mode?: DeleteMode) => Promise<void>;
 }
 
 /**
@@ -88,7 +88,8 @@ export function useBroadcastHistory(
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => adminService.deleteBroadcast(id, 'history', token),
+    mutationFn: ({ id, mode }: { id: string; mode: DeleteMode }) =>
+      adminService.deleteBroadcast(id, mode, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: broadcastKeys.lists() });
     },
@@ -105,9 +106,9 @@ export function useBroadcastHistory(
 
   // Batch delete mutation
   const batchMutation = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: ({ ids, mode }: { ids: string[]; mode: DeleteMode }) =>
       adminService.batchBroadcasts(
-        { action: BatchAction.DELETE, ids, mode: DeleteMode.HISTORY },
+        { action: BatchAction.DELETE, ids, mode },
         token
       ),
     onSuccess: () => {
@@ -117,8 +118,8 @@ export function useBroadcastHistory(
 
   // Action handlers
   const deleteBroadcast = useCallback(
-    async (id: string) => {
-      await deleteMutation.mutateAsync(id);
+    async (id: string, mode: DeleteMode = DeleteMode.HISTORY) => {
+      await deleteMutation.mutateAsync({ id, mode });
     },
     [deleteMutation]
   );
@@ -134,8 +135,8 @@ export function useBroadcastHistory(
   );
 
   const batchDelete = useCallback(
-    async (ids: string[]) => {
-      await batchMutation.mutateAsync(ids);
+    async (ids: string[], mode: DeleteMode = DeleteMode.HISTORY) => {
+      await batchMutation.mutateAsync({ ids, mode });
     },
     [batchMutation]
   );

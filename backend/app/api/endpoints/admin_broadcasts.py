@@ -13,6 +13,7 @@ from sqlalchemy import func, or_
 
 from app.api.endpoints.game import verify_admin
 from app.core.database import get_db
+from app.models.notification import Notification, NotificationOutbox
 from app.models.notification_broadcast import NotificationBroadcast
 from app.models.user import User
 from app.schemas.notification_broadcast import (
@@ -38,6 +39,27 @@ router = APIRouter(prefix="/admin/notifications/broadcasts", tags=["admin-broadc
 logger = logging.getLogger(__name__)
 
 DEFAULT_BROADCAST_PAGE_SIZE = 500
+
+
+def _cascade_delete_broadcast(
+    db: Session, broadcast_id: str, broadcast: NotificationBroadcast
+) -> tuple[int, int]:
+    """
+    Hard delete a broadcast and all associated notifications/outbox.
+
+    Returns (notifications_deleted, outbox_deleted) counts.
+    """
+    notifications_deleted = db.query(Notification).filter(
+        Notification.broadcast_id == broadcast_id
+    ).delete(synchronize_session=False)
+
+    outbox_deleted = db.query(NotificationOutbox).filter(
+        NotificationOutbox.broadcast_id == broadcast_id
+    ).delete(synchronize_session=False)
+
+    db.delete(broadcast)
+
+    return notifications_deleted, outbox_deleted
 
 
 async def _execute_broadcast(
@@ -434,9 +456,14 @@ async def delete_broadcast(
     db: Session = Depends(get_db),
 ):
     """
-    Delete a broadcast (soft delete).
+    Delete a broadcast.
     DELETE /api/admin/notifications/broadcasts/{broadcast_id}
+
+    mode=history: Soft delete (mark as DELETED, keep in DB)
+    mode=cascade: Hard delete broadcast + all associated notifications and outbox
     """
+    actor_id = actor.get("player_id", "unknown")
+
     broadcast = db.query(NotificationBroadcast).filter(
         NotificationBroadcast.id == broadcast_id
     ).first()
@@ -450,18 +477,28 @@ async def delete_broadcast(
             detail="Cannot delete broadcast while sending.",
         )
 
-    broadcast.status = BroadcastStatus.DELETED.value
-    broadcast.deleted_at = datetime.utcnow()
+    notifications_deleted = 0
+    outbox_deleted = 0
+
+    if mode == DeleteMode.CASCADE:
+        notifications_deleted, outbox_deleted = _cascade_delete_broadcast(
+            db, broadcast_id, broadcast
+        )
+    else:
+        # Soft delete: keep history, hide from list
+        broadcast.status = BroadcastStatus.DELETED.value
+        broadcast.deleted_at = datetime.utcnow()
+
     db.commit()
 
-    # Note: CASCADE mode would delete associated notifications
-    # This is intentionally not implemented for safety
-    if mode == DeleteMode.CASCADE:
-        logger.warning(
-            "CASCADE delete requested but not implemented for safety. "
-            "Broadcast %s soft-deleted only.",
-            broadcast_id,
-        )
+    logger.warning(
+        "BROADCAST_DELETE actor=%s id=%s mode=%s notifications_deleted=%s outbox_deleted=%s",
+        actor_id,
+        broadcast_id,
+        mode.value,
+        notifications_deleted,
+        outbox_deleted,
+    )
 
     return None
 
@@ -475,10 +512,15 @@ async def batch_operation(
     """
     Batch operations on broadcasts.
     POST /api/admin/notifications/broadcasts/batch
+
+    Supports mode=history (soft delete) or mode=cascade (hard delete with notifications)
     """
     accepted = len(body.ids)
     updated = 0
     failed: list[str] = []
+    actor_id = actor.get("player_id", "unknown")
+    total_notifications_deleted = 0
+    total_outbox_deleted = 0
 
     for broadcast_id in body.ids:
         try:
@@ -495,8 +537,20 @@ async def batch_operation(
                     failed.append(broadcast_id)
                     continue
 
-                broadcast.status = BroadcastStatus.DELETED.value
-                broadcast.deleted_at = datetime.utcnow()
+                notifications_deleted = 0
+                outbox_deleted = 0
+
+                if body.mode == DeleteMode.CASCADE:
+                    notifications_deleted, outbox_deleted = _cascade_delete_broadcast(
+                        db, broadcast_id, broadcast
+                    )
+                    total_notifications_deleted += notifications_deleted
+                    total_outbox_deleted += outbox_deleted
+                else:
+                    # Soft delete
+                    broadcast.status = BroadcastStatus.DELETED.value
+                    broadcast.deleted_at = datetime.utcnow()
+
                 updated += 1
 
         except Exception as e:
@@ -505,6 +559,19 @@ async def batch_operation(
             failed.append(broadcast_id)
 
     db.commit()
+
+    logger.warning(
+        "BROADCAST_BATCH_DELETE actor=%s action=%s mode=%s accepted=%s updated=%s failed=%s "
+        "notifications_deleted=%s outbox_deleted=%s",
+        actor_id,
+        body.action.value,
+        body.mode.value,
+        accepted,
+        updated,
+        len(failed),
+        total_notifications_deleted,
+        total_outbox_deleted,
+    )
 
     return BroadcastBatchResponse(
         accepted=accepted,

@@ -336,6 +336,16 @@
     "job_state_queued": "排队中",
     "job_state_running": "运行中",
     "job_state_success": "成功",
-    "job_state_error": "失败"
+    "job_state_error": "失败",
+    "update_feature_disabled": "更新功能未启用。请在 .env 中设置 UPDATE_AGENT_ENABLED=true 以启用此功能。",
+    "update_agent_unreachable": "更新代理不可达。请确保代理已运行且 UPDATE_AGENT_URL 配置正确。",
+    "update_check_failed": "检查更新失败",
+    "action_delete_history": "删除记录",
+    "action_delete_cascade": "彻底删除",
+    "dialog_delete_history_title": "确认删除记录？",
+    "dialog_delete_history_desc": "仅从管理后台记录中移除。用户收件箱中的消息将被保留。",
+    "dialog_delete_cascade_title": "确认彻底删除？",
+    "dialog_delete_cascade_desc": "警告：这将从所有用户的收件箱中移除此通知。该操作不可撤销。",
+    "cascade_delete_success": "广播和所有用户通知已删除"
   }
 }
