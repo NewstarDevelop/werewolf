@@ -2,6 +2,7 @@ import PlayerCard from "./PlayerCard";
 import { Users } from "lucide-react";
 import { PendingAction, Role } from "@/services/api";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 
 interface Player {
   id: number;
@@ -42,6 +43,9 @@ const PlayerGrid = ({
   // Determine which players can be selected based on pending action
   const selectableIds = pendingAction?.choices || [];
 
+  // Determine grid mode: compact (3 cols) for 9 or fewer players, expanded (4 cols) for more
+  const isCompactMode = players.length <= 9;
+
   return (
     <div className="bg-card/50 rounded-xl border border-border flex flex-col p-2 md:p-3 h-full md:h-auto md:min-h-[500px] md:max-h-[70vh] overflow-y-auto scrollbar-thin">
       {/* Header */}
@@ -56,11 +60,18 @@ const PlayerGrid = ({
       </div>
 
       {/* Responsive Grid Layout
-          - Uniform padding on all sides for consistent card spacing
-          - Larger gap prevents card overlap on hover (scale-105)
+          - Dynamic columns: 3 cols for 9 players (3x3), 4 cols for 12 players (4x3)
+          - Increased padding prevents hover scale overflow
           - Scrollable container handles overflow
       */}
-      <div className="grid w-full place-items-center content-start md:content-center gap-5 sm:gap-6 md:gap-7 grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 auto-rows-min md:auto-rows-auto p-3 pb-4">
+      <div className={cn(
+        "grid w-full place-items-center content-start md:content-center",
+        "gap-5 sm:gap-6 md:gap-7",
+        "auto-rows-min md:auto-rows-auto",
+        "p-4 pb-6",
+        "grid-cols-3 sm:grid-cols-4 md:grid-cols-3",
+        isCompactMode ? "lg:grid-cols-3" : "lg:grid-cols-4"
+      )}>
         {players.map((player) => {
           // Check if this player is a wolf teammate (for any wolf role)
           const isWolfRole = myRole === "werewolf" || myRole === "wolf_king" || myRole === "white_wolf_king";
