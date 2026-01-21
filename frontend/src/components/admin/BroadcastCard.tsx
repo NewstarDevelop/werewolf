@@ -6,9 +6,10 @@
  * - Title and body input
  * - Confirmation dialog before sending
  * - Feedback on broadcast result
+ * - Support for prefilling from templates
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,16 +31,33 @@ import { toast } from 'sonner';
 import { adminService } from '@/services/adminService';
 import { getErrorMessage } from '@/utils/errorHandler';
 
-interface BroadcastCardProps {
-  token?: string;
+interface BroadcastTemplate {
+  title: string;
+  body: string;
+  category: string;
 }
 
-export function BroadcastCard({ token }: BroadcastCardProps) {
+interface BroadcastCardProps {
+  token?: string;
+  initialValues?: BroadcastTemplate | null;
+  onValuesUsed?: () => void;
+}
+
+export function BroadcastCard({ token, initialValues, onValuesUsed }: BroadcastCardProps) {
   const { t } = useTranslation('common');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Apply initial values when provided (from template)
+  useEffect(() => {
+    if (initialValues) {
+      setTitle(initialValues.title);
+      setBody(initialValues.body);
+      onValuesUsed?.();
+    }
+  }, [initialValues, onValuesUsed]);
 
   const generateIdempotencyKey = () => {
     const randomPart = crypto.randomUUID?.() ??

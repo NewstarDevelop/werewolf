@@ -144,6 +144,7 @@ async def emit_to_users(
     data: Optional[dict[str, Any]] = None,
     persist_policy: NotificationPersistPolicy = NotificationPersistPolicy.DURABLE,
     idempotency_key_prefix: Optional[str] = None,
+    broadcast_id: Optional[str] = None,
 ) -> None:
     """
     Emit the same notification to multiple users.
@@ -157,6 +158,7 @@ async def emit_to_users(
         data: Optional additional data
         persist_policy: DURABLE or VOLATILE
         idempotency_key_prefix: Prefix for idempotency keys (key = prefix:user_id)
+        broadcast_id: Optional broadcast ID for admin-sent broadcasts
     """
     if not user_ids:
         return
@@ -176,6 +178,7 @@ async def emit_to_users(
                 data=data,
                 persist_policy=persist_policy,
                 idempotency_key=idem_key,
+                broadcast_id=broadcast_id,
             )
         except Exception as e:
             db.rollback()

@@ -5,19 +5,34 @@
  * - Page-level authentication via AdminAuthGuard
  * - Tabbed interface for different admin functions
  * - Broadcast notifications
+ * - Broadcast history management
  * - Environment variables management
  */
 
+import { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ShieldAlert, Megaphone, Settings } from 'lucide-react';
 import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { BroadcastCard } from '@/components/admin/BroadcastCard';
+import { BroadcastHistoryPanel } from '@/components/admin/BroadcastHistoryPanel';
 import { EnvManager } from '@/components/admin/EnvManager';
+import type { BroadcastTemplate } from '@/components/admin/BroadcastHistoryPanel';
 
 export default function AdminPage() {
   const { t } = useTranslation('common');
+  const broadcastCardRef = useRef<HTMLDivElement>(null);
+
+  // State for template prefill
+  const [templateValues, setTemplateValues] = useState<BroadcastTemplate | null>(null);
+
+  // Handle "Use as Template" from history panel
+  const handleUseTemplate = useCallback((template: BroadcastTemplate) => {
+    setTemplateValues(template);
+    // Scroll to the broadcast card
+    broadcastCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   return (
     <div className="flex flex-1 flex-col space-y-6 p-6 md:p-8 animate-fade-in">
@@ -48,7 +63,17 @@ export default function AdminPage() {
             </TabsList>
 
             <TabsContent value="notifications" className="space-y-6">
-              <BroadcastCard token={adminToken} />
+              <div ref={broadcastCardRef}>
+                <BroadcastCard
+                  token={adminToken}
+                  initialValues={templateValues}
+                  onValuesUsed={() => setTemplateValues(null)}
+                />
+              </div>
+              <BroadcastHistoryPanel
+                token={adminToken}
+                onUseTemplate={handleUseTemplate}
+              />
             </TabsContent>
 
             <TabsContent value="config" className="space-y-6">

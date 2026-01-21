@@ -35,12 +35,19 @@ class Notification(Base):
     - UUIDs are stored as String(36) to match existing models (e.g. users.id).
     - read_at is NULL => unread; non-NULL => read.
     - data is JSON for extensibility (room_id/game_id/action_url/etc).
+    - broadcast_id links to NotificationBroadcast for admin-sent broadcasts.
     """
 
     __tablename__ = "notifications"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    broadcast_id = Column(
+        String(36),
+        ForeignKey("notification_broadcasts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     category = Column(String(16), nullable=False, index=True)
     title = Column(String(200), nullable=False)
@@ -80,6 +87,7 @@ class NotificationOutbox(Base):
 
     Important:
     - At-least-once semantics; consumers should be idempotent (dedupe by notification.id).
+    - broadcast_id links to NotificationBroadcast for admin-sent broadcasts.
     """
 
     __tablename__ = "notification_outbox"
@@ -90,6 +98,12 @@ class NotificationOutbox(Base):
     idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
 
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    broadcast_id = Column(
+        String(36),
+        ForeignKey("notification_broadcasts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     topic = Column(String(64), nullable=False, default="notifications")
 
     # Payload is the message that will be published to Redis; keep it self-contained for workers.

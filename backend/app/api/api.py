@@ -1,10 +1,11 @@
 """API router aggregation."""
 from fastapi import APIRouter
 
-from app.api.endpoints import admin, auth, config, game, game_history, notifications, room, users, websocket, websocket_notifications
+from app.api.endpoints import admin, admin_broadcasts, auth, config, game, game_history, notifications, room, users, websocket, websocket_notifications
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(admin.router)
+api_router.include_router(admin_broadcasts.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(config.router)

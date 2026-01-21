@@ -82,6 +82,7 @@ class NotificationService:
         persist_policy: NotificationPersistPolicy = NotificationPersistPolicy.DURABLE,
         topic: str = DEFAULT_TOPIC,
         idempotency_key: Optional[str] = None,
+        broadcast_id: Optional[str] = None,
     ) -> Optional[NotificationPublic]:
         """
         Emit a notification under tiered storage policy.
@@ -110,6 +111,7 @@ class NotificationService:
             title=title,
             body=body,
             data=payload_data,
+            broadcast_id=broadcast_id,
         )
         db.add(notification)
         db.flush()  # ensure notification.id is available
@@ -132,6 +134,7 @@ class NotificationService:
             status="PENDING",
             attempts=0,
             available_at=datetime.utcnow(),
+            broadcast_id=broadcast_id,
         )
         db.add(outbox)
         db.commit()
