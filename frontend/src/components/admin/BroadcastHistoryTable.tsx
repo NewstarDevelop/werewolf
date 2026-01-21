@@ -4,6 +4,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
+import { parseServerDate } from '@/utils/date';
 import {
   MoreHorizontal,
   Eye,
@@ -125,11 +126,12 @@ export function BroadcastHistoryTable({
   };
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-';
+    const date = parseServerDate(dateStr);
+    if (!date) return '-';
     try {
-      return format(new Date(dateStr), 'yyyy-MM-dd HH:mm');
+      return format(date, 'yyyy-MM-dd HH:mm');
     } catch {
-      return dateStr;
+      return dateStr || '-';
     }
   };
 

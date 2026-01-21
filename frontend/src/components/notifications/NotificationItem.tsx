@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { Gamepad2, Users, Bell, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { parseServerDate } from '@/utils/date';
 import type { Notification, NotificationCategory } from '@/types/notification';
 
 interface NotificationItemProps {
@@ -62,10 +63,13 @@ export function NotificationItem({
   };
 
   // Format relative time
-  const timeAgo = formatDistanceToNow(new Date(notification.created_at), {
-    addSuffix: true,
-    locale: zhCN,
-  });
+  const date = parseServerDate(notification.created_at);
+  const timeAgo = date 
+    ? formatDistanceToNow(date, {
+        addSuffix: true,
+        locale: zhCN,
+      })
+    : '';
 
   return (
     <div
@@ -78,6 +82,7 @@ export function NotificationItem({
       onClick={handleClick}
       role="button"
       tabIndex={0}
+      aria-label={`${isUnread ? '未读通知: ' : ''}${notification.title}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           handleClick();

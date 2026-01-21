@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { parseServerDate } from '@/utils/date';
 import {
   Sheet,
   SheetContent,
@@ -47,8 +48,8 @@ interface UserDetailSheetProps {
 }
 
 function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
+  const date = parseServerDate(dateStr);
+  if (!date) return '-';
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'long',

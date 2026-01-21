@@ -4,6 +4,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
+import { parseServerDate } from '@/utils/date';
 import {
   MoreHorizontal,
   Eye,
@@ -85,11 +86,12 @@ export function BroadcastHistoryList({
   const { t } = useTranslation('common');
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-';
+    const date = parseServerDate(dateStr);
+    if (!date) return '-';
     try {
-      return format(new Date(dateStr), 'MM-dd HH:mm');
+      return format(date, 'MM-dd HH:mm');
     } catch {
-      return dateStr;
+      return dateStr || '-';
     }
   };
 

@@ -4,6 +4,7 @@
 
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
+import { parseServerDate } from '@/utils/date';
 import { Copy, Loader2, Users, CheckCircle, XCircle } from 'lucide-react';
 
 import {
@@ -44,11 +45,12 @@ export function BroadcastDetailDialog({
   );
 
   const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '-';
+    const date = parseServerDate(dateStr);
+    if (!date) return '-';
     try {
-      return format(new Date(dateStr), 'yyyy-MM-dd HH:mm:ss');
+      return format(date, 'yyyy-MM-dd HH:mm:ss');
     } catch {
-      return dateStr;
+      return dateStr || '-';
     }
   };
 

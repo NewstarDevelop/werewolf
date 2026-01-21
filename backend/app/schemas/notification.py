@@ -5,7 +5,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.base import UTCZBaseModel, UTCZFromAttributesModel
 
 
 class NotificationCategory(str, Enum):
@@ -29,7 +31,7 @@ class NotificationPersistPolicy(str, Enum):
     DURABLE = "DURABLE"
 
 
-class NotificationPublic(BaseModel):
+class NotificationPublic(UTCZFromAttributesModel):
     """Public notification payload returned by REST APIs."""
 
     id: str
@@ -41,11 +43,8 @@ class NotificationPublic(BaseModel):
     created_at: datetime
     read_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class NotificationListResponse(BaseModel):
+class NotificationListResponse(UTCZBaseModel):
     """Paginated notification list response."""
 
     notifications: list[NotificationPublic]
@@ -54,40 +53,40 @@ class NotificationListResponse(BaseModel):
     page_size: int
 
 
-class UnreadCountResponse(BaseModel):
+class UnreadCountResponse(UTCZBaseModel):
     """Unread count response."""
 
     unread_count: int
 
 
-class MarkReadResponse(BaseModel):
+class MarkReadResponse(UTCZBaseModel):
     """Mark-one-as-read response."""
 
     notification_id: str
     read_at: datetime
 
 
-class ReadAllResponse(BaseModel):
+class ReadAllResponse(UTCZBaseModel):
     """Mark-all-as-read response."""
 
     updated: int
     read_at: datetime
 
 
-class ReadBatchRequest(BaseModel):
+class ReadBatchRequest(UTCZBaseModel):
     """Batch mark-as-read request."""
 
     notification_ids: list[str] = Field(..., min_length=1, max_length=100)
 
 
-class ReadBatchResponse(BaseModel):
+class ReadBatchResponse(UTCZBaseModel):
     """Batch mark-as-read response."""
 
     updated: int
     read_at: datetime
 
 
-class NotificationMessageData(BaseModel):
+class NotificationMessageData(UTCZBaseModel):
     """
     Data field inside WebSocket envelope for notification messages.
 
@@ -100,7 +99,7 @@ class NotificationMessageData(BaseModel):
     event_id: Optional[str] = None  # for volatile messages without DB id
 
 
-class PubSubMessage(BaseModel):
+class PubSubMessage(UTCZBaseModel):
     """
     Redis Pub/Sub message schema.
 
