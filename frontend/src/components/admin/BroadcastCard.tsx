@@ -30,6 +30,7 @@ import { Megaphone, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminService } from '@/services/adminService';
 import { getErrorMessage } from '@/utils/errorHandler';
+import { NotificationCategory } from '@/types/broadcast';
 
 interface BroadcastTemplate {
   title: string;
@@ -70,20 +71,21 @@ export function BroadcastCard({ token, initialValues, onValuesUsed }: BroadcastC
     setIsSending(true);
 
     try {
-      const result = await adminService.broadcastNotification(
+      const result = await adminService.createBroadcast(
         {
           title: title.trim(),
           body: body.trim(),
-          category: 'SYSTEM',
+          category: NotificationCategory.SYSTEM,
           persist_policy: 'DURABLE',
           idempotency_key: generateIdempotencyKey(),
+          send_now: true,
         },
         token
       );
 
       toast.success(
         t('admin.broadcast_success', 'Notification sent to {{count}} users', {
-          count: result.processed,
+          count: result.total_targets,
         })
       );
 

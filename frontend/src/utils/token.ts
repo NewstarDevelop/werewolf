@@ -1,9 +1,18 @@
 /**
  * JWT Token 管理工具
- * 用于存储、获取和管理玩家认证 token
  *
- * 安全说明：使用 sessionStorage，页面刷新保持登录，但关闭标签页后失效。
- * 包含过期时间检查。
+ * SECURITY NOTE (2026-01-21):
+ * This module is being deprecated. The application now uses HttpOnly cookies
+ * for user authentication. Token storage in sessionStorage is only used for
+ * legacy game room tokens during the migration period.
+ *
+ * Migration plan:
+ * 1. User auth: Now uses HttpOnly cookies (handled by backend)
+ * 2. Game room tokens: Still uses sessionStorage (will migrate to one-time tickets)
+ * 3. All deprecated functions will be removed after migration complete
+ *
+ * DO NOT use getAuthHeader() for user authentication.
+ * Use credentials: 'include' in fetch requests instead.
  */
 
 const TOKEN_KEY = 'werewolf_token';
@@ -11,7 +20,8 @@ const EXPIRY_KEY = 'werewolf_token_expiry';
 const DEFAULT_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * 保存 JWT token
+ * 保存 JWT token (用于游戏房间认证)
+ * @deprecated Will be replaced by one-time tickets
  * @param token - JWT token 字符串
  * @param expiresIn - 过期时间（毫秒），默认 24 小时
  */
@@ -26,7 +36,8 @@ export function saveToken(token: string, expiresIn: number = DEFAULT_EXPIRY_MS):
 }
 
 /**
- * 获取 JWT token
+ * 获取 JWT token (用于游戏房间认证)
+ * @deprecated Will be replaced by one-time tickets
  * @returns JWT token 或 null（如果不存在或已过期）
  */
 export function getToken(): string | null {
@@ -52,7 +63,11 @@ export function clearToken(): void {
 }
 
 /**
- * 获取认证请求头
+ * 获取认证请求头 (仅用于游戏房间认证)
+ *
+ * @deprecated For user auth, use credentials: 'include' instead.
+ * This is only for legacy game room tokens during migration.
+ *
  * @returns 包含 Authorization header 的对象，如果没有 token 则返回空对象
  */
 export function getAuthHeader(): HeadersInit {
@@ -67,44 +82,42 @@ export function getAuthHeader(): HeadersInit {
   };
 }
 
-// User authentication (persistent across sessions)
-// DEPRECATED: The following functions are deprecated as the app now uses
-// HttpOnly cookies exclusively for security. Keeping for backward compatibility
-// but should not be used in new code.
+// =============================================================================
+// DEPRECATED FUNCTIONS - DO NOT USE IN NEW CODE
+// These are kept only for cleanup during logout
+// =============================================================================
+
 const USER_TOKEN_KEY = 'user_auth_token';
 
 /**
- * @deprecated Use HttpOnly cookies instead. This function is kept for cleanup only.
- * Save user authentication token (localStorage for persistence).
+ * @deprecated Application uses HttpOnly cookies. This is kept for cleanup only.
  */
-export function saveUserToken(token: string): void {
-  console.warn('saveUserToken is deprecated. Application uses HttpOnly cookies for authentication.');
-  if (!token) return;
-  localStorage.setItem(USER_TOKEN_KEY, token);
+export function saveUserToken(_token: string): void {
+  console.warn('saveUserToken is deprecated. Application uses HttpOnly cookies.');
+  // No-op: Do not store tokens in localStorage
 }
 
 /**
- * @deprecated Use HttpOnly cookies instead. This function is kept for cleanup only.
- * Get user authentication token.
+ * @deprecated Application uses HttpOnly cookies. This is kept for cleanup only.
  */
 export function getUserToken(): string | null {
-  console.warn('getUserToken is deprecated. Application uses HttpOnly cookies for authentication.');
-  return localStorage.getItem(USER_TOKEN_KEY);
+  console.warn('getUserToken is deprecated. Application uses HttpOnly cookies.');
+  // Return null - auth is now cookie-based
+  return null;
 }
 
 /**
- * Clear user authentication token.
- * Note: Still needed for cleanup during logout.
+ * Clear user authentication token from localStorage.
+ * This is still needed for cleanup during logout to remove any legacy tokens.
  */
 export function clearUserToken(): void {
   localStorage.removeItem(USER_TOKEN_KEY);
 }
 
 /**
- * Decode JWT token payload.
- * @deprecated Token validation should be done server-side with HttpOnly cookies.
+ * @deprecated Token validation should be done server-side.
  */
-export function decodeToken(token: string): any | null {
+export function decodeToken(token: string): Record<string, unknown> | null {
   try {
     const payload = token.split('.')[1];
     return JSON.parse(atob(payload));
@@ -114,26 +127,18 @@ export function decodeToken(token: string): any | null {
 }
 
 /**
- * Check if token is expired.
- * @deprecated Token validation should be done server-side with HttpOnly cookies.
+ * @deprecated Token validation should be done server-side.
  */
 export function isTokenExpired(token: string): boolean {
   const payload = decodeToken(token);
-  if (!payload || !payload.exp) return true;
+  if (!payload || typeof payload.exp !== 'number') return true;
   return Date.now() >= payload.exp * 1000;
 }
 
 /**
- * Get user auth header for API requests.
  * @deprecated Use credentials: 'include' for cookie-based auth instead.
  */
 export function getUserAuthHeader(): HeadersInit {
-  const token = getUserToken();
-  if (!token || isTokenExpired(token)) {
-    clearUserToken();
-    return {};
-  }
-  return {
-    'Authorization': `Bearer ${token}`
-  };
+  console.warn('getUserAuthHeader is deprecated. Use credentials: "include" instead.');
+  return {};
 }

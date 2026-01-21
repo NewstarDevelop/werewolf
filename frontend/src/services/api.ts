@@ -212,6 +212,7 @@ export async function fetchApi<T>(
     try {
       const response = await fetch(url, {
         ...options,
+        credentials: 'include',  // Send HttpOnly cookies for authentication
         headers: {
           ...defaultHeaders,
           ...options.headers,
