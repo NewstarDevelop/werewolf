@@ -9,7 +9,7 @@
 # Web framework
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-starlette==0.45.3
+# starlette version managed by fastapi
 
 # Data validation
 pydantic==2.10.6
