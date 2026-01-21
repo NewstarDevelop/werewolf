@@ -1,0 +1,36 @@
+# Core dependencies - pin major.minor, allow patch updates
+# Use pip-tools to generate requirements.txt: pip-compile requirements.in
+
+# Web framework
+fastapi>=0.104.0,<0.115.0
+uvicorn[standard]>=0.24.0,<0.35.0
+
+# Data validation
+pydantic[email]>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+
+# Environment
+python-dotenv>=1.0.0,<2.0.0
+python-multipart>=0.0.6,<1.0.0
+
+# Security
+PyJWT>=2.8.0,<3.0.0
+bcrypt>=4.0.0,<5.0.0
+
+# Database - SQLAlchemy with async support
+sqlalchemy>=2.0.0,<3.0.0
+alembic>=1.13.0,<2.0.0
+aiosqlite>=0.19.0,<1.0.0      # Async SQLite driver
+asyncpg>=0.29.0,<1.0.0        # Async PostgreSQL driver
+
+# HTTP client
+httpx>=0.25.0,<1.0.0
+
+# AI/LLM
+openai>=1.0.0,<2.0.0
+
+# Cache (optional)
+redis>=4.2.0,<6.0.0
+
+# Rate limiting
+slowapi>=0.1.9,<1.0.0         # For admin login rate limiting
