@@ -1,14 +1,14 @@
 """User profile and statistics API endpoints.
 
-A3-FIX: All endpoints are sync (def) to avoid event loop blocking.
-These are pure DB operations with no async I/O.
+Async endpoints using SQLAlchemy 2.0 async API.
 """
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.api.dependencies import get_current_user
 from app.models.user import User
 from app.models.game_history import GameParticipant
@@ -20,14 +20,15 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserResponse)
-def get_current_user_profile(
+async def get_current_user_profile(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get current user's profile.
     """
-    user = db.query(User).get(current_user["user_id"])
+    result = await db.execute(select(User).where(User.id == current_user["user_id"]))
+    user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -36,28 +37,26 @@ def get_current_user_profile(
 
 
 @router.put("/me", response_model=UserResponse)
-def update_user_profile(
+async def update_user_profile(
     body: UpdateProfileRequest,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Update current user's profile.
     """
-    from sqlalchemy.exc import IntegrityError
-
-    user = db.query(User).get(current_user["user_id"])
+    result = await db.execute(select(User).where(User.id == current_user["user_id"]))
+    user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check nickname uniqueness before update
     if body.nickname is not None and body.nickname != user.nickname:
-        existing = db.query(User).filter(
-            User.nickname == body.nickname,
-            User.id != user.id
-        ).first()
-        if existing:
+        existing_result = await db.execute(
+            select(User).where(User.nickname == body.nickname, User.id != user.id)
+        )
+        if existing_result.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Nickname already taken")
 
     # Update fields if provided
@@ -73,19 +72,19 @@ def update_user_profile(
     user.updated_at = datetime.utcnow()
 
     try:
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=409, detail="Nickname already taken")
 
     return UserResponse.from_orm(user)
 
 
 @router.get("/me/stats", response_model=UserStatsResponse)
-def get_user_stats(
+async def get_user_stats(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get current user's game statistics.
@@ -93,23 +92,26 @@ def get_user_stats(
     user_id = current_user["user_id"]
 
     # Query game statistics
-    stats = db.query(
-        func.count(GameParticipant.id).label("games_played"),
-        func.sum(GameParticipant.is_winner).label("games_won")
-    ).filter(
-        GameParticipant.user_id == user_id
-    ).first()
+    stats_result = await db.execute(
+        select(
+            func.count(GameParticipant.id).label("games_played"),
+            func.sum(GameParticipant.is_winner).label("games_won")
+        ).where(GameParticipant.user_id == user_id)
+    )
+    stats = stats_result.first()
 
-    games_played = stats.games_played or 0
-    games_won = int(stats.games_won or 0)
+    games_played = stats.games_played or 0 if stats else 0
+    games_won = int(stats.games_won or 0) if stats else 0
     win_rate = (games_won / games_played) if games_played > 0 else 0.0
 
     # Get recent games
-    recent_participations = db.query(GameParticipant).filter(
-        GameParticipant.user_id == user_id
-    ).order_by(
-        GameParticipant.created_at.desc()
-    ).limit(10).all()
+    recent_result = await db.execute(
+        select(GameParticipant)
+        .where(GameParticipant.user_id == user_id)
+        .order_by(GameParticipant.created_at.desc())
+        .limit(10)
+    )
+    recent_participations = recent_result.scalars().all()
 
     recent_games = [
         {
@@ -131,15 +133,16 @@ def get_user_stats(
 
 
 @router.get("/me/preferences", response_model=UserPreferencesResponse)
-def get_user_preferences(
+async def get_user_preferences(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get current user's preferences.
     Returns merged defaults for missing fields.
     """
-    user = db.query(User).get(current_user["user_id"])
+    result = await db.execute(select(User).where(User.id == current_user["user_id"]))
+    user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -158,16 +161,17 @@ def get_user_preferences(
 
 
 @router.put("/me/preferences", response_model=UserPreferencesResponse)
-def update_user_preferences(
+async def update_user_preferences(
     body: UserPreferences,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Update current user's preferences (idempotent PUT).
     Returns the updated preferences with merged defaults.
     """
-    user = db.query(User).get(current_user["user_id"])
+    result = await db.execute(select(User).where(User.id == current_user["user_id"]))
+    user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -181,8 +185,8 @@ def update_user_preferences(
     user.preferences = prefs_dict
     user.updated_at = datetime.utcnow()
 
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     # Return updated preferences
     return UserPreferencesResponse(preferences=UserPreferences(**user.preferences))

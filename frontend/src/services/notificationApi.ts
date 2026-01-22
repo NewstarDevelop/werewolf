@@ -2,7 +2,7 @@
  * Notification API Service
  * Handles notification-related API calls
  */
-import { fetchApi } from './api';
+import { authorizedFetch as fetchApi } from './api';
 import type {
   Notification,
   NotificationCategory,

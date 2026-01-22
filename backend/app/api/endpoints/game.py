@@ -1,12 +1,11 @@
 """Game API endpoints."""
 import logging
 from fastapi import APIRouter, HTTPException, Header, Depends
-from fastapi.concurrency import run_in_threadpool
 from typing import List, Dict, Optional
 
 from app.core.config import settings
 from app.core.auth import create_player_token
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.models.game import game_store, WOLF_ROLES
 from app.api.dependencies import get_current_player, get_optional_user
 from app.schemas.enums import (
@@ -24,34 +23,40 @@ from app.services.game_analyzer import analyze_game
 from app.services.analysis_cache import AnalysisCache
 from app.services.room_manager import room_manager
 from app.services.websocket_manager import websocket_manager
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/game", tags=["game"])
 logger = logging.getLogger(__name__)
 
 
-def _persist_game_over_sync(db: Session, game_id: str) -> None:
+async def _persist_game_over(
+    db: AsyncSession,
+    game_id: str,
+    status: Optional[str],
+    winner: Optional[str]
+) -> None:
     """
-    Synchronous helper to persist game completion.
-
-    This function is designed to be called via run_in_threadpool to avoid
-    blocking the async event loop. It handles both the persistence and
-    rollback within the same thread to ensure Session safety.
+    Persist game completion to database.
 
     Args:
-        db: Database session
+        db: Async database session
         game_id: Game/room ID
+        status: Game result status
+        winner: Winner identifier if game ended
     """
+    if status != "game_over" or not winner:
+        return
+
     try:
-        room_manager.finish_game(db, game_id)
+        await room_manager.finish_game(db, game_id)
         logger.info(
             "Game history persisted successfully",
             extra={"game_id": game_id}
         )
     except Exception:
-        # Rollback in the same thread to maintain Session safety
+        # Rollback on error
         try:
-            db.rollback()
+            await db.rollback()
         except Exception:
             logger.error(
                 "Database rollback failed",
@@ -64,31 +69,6 @@ def _persist_game_over_sync(db: Session, game_id: str) -> None:
             extra={"game_id": game_id},
             exc_info=True
         )
-
-
-async def _persist_game_over(
-    db: Session,
-    game_id: str,
-    status: Optional[str],
-    winner: Optional[str]
-) -> None:
-    """
-    Persist game completion to database.
-
-    Executes synchronous DB operations in a threadpool to avoid blocking the event loop.
-    Ensures proper transaction rollback on errors within the same thread.
-
-    Args:
-        db: Database session
-        game_id: Game/room ID
-        status: Game result status
-        winner: Winner identifier if game ended
-    """
-    if status != "game_over" or not winner:
-        return
-
-    # Execute entire DB operation (including potential rollback) in a single thread
-    await run_in_threadpool(_persist_game_over_sync, db, game_id)
 
 
 # T-SEC-004: Admin verification (JWT admin token only)
@@ -376,7 +356,7 @@ def _get_pending_action(game, human_player) -> PendingAction | None:
 async def step_game(
     game_id: str,
     current_player: Dict = Depends(get_current_player),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> StepResponse:
     """
     Advance the game state by one step (WL-010: async).
@@ -441,7 +421,7 @@ async def submit_action(
     game_id: str,
     request: ActionRequest,
     current_player: Dict = Depends(get_current_player),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> ActionResponse:
     """
     Submit a player action.

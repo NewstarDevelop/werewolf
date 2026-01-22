@@ -2,7 +2,7 @@
  * Preferences API Service
  * Handles user preferences API calls
  */
-import { fetchApi } from './api';
+import { authorizedFetch as fetchApi } from './api';
 import type { NotificationPreferences } from '@/types/notification';
 
 export interface SoundEffectsPreferences {

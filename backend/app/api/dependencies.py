@@ -1,11 +1,12 @@
 """FastAPI dependency injection functions for authentication."""
 from fastapi import Header, HTTPException, Depends, Cookie
 from typing import Optional, Dict
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 
 from app.core.auth import verify_player_token
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 
 
 def _extract_bearer_token(authorization: str) -> Optional[str]:
@@ -101,7 +102,7 @@ async def get_current_player(
 async def get_current_user(
     authorization: Optional[str] = Header(None),
     user_access_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> Dict:
     """
     Dependency to get current authenticated user from JWT token.
@@ -177,7 +178,8 @@ async def get_current_user(
 
     # Real-time user validation
     from app.models.user import User
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(
@@ -198,7 +200,7 @@ async def get_current_user(
 async def get_optional_user(
     authorization: Optional[str] = Header(None),
     user_access_token: Optional[str] = Cookie(None),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> Optional[Dict]:
     """
     Dependency to get current user if authenticated, None otherwise.
@@ -241,7 +243,8 @@ async def get_optional_user(
 
     # Validate user exists and is active
     from app.models.user import User
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
         return None

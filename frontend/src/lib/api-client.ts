@@ -3,13 +3,15 @@
  *
  * This module provides the base HTTP client with:
  * - Automatic cookie-based authentication (credentials: 'include')
+ * - Automatic JWT room token injection (Authorization header)
  * - Timeout handling
  * - Retry logic for idempotent requests
  * - Unified error handling
  *
- * Security: Uses HttpOnly cookies for authentication.
- * Do NOT manually inject Authorization headers for user auth.
+ * Security: Uses HttpOnly cookies for user auth, Bearer token for room auth.
  */
+
+import { getAuthHeader } from '@/utils/token';
 
 // Default empty string (relative path), production uses nginx proxy
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
@@ -50,6 +52,12 @@ export interface FetchOptions extends RequestInit {
   timeout?: number;
   /** Whether to skip automatic retry on 5xx errors. Default: false */
   skipRetry?: boolean;
+  /**
+   * If true, skip injecting room token from sessionStorage.
+   * Use this for user-scoped APIs (history, profile, etc.) that should
+   * rely only on HttpOnly cookie authentication.
+   */
+  skipRoomToken?: boolean;
 }
 
 /**
@@ -57,6 +65,7 @@ export interface FetchOptions extends RequestInit {
  *
  * Features:
  * - Automatic cookie-based authentication (credentials: 'include')
+ * - Automatic JWT token injection via getAuthHeader() (unless skipRoomToken is true)
  * - Configurable timeout with AbortSignal support
  * - Retry logic for idempotent methods (GET/HEAD) only
  * - Unified error handling via ApiError
@@ -64,10 +73,9 @@ export interface FetchOptions extends RequestInit {
  * Security:
  * - Endpoint must be a relative path starting with '/'
  * - Rejects absolute URLs and protocol-relative URLs ('//')
- * - Does NOT manually inject Authorization headers (uses cookies)
  *
  * @param endpoint - Relative API path (must start with '/')
- * @param options - Extended fetch options with timeout support
+ * @param options - Extended fetch options
  * @returns Promise resolving to the parsed JSON response
  * @throws {ApiError} When the request fails or endpoint is invalid
  */
@@ -86,9 +94,10 @@ export async function fetchApi<T>(
   const url = `${API_BASE_URL}${endpoint}`;
   const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
 
-  // Headers: Content-Type only, auth is via cookies
+  // Build headers - inject room token if not skipped
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
+    ...(options.skipRoomToken ? {} : getAuthHeader())
   };
 
   // Retry configuration: only idempotent methods
@@ -98,10 +107,11 @@ export async function fetchApi<T>(
   let retryCount = 0;
 
   while (true) {
+    // Create controller and timeout for each attempt
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    // Support external AbortSignal
+    // Support external AbortSignal - listen and forward abort
     if (options.signal) {
       options.signal.addEventListener('abort', () => {
         controller.abort();
@@ -124,10 +134,7 @@ export async function fetchApi<T>(
       if (!response.ok) {
         // Retry on 5xx for idempotent requests
         if (response.status >= 500 && retryCount < MAX_RETRIES) {
-          retryCount++;
-          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
+          throw new Error(`Server Error ${response.status}`);
         }
 
         let detail = 'Unknown error';
@@ -153,28 +160,32 @@ export async function fetchApi<T>(
       // Check abort source
       const isExternalAbort = options.signal?.aborted;
       const isTimeoutAbort = error instanceof Error && error.name === 'AbortError' && !isExternalAbort;
+      const isNetworkError = error instanceof Error &&
+        (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('Server Error'));
 
       if (isExternalAbort) {
-        throw new ApiError(499, 'Request cancelled');
+        throw new ApiError(499, 'Request cancelled'); // Or just throw error
       }
 
       if (isTimeoutAbort) {
         if (retryCount < MAX_RETRIES) {
           retryCount++;
+          console.log(`Request timeout, retrying... (${MAX_RETRIES - retryCount + 1} attempts left)`);
           continue;
         }
         throw new ApiError(408, 'Request timeout');
       }
 
-      // Network error or other - retry if idempotent
-      if (error instanceof Error && !(error instanceof ApiError)) {
+      // Network error - retry if idempotent
+      if (isNetworkError) {
         if (retryCount < MAX_RETRIES) {
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+          console.log(`Network error, retrying... (${MAX_RETRIES - retryCount + 1} attempts left) in ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        throw new ApiError(0, error.message || 'Network error');
+        throw new ApiError(0, error instanceof Error ? error.message : 'Network error');
       }
 
       throw error;
@@ -213,3 +224,6 @@ export const apiClient = {
   delete: <T>(endpoint: string, options?: FetchOptions) =>
     fetchApi<T>(endpoint, { ...options, method: 'DELETE' }),
 };
+
+// Re-export ApiError
+export default apiClient;

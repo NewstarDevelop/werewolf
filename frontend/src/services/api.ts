@@ -2,310 +2,33 @@
  * API Service for Werewolf Game Backend
  * Handles all HTTP requests to the FastAPI backend
  *
- * Security: Uses credentials: 'include' to send HttpOnly cookies
+ * Uses the unified api-client from @/lib/api-client
  */
 
-import { getAuthHeader } from '@/utils/token';
+import { fetchApi } from '@/lib/api-client';
+import {
+  GameStartRequest,
+  GameStartResponse,
+  GameState,
+  StepResponse,
+  ActionRequest,
+  ActionResponse
+} from '@/types/api';
 
-// 默认空字符串（相对路径），生产环境走 nginx 反代；开发环境需在 .env.development 配置
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+// Re-export types for backward compatibility with existing consumers
+export * from '@/types/api';
+
+// Re-export ApiError for backward compatibility
+export { ApiError } from '@/lib/api-client';
+
+// Re-export API_BASE_URL for backward compatibility
+export { API_BASE_URL } from '@/lib/api-client';
 
 /**
- * Options for authorizedFetch
+ * Authorized fetch wrapper - Now just an alias for fetchApi
+ * Retained for backward compatibility
  */
-export interface AuthorizedFetchOptions {
-  /**
-   * If true, skip injecting room token from sessionStorage.
-   * Use this for user-scoped APIs (history, profile, etc.) that should
-   * rely only on HttpOnly cookie authentication.
-   */
-  skipRoomToken?: boolean;
-}
-
-/**
- * Authorized fetch wrapper for components that need JWT authentication
- * Use this for API calls outside of the main game flow (logs, debug, analysis)
- *
- * Security: Includes credentials to send HttpOnly cookies
- *
- * @param endpoint - API endpoint path
- * @param options - Optional configuration
- */
-export async function authorizedFetch<T>(
-  endpoint: string,
-  options: AuthorizedFetchOptions = {}
-): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  // Only inject room token if not skipped
-  if (!options.skipRoomToken) {
-    Object.assign(headers, getAuthHeader());
-  }
-
-  const response = await fetch(url, {
-    credentials: 'include',  // Send HttpOnly cookies
-    headers
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new ApiError(response.status, errorData.detail || `HTTP ${response.status}`);
-  }
-
-  return response.json();
-}
-
-// Types matching backend schemas
-export type Role = 'werewolf' | 'villager' | 'seer' | 'witch' | 'hunter' | 'guard' | 'wolf_king' | 'white_wolf_king';
-export type GameStatus = 'waiting' | 'playing' | 'finished';
-export type GameMode = 'classic_9' | 'classic_12';
-export type WolfKingVariant = 'wolf_king' | 'white_wolf_king';
-
-export type GamePhase =
-  | 'night_start'
-  | 'night_guard'
-  | 'night_werewolf_chat'
-  | 'night_werewolf'
-  | 'night_seer'
-  | 'night_witch'
-  | 'day_announcement'
-  | 'day_last_words'
-  | 'death_shoot'
-  | 'day_speech'
-  | 'day_vote'
-  | 'day_vote_result'
-  | 'hunter_shoot'
-  | 'game_over';
-export type ActionType = 'kill' | 'verify' | 'save' | 'poison' | 'vote' | 'shoot' | 'protect' | 'self_destruct' | 'speak' | 'skip';
-// WL-013 Fix: Sync with backend MessageType enum
-export type MessageType = 'speech' | 'system' | 'thought' | 'last_words' | 'wolf_chat' | 'vote_thought';
-export type Winner = 'werewolf' | 'villager' | 'none';
-
-export interface PlayerPublic {
-  seat_id: number;
-  is_alive: boolean;
-  is_human: boolean;
-  avatar?: string | null;
-  name?: string | null;
-  role?: Role | null; // only shown when game is finished
-}
-
-export interface MessageInGame {
-  seat_id: number;
-  text: string;
-  type: MessageType;
-  day: number;
-}
-
-export interface PendingAction {
-  type: ActionType;
-  choices: number[];
-  message?: string | null;
-}
-
-export interface GameState {
-  game_id: string;
-  status: GameStatus;
-  state_version: number;  // State version for race condition prevention
-  day: number;
-  phase: GamePhase;
-  current_actor?: number | null;
-  my_seat: number;
-  my_role: Role;
-  players: PlayerPublic[];
-  message_log: MessageInGame[];
-  pending_action?: PendingAction | null;
-  winner?: Winner | null;
-  night_kill_target?: number | null;
-  wolf_teammates: number[];
-  verified_results: Record<number, boolean>;
-  wolf_votes_visible?: Record<number, number>; // teammate_seat -> target_seat
-}
-
-export interface GameStartRequest {
-  human_seat?: number | null;
-  human_role?: Role | null;
-  language?: string;  // Game language: "zh" or "en"
-}
-
-export interface GameStartResponse {
-  game_id: string;
-  player_role: Role;
-  player_seat: number;
-  players: PlayerPublic[];
-  token: string;  // JWT token for authentication
-}
-
-export interface StepResponse {
-  status: string;
-  new_phase?: GamePhase | null;
-  message?: string | null;
-}
-
-export interface ActionRequest {
-  seat_id: number;
-  action_type: ActionType;
-  target_id?: number | null;
-  content?: string | null;
-}
-
-export interface ActionResponse {
-  success: boolean;
-  message?: string | null;
-}
-
-// API Error class with optional response data for compatibility
-export class ApiError extends Error {
-  // Optional response object for axios-style error handling compatibility
-  response?: {
-    status: number;
-    data?: { detail?: string };
-  };
-
-  constructor(
-    public status: number,
-    public detail: string
-  ) {
-    super(detail);
-    this.name = 'ApiError';
-  }
-}
-
-/**
- * Extended options for fetchApi with auth control
- */
-export interface FetchApiOptions extends RequestInit {
-  /**
-   * If true, skip injecting room token from sessionStorage.
-   * Use this for user-scoped APIs that should rely only on HttpOnly cookie authentication.
-   */
-  skipRoomToken?: boolean;
-}
-
-/**
- * Core internal fetch wrapper with retry, timeout, and error handling.
- *
- * Features:
- * - Automatic JWT token injection via getAuthHeader() (unless skipRoomToken is true)
- * - 10s timeout with AbortSignal support
- * - Retry logic for idempotent methods (GET/HEAD) only
- * - Unified error handling via ApiError
- *
- * Security:
- * - Endpoint must be a relative path starting with '/'
- * - Rejects absolute URLs and protocol-relative URLs ('//')
- *
- * CRITICAL FIXES APPLIED:
- * - C1: Only retry idempotent methods (GET/HEAD) to prevent duplicate POST actions
- * - C2: Always clear timeout in finally block to prevent timer leaks
- * - C3: Support external AbortSignal and distinguish from timeout aborts
- *
- * @internal Recommended for use within service modules only
- * @param endpoint - Relative API path (must start with '/')
- * @param options - Extended fetch options with auth control
- * @returns Promise resolving to the parsed JSON response
- * @throws {ApiError} When the request fails or endpoint is invalid
- */
-export async function fetchApi<T>(
-  endpoint: string,
-  options: FetchApiOptions = {}
-): Promise<T> {
-  // Security: Validate endpoint to prevent token leakage to external domains
-  if (!endpoint.startsWith('/')) {
-    throw new ApiError(400, 'Endpoint must be a relative path starting with "/"');
-  }
-  if (endpoint.startsWith('//')) {
-    throw new ApiError(400, 'Protocol-relative URLs are not allowed');
-  }
-  const url = `${API_BASE_URL}${endpoint}`;
-
-  // Build headers - only inject room token if not skipped
-  const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(options.skipRoomToken ? {} : getAuthHeader())
-  };
-
-  // C1 FIX: Only retry idempotent methods (GET/HEAD) to prevent duplicate POST actions
-  const method = (options.method || 'GET').toUpperCase();
-  const isIdempotent = ['GET', 'HEAD'].includes(method);
-  const MAX_RETRIES = isIdempotent ? 3 : 0; // POST/PUT/DELETE/PATCH do not retry
-  let retryCount = 0;
-
-  while (true) {
-    // C2 & C3 FIX: Create controller and timeout for each attempt
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-    // C3 FIX: Support external AbortSignal - listen and forward abort
-    if (options.signal) {
-      options.signal.addEventListener('abort', () => {
-        controller.abort();
-      }, { once: true });
-    }
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        credentials: 'include',  // Send HttpOnly cookies for authentication
-        headers: {
-          ...defaultHeaders,
-          ...options.headers,
-        },
-        signal: controller.signal,
-      });
-
-      // C2 FIX: Clear timeout on success
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        // If 5xx error and idempotent, retry
-        if (response.status >= 500 && retryCount < MAX_RETRIES) {
-          throw new Error(`Server Error ${response.status}`);
-        }
-
-        let detail = 'Unknown error';
-        try {
-          const errorData = await response.json();
-          detail = errorData.detail || errorData.message || JSON.stringify(errorData);
-        } catch {
-          detail = response.statusText;
-        }
-        throw new ApiError(response.status, detail);
-      }
-
-      return response.json();
-    } catch (error) {
-      // C2 FIX: Always clear timeout, even on error
-      clearTimeout(timeoutId);
-
-      // C3 FIX: Distinguish external abort from timeout abort
-      const isExternalAbort = options.signal?.aborted;
-      const isTimeoutAbort = error instanceof Error && error.name === 'AbortError' && !isExternalAbort;
-      const isNetworkError = error instanceof Error &&
-        (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('Server Error'));
-
-      // External abort should not retry - user explicitly cancelled
-      if (isExternalAbort) {
-        throw error;
-      }
-
-      // Only retry on network errors or timeout (and only for idempotent methods)
-      if ((isNetworkError || isTimeoutAbort) && retryCount < MAX_RETRIES) {
-        retryCount++;
-        const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
-        console.log(`API request failed, retrying... (${MAX_RETRIES - retryCount + 1} attempts left) in ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-
-      throw error;
-    }
-  }
-}
+export const authorizedFetch = fetchApi;
 
 // ==================== Game API ====================
 
@@ -374,13 +97,13 @@ export async function healthCheck(): Promise<{ status: string }> {
 /**
  * Check if current phase is night
  */
-export function isNightPhase(phase: GamePhase): boolean {
+export function isNightPhase(phase: import('@/types/api').GamePhase): boolean {
   return phase.startsWith('night_');
 }
 
 /**
  * Check if human player needs to act
  */
-export function needsHumanAction(gameState: GameState): boolean {
+export function needsHumanAction(gameState: import('@/types/api').GameState): boolean {
   return gameState.pending_action !== null && gameState.pending_action !== undefined;
 }

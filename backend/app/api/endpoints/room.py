@@ -2,11 +2,12 @@
 import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.core.auth import create_player_token
 from app.api.dependencies import get_current_player, get_optional_user, get_current_user
 from app.services.room_manager import room_manager
@@ -102,7 +103,7 @@ class RoomDetailResponse(BaseModel):
 @router.post("")
 async def create_room(
     request: CreateRoomRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: Dict = Depends(get_current_user)
 ):
     """
@@ -148,16 +149,20 @@ async def create_room(
 
         # 获取用户信息
         user_id = current_user.get("user_id")
-        user = db.query(User).filter(User.id == user_id).first()
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
         # 检查用户是否已有活跃房间（一人一房限制）
         from app.models.room import Room
-        existing_room = db.query(Room).filter(
-            Room.creator_user_id == user_id,
-            Room.status.in_([RoomStatus.WAITING, RoomStatus.PLAYING])
-        ).first()
+        existing_result = await db.execute(
+            select(Room).where(
+                Room.creator_user_id == user_id,
+                Room.status.in_([RoomStatus.WAITING, RoomStatus.PLAYING])
+            )
+        )
+        existing_room = existing_result.scalar_one_or_none()
 
         if existing_room:
             raise HTTPException(
@@ -172,7 +177,7 @@ async def create_room(
         creator_id = str(uuid.uuid4())
 
         # 创建房间，使用用户的 nickname
-        room = room_manager.create_room(
+        room = await room_manager.create_room(
             db,
             request.name,
             user.nickname,  # 使用用户的真实昵称
@@ -224,17 +229,17 @@ async def create_room(
         raise
     except Exception as e:
         # Rollback any pending transaction to prevent session corruption
-        db.rollback()
+        await db.rollback()
         # WL-014 Fix: Log detailed error, return generic message
         logger.error(f"Failed to create room: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create room")
 
 
 @router.get("", response_model=List[RoomResponse])
-def get_rooms(
+async def get_rooms(
     status: Optional[str] = None,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     获取房间列表
@@ -252,7 +257,7 @@ def get_rooms(
                     detail=f"Invalid status. Must be one of: waiting, playing, finished"
                 )
 
-        rooms = room_manager.get_rooms(db, room_status, limit)
+        rooms = await room_manager.get_rooms(db, room_status, limit)
         return [
             RoomResponse(
                 id=r.id,
@@ -276,9 +281,9 @@ def get_rooms(
 
 
 @router.get("/{room_id}", response_model=RoomDetailResponse)
-def get_room_detail(
+async def get_room_detail(
     room_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_player: Dict = Depends(get_current_player)
 ):
     """
@@ -290,7 +295,7 @@ def get_room_detail(
     Only room members can view room details.
     """
     try:
-        room = room_manager.get_room(db, room_id)
+        room = await room_manager.get_room(db, room_id)
         if not room:
             raise HTTPException(status_code=404, detail="房间不存在")
 
@@ -305,7 +310,7 @@ def get_room_detail(
         if token_type != "user" and token_room_id != room_id:
             raise HTTPException(status_code=403, detail="无权访问该房间")
 
-        players = room_manager.get_room_players(db, room_id)
+        players = await room_manager.get_room_players(db, room_id)
 
         # 获取当前用户的 player_id 用于标识 is_me
         current_player_id = current_player.get("player_id")
@@ -357,7 +362,7 @@ def get_room_detail(
 async def join_room(
     room_id: str,
     request: JoinRoomRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     auth_user: Optional[Dict] = Depends(get_optional_user)
 ):
     """
@@ -377,11 +382,11 @@ async def join_room(
         user_id = auth_user.get("user_id") if auth_user else None
 
         # 获取房间信息（用于通知房主）
-        room = room_manager.get_room(db, room_id)
+        room = await room_manager.get_room(db, room_id)
         if not room:
             raise HTTPException(status_code=404, detail="房间不存在")
 
-        player = room_manager.join_room(
+        player = await room_manager.join_room(
             db,
             room_id,
             player_id,
@@ -436,7 +441,7 @@ async def join_room(
 @router.post("/{room_id}/leave")
 async def leave_room(
     room_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_player: Dict = Depends(get_current_player)
 ):
     """
@@ -456,7 +461,7 @@ async def leave_room(
             raise HTTPException(status_code=403, detail="You are not in this room")
 
         # 调用服务层离开房间，获取广播信息
-        result = room_manager.leave_room(db, room_id, player_id)
+        result = await room_manager.leave_room(db, room_id, player_id)
 
         # WebSocket 广播 player_left 事件（失败不阻断主流程）
         room_key = f"room_{room_id}"
@@ -490,9 +495,9 @@ async def leave_room(
 
 
 @router.post("/{room_id}/ready")
-def toggle_ready(
+async def toggle_ready(
     room_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_player: Dict = Depends(get_current_player)
 ):
     """
@@ -507,7 +512,7 @@ def toggle_ready(
         if current_player.get("room_id") != room_id:
             raise HTTPException(status_code=403, detail="You are not in this room")
 
-        is_ready = room_manager.toggle_ready(
+        is_ready = await room_manager.toggle_ready(
             db,
             room_id,
             player_id
@@ -533,7 +538,7 @@ def toggle_ready(
 async def start_game(
     room_id: str,
     request: StartGameRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_player: Dict = Depends(get_current_player)
 ):
     """
@@ -557,16 +562,16 @@ async def start_game(
             raise HTTPException(status_code=403, detail="You are not in this room")
 
         # 获取房间信息用于通知
-        room = room_manager.get_room(db, room_id)
+        room = await room_manager.get_room(db, room_id)
         if not room:
             raise HTTPException(status_code=404, detail="房间不存在")
 
         # 获取房间内所有玩家的 user_id（用于发送通知）
-        players = room_manager.get_room_players(db, room_id)
+        players = await room_manager.get_room_players(db, room_id)
         player_user_ids = [p.user_id for p in players if p.user_id]
 
         # start_game 内部会验证是否为房主
-        game_id = room_manager.start_game(
+        game_id = await room_manager.start_game(
             db,
             room_id,
             player_id,  # 使用认证的 player_id
@@ -622,9 +627,9 @@ async def start_game(
 
 
 @router.delete("/{room_id}")
-def delete_room(
+async def delete_room(
     room_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_player: Dict = Depends(get_current_player)
 ):
     """
@@ -640,17 +645,17 @@ def delete_room(
             raise HTTPException(status_code=403, detail="You are not in this room")
 
         # 获取房间信息验证房主
-        room = room_manager.get_room(db, room_id)
+        room = await room_manager.get_room(db, room_id)
         if not room:
             raise HTTPException(status_code=404, detail="房间不存在")
 
         # 验证是否为房主（通过creator_id）
-        players = room_manager.get_room_players(db, room_id)
+        players = await room_manager.get_room_players(db, room_id)
         creator = next((p for p in players if p.is_creator), None)
         if not creator or creator.player_id != player_id:
             raise HTTPException(status_code=403, detail="Only room owner can delete the room")
 
-        success = room_manager.delete_room(db, room_id)
+        success = await room_manager.delete_room(db, room_id)
         if success:
             return {"success": True, "message": "房间已删除"}
         raise HTTPException(status_code=404, detail="房间不存在")

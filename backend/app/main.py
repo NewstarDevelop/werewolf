@@ -117,21 +117,19 @@ async def startup_event():
     # WL-011 Fix: Reset orphaned rooms after restart
     # Since game state is stored in-memory, rooms in PLAYING state
     # after restart have lost their game objects and must be reset
-    from app.core.database import SessionLocal
+    from app.core.database_async import AsyncSessionLocal
     from app.services.room_manager import room_manager
 
-    db = SessionLocal()
-    try:
-        reset_count = room_manager.reset_orphaned_rooms(db)
-        if reset_count > 0:
-            logger.warning(
-                f"WL-011: Reset {reset_count} orphaned room(s) from PLAYING to WAITING. "
-                "Game state was lost due to server restart."
-            )
-    except Exception as e:
-        logger.error(f"Failed to reset orphaned rooms: {e}")
-    finally:
-        db.close()
+    async with AsyncSessionLocal() as db:
+        try:
+            reset_count = await room_manager.reset_orphaned_rooms(db)
+            if reset_count > 0:
+                logger.warning(
+                    f"WL-011: Reset {reset_count} orphaned room(s) from PLAYING to WAITING. "
+                    "Game state was lost due to server restart."
+                )
+        except Exception as e:
+            logger.error(f"Failed to reset orphaned rooms: {e}")
 
     # Initialize game logging
     init_game_logging()
