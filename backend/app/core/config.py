@@ -102,7 +102,8 @@ class Settings:
         # Application settings
         self.DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
         self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-        self.DATA_DIR: str = os.getenv("DATA_DIR", "data")  # 数据存储目录（用于SQLite等）
+        # 数据存储目录：Docker 环境使用绝对路径 /app/data，本地开发使用相对路径 data
+        self.DATA_DIR: str = os.getenv("DATA_DIR", "/app/data" if os.path.exists("/app") else "data")
 
         # Database configuration
         # DATABASE_URL: Single source of truth for database connection

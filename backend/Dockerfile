@@ -29,8 +29,10 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Create non-root user for security and pre-create data directory
+# Use fixed UID=1000 for predictable volume permissions
+# On host, run: sudo chown -R 1000:1000 ./data
 RUN mkdir -p /app/data && \
-    adduser --disabled-password --gecos '' appuser && \
+    adduser --disabled-password --gecos '' --uid 1000 appuser && \
     chown -R appuser:appuser /app
 
 USER appuser
