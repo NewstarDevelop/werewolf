@@ -354,6 +354,7 @@
     "dialog_delete_history_desc": "仅从管理后台记录中移除。用户收件箱中的消息将被保留。",
     "dialog_delete_cascade_title": "确认彻底删除？",
     "dialog_delete_cascade_desc": "警告：这将从所有用户的收件箱中移除此通知。该操作不可撤销。",
-    "cascade_delete_success": "广播和所有用户通知已删除"
+    "cascade_delete_success": "广播和所有用户通知已删除",
+    "update_job_lost": "更新任务丢失或启动失败，请重试。"
   }
 }

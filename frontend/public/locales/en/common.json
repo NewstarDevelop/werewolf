@@ -354,6 +354,7 @@
     "dialog_delete_history_desc": "This will remove the record from the admin history. The message will remain in users' inboxes.",
     "dialog_delete_cascade_title": "Permanently Delete?",
     "dialog_delete_cascade_desc": "WARNING: This will remove the notification from ALL user inboxes. This action cannot be undone.",
-    "cascade_delete_success": "Broadcast and all user notifications deleted"
+    "cascade_delete_success": "Broadcast and all user notifications deleted",
+    "update_job_lost": "Update job was lost or failed to start. Please try again."
   }
 }

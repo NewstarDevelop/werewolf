@@ -158,6 +158,12 @@ export function SystemMaintenancePanel({ token }: SystemMaintenancePanelProps) {
           } else {
             toast.error(status.message || t('admin.update_failed', 'Update failed'));
           }
+        } else if (status.state === 'idle') {
+          // Runner container doesn't exist - the job was lost or failed to start
+          // This shouldn't happen during an active update
+          setIsUpdating(false);
+          toast.error(t('admin.update_job_lost', 'Update job was lost or failed to start. Please try again.'));
+          handleCheck();
         }
       } catch {
         // Ignore polling errors (server might be restarting)

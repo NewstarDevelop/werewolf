@@ -346,12 +346,9 @@ def _start_runner_container(force: bool) -> str:
     if CFG.compose_file:
         args += ["--env", f"UPDATE_AGENT_COMPOSE_FILE={CFG.compose_file}"]
 
-    args += [
-        CFG.runner_image,
-        "python3",
-        "/app/update_agent.py",
-        "runner",
-    ]
+    # Note: The runner image uses ENTRYPOINT ["python3", "/app/update_agent.py"]
+    # so we only need to pass the mode argument, not the full command
+    args += [CFG.runner_image, "runner"]
     if force:
         args.append("--force")
 
