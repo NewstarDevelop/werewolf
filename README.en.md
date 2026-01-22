@@ -33,13 +33,17 @@ Werewolf AI is an innovative online Werewolf (Mafia) game. AI players are powere
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/your-username/werewolf.git
+git clone https://github.com/NewstarDevelo/werewolf.git
 cd werewolf && cp .env.example .env
 
 # 2. Edit .env, set JWT_SECRET_KEY and OPENAI_API_KEY
+nano .env
 
-# 3. Start
-docker-compose up -d
+# 3. Start (using deploy script, auto-handles permissions)
+chmod +x deploy.sh && ./deploy.sh
+
+# Or manual start (first time requires data directory permissions)
+# sudo chown -R 1000:1000 ./data && docker compose up -d
 ```
 
 After starting:

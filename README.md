@@ -33,13 +33,17 @@ Werewolf AI 是一款创新的在线狼人杀游戏。游戏中的 AI 玩家由�
 
 ```bash
 # 1. 克隆并配置
-git clone https://github.com/your-username/werewolf.git
+git clone https://github.com/NewstarDevelo/werewolf.git
 cd werewolf && cp .env.example .env
 
 # 2. 编辑 .env，设置 JWT_SECRET_KEY 和 OPENAI_API_KEY
+nano .env
 
-# 3. 启动
-docker-compose up -d
+# 3. 启动（使用部署脚本，自动处理权限）
+chmod +x deploy.sh && ./deploy.sh
+
+# 或手动启动（首次需设置数据目录权限）
+# sudo chown -R 1000:1000 ./data && docker compose up -d
 ```
 
 启动后访问：
