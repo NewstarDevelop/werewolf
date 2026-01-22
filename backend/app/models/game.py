@@ -625,6 +625,14 @@ class Game:
             state["wolf_votes_visible"] = {}
             state["pending_action"] = None
 
+        # WL-BUG-001 Fix: Ensure all required fields have default values
+        # This prevents "Cannot convert undefined or null to object" errors
+        # when frontend receives incomplete state (e.g., token mismatch)
+        if "wolf_teammates" not in state:
+            state["wolf_teammates"] = []
+        if "verified_results" not in state:
+            state["verified_results"] = {}
+
         return state
 
     # Backward compatibility alias for P0 hotfix

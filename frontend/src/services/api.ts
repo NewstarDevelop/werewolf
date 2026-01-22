@@ -11,19 +11,44 @@ import { getAuthHeader } from '@/utils/token';
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
 /**
+ * Options for authorizedFetch
+ */
+export interface AuthorizedFetchOptions {
+  /**
+   * If true, skip injecting room token from sessionStorage.
+   * Use this for user-scoped APIs (history, profile, etc.) that should
+   * rely only on HttpOnly cookie authentication.
+   */
+  skipRoomToken?: boolean;
+}
+
+/**
  * Authorized fetch wrapper for components that need JWT authentication
  * Use this for API calls outside of the main game flow (logs, debug, analysis)
  *
  * Security: Includes credentials to send HttpOnly cookies
+ *
+ * @param endpoint - API endpoint path
+ * @param options - Optional configuration
  */
-export async function authorizedFetch<T>(endpoint: string): Promise<T> {
+export async function authorizedFetch<T>(
+  endpoint: string,
+  options: AuthorizedFetchOptions = {}
+): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  // Only inject room token if not skipped
+  if (!options.skipRoomToken) {
+    Object.assign(headers, getAuthHeader());
+  }
+
   const response = await fetch(url, {
     credentials: 'include',  // Send HttpOnly cookies
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    }
+    headers
   });
 
   if (!response.ok) {
@@ -151,10 +176,21 @@ export class ApiError extends Error {
 }
 
 /**
+ * Extended options for fetchApi with auth control
+ */
+export interface FetchApiOptions extends RequestInit {
+  /**
+   * If true, skip injecting room token from sessionStorage.
+   * Use this for user-scoped APIs that should rely only on HttpOnly cookie authentication.
+   */
+  skipRoomToken?: boolean;
+}
+
+/**
  * Core internal fetch wrapper with retry, timeout, and error handling.
  *
  * Features:
- * - Automatic JWT token injection via getAuthHeader()
+ * - Automatic JWT token injection via getAuthHeader() (unless skipRoomToken is true)
  * - 10s timeout with AbortSignal support
  * - Retry logic for idempotent methods (GET/HEAD) only
  * - Unified error handling via ApiError
@@ -170,13 +206,13 @@ export class ApiError extends Error {
  *
  * @internal Recommended for use within service modules only
  * @param endpoint - Relative API path (must start with '/')
- * @param options - Standard fetch options
+ * @param options - Extended fetch options with auth control
  * @returns Promise resolving to the parsed JSON response
  * @throws {ApiError} When the request fails or endpoint is invalid
  */
 export async function fetchApi<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: FetchApiOptions = {}
 ): Promise<T> {
   // Security: Validate endpoint to prevent token leakage to external domains
   if (!endpoint.startsWith('/')) {
@@ -186,9 +222,11 @@ export async function fetchApi<T>(
     throw new ApiError(400, 'Protocol-relative URLs are not allowed');
   }
   const url = `${API_BASE_URL}${endpoint}`;
+
+  // Build headers - only inject room token if not skipped
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
-    ...getAuthHeader() // Auto-add JWT token if available
+    ...(options.skipRoomToken ? {} : getAuthHeader())
   };
 
   // C1 FIX: Only retry idempotent methods (GET/HEAD) to prevent duplicate POST actions

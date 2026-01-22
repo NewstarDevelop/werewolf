@@ -47,7 +47,7 @@ export async function listNotifications(
     ? `/api/notifications?${queryString}`
     : '/api/notifications';
 
-  return fetchApi<NotificationListResponse>(endpoint);
+  return fetchApi<NotificationListResponse>(endpoint, { skipRoomToken: true });
 }
 
 /**
@@ -55,7 +55,8 @@ export async function listNotifications(
  */
 export async function getUnreadCount(): Promise<number> {
   const response = await fetchApi<UnreadCountResponse>(
-    '/api/notifications/unread-count'
+    '/api/notifications/unread-count',
+    { skipRoomToken: true }
   );
   return response.unread_count;
 }
@@ -68,7 +69,7 @@ export async function markNotificationRead(
 ): Promise<MarkReadResponse> {
   return fetchApi<MarkReadResponse>(
     `/api/notifications/${notificationId}/read`,
-    { method: 'POST' }
+    { method: 'POST', skipRoomToken: true }
   );
 }
 
@@ -78,6 +79,7 @@ export async function markNotificationRead(
 export async function markAllNotificationsRead(): Promise<ReadAllResponse> {
   return fetchApi<ReadAllResponse>('/api/notifications/read-all', {
     method: 'POST',
+    skipRoomToken: true,
   });
 }
 
@@ -91,6 +93,7 @@ export async function markNotificationsBatchRead(
   return fetchApi<ReadBatchResponse>('/api/notifications/read-batch', {
     method: 'POST',
     body: JSON.stringify(body),
+    skipRoomToken: true,
   });
 }
 

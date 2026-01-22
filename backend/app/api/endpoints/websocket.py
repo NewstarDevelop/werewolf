@@ -62,6 +62,7 @@ async def game_websocket(
 
     # 从 payload 提取 player_id
     player_id = payload.get("player_id") or payload.get("sub")
+    user_id = payload.get("user_id")  # WL-BUG-001: Extract user_id for fallback lookup
     room_id = payload.get("room_id")
 
     # A2-FIX: 校验 room_id 与 game_id 匹配（如果 token 包含 room_id）
@@ -80,7 +81,16 @@ async def game_websocket(
         return
 
     # Step 3: Verify player is in this game
+    # WL-BUG-001 Fix: Try player_id first, then fallback to user_id for cookie auth
     player = game.get_player_by_id(player_id)
+    effective_player_id = player_id
+    if not player and user_id and user_id != player_id:
+        # Fallback: try user_id (cookie auth may use user_id as player_id)
+        player = game.get_player_by_id(user_id)
+        if player:
+            effective_player_id = user_id
+            logger.info(f"WL-BUG-001: Used user_id {user_id} as fallback for player lookup in game {game_id}")
+
     if not player:
         await close_with_error(websocket, 4004, "Player not in game")
         return
@@ -89,11 +99,11 @@ async def game_websocket(
     # If using subprotocol auth, respond with "auth" to confirm
     subprotocols = websocket.scope.get("subprotocols", [])
     accepted_subprotocol = "auth" if subprotocols and subprotocols[0] == "auth" else None
-    await websocket_manager.connect(game_id, player_id, websocket, subprotocol=accepted_subprotocol)
+    await websocket_manager.connect(game_id, effective_player_id, websocket, subprotocol=accepted_subprotocol)
 
     try:
         # Send initial state filtered for this player
-        initial_state = game.get_state_for_player(player_id)
+        initial_state = game.get_state_for_player(effective_player_id)
         await websocket.send_json({
             "type": "connected",
             "data": initial_state
@@ -111,11 +121,11 @@ async def game_websocket(
                 })
 
     except WebSocketDisconnect:
-        logger.info(f"Player {player_id} disconnected from game {game_id}")
+        logger.info(f"Player {effective_player_id} disconnected from game {game_id}")
     except Exception as e:
-        logger.error(f"WebSocket error for player {player_id} in game {game_id}: {e}", exc_info=True)
+        logger.error(f"WebSocket error for player {effective_player_id} in game {game_id}: {e}", exc_info=True)
     finally:
-        websocket_manager.disconnect(game_id, player_id, websocket)
+        websocket_manager.disconnect(game_id, effective_player_id, websocket)
 
 
 @router.websocket("/ws/room/{room_id}")

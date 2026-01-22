@@ -402,11 +402,17 @@ class RoomManager:
             for p in ready_players:
                 human_seats.append(p.seat_id)
                 player_mapping[p.player_id] = p.seat_id
+                # WL-BUG-001 Fix: Also map user_id for cookie-based auth fallback
+                if p.user_id:
+                    player_mapping[p.user_id] = p.seat_id
         else:
             # 多人模式：所有玩家都是真人
             for p in players:
                 human_seats.append(p.seat_id)
                 player_mapping[p.player_id] = p.seat_id
+                # WL-BUG-001 Fix: Also map user_id for cookie-based auth fallback
+                if p.user_id:
+                    player_mapping[p.user_id] = p.seat_id
 
         game.human_seats = human_seats
         game.player_mapping = player_mapping

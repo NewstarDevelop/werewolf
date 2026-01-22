@@ -49,7 +49,8 @@ export async function getGameHistory(
 
   const queryString = params.toString();
   return authorizedFetch<GameHistoryListResponse>(
-    `/api/game-history${queryString ? `?${queryString}` : ''}`
+    `/api/game-history${queryString ? `?${queryString}` : ''}`,
+    { skipRoomToken: true }
   );
 }
 
@@ -57,7 +58,10 @@ export async function getGameHistory(
  * Get detailed information about a specific game
  */
 export async function getGameHistoryDetail(gameId: string): Promise<GameHistoryDetail> {
-  return authorizedFetch<GameHistoryDetail>(`/api/game-history/${gameId}`);
+  return authorizedFetch<GameHistoryDetail>(
+    `/api/game-history/${gameId}`,
+    { skipRoomToken: true }
+  );
 }
 
 export interface GameReplayResponse {
@@ -81,6 +85,7 @@ export async function getGameReplay(
   params.append('limit', limit.toString());
 
   return authorizedFetch<GameReplayResponse>(
-    `/api/game-history/${gameId}/replay?${params.toString()}`
+    `/api/game-history/${gameId}/replay?${params.toString()}`,
+    { skipRoomToken: true }
   );
 }

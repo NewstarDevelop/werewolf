@@ -8,6 +8,30 @@ from app.core.auth import verify_player_token
 from app.core.database import get_db
 
 
+def _extract_bearer_token(authorization: str) -> Optional[str]:
+    """Extract JWT token from 'Authorization: Bearer <token>' header.
+
+    Returns:
+        Token string if valid format, None otherwise.
+    """
+    parts = authorization.split()
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1]
+    return None
+
+
+def _verify_token_safe(token: str) -> Optional[Dict]:
+    """Verify JWT token without raising exceptions.
+
+    Returns:
+        Decoded payload if valid, None otherwise.
+    """
+    try:
+        return verify_player_token(token)
+    except Exception:
+        return None
+
+
 async def get_current_player(
     authorization: Optional[str] = Header(None),
     user_access_token: Optional[str] = Cookie(None)
@@ -84,6 +108,9 @@ async def get_current_user(
     Requires user_id in token payload (user must be logged in).
 
     Security: Supports both Authorization header and HttpOnly cookie.
+    - If Authorization header contains a user token (with user_id), use it.
+    - If Authorization header contains a room/player token (no user_id), fall back to cookie.
+    - Detects conflicts when both sources have different user_ids.
     Validates user exists and is active in real-time to enable effective token revocation.
 
     Args:
@@ -98,9 +125,48 @@ async def get_current_user(
         HTTPException: 401 if token is missing/invalid or no user_id
                       403 if user account is disabled
     """
-    payload = await get_current_player(authorization, user_access_token)
+    header_payload: Optional[Dict] = None
+    cookie_payload: Optional[Dict] = None
 
-    # Verify user_id exists (distinguishes user tokens from anonymous player tokens)
+    # Try to parse Authorization header
+    if authorization:
+        header_token = _extract_bearer_token(authorization)
+        if header_token:
+            header_payload = _verify_token_safe(header_token)
+
+    # Try to parse Cookie
+    if user_access_token:
+        cookie_payload = _verify_token_safe(user_access_token)
+
+    # Determine which payload to use
+    header_user_id = header_payload.get("user_id") if header_payload else None
+    cookie_user_id = cookie_payload.get("user_id") if cookie_payload else None
+
+    payload: Optional[Dict] = None
+
+    if header_user_id:
+        # Authorization header has user token
+        # Check for conflict with cookie
+        if cookie_user_id and cookie_user_id != header_user_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication conflict: mismatched user credentials.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        payload = header_payload
+    elif cookie_user_id:
+        # Authorization header missing or has room token (no user_id)
+        # Fall back to cookie authentication
+        payload = cookie_payload
+    else:
+        # Neither source has valid user token
+        raise HTTPException(
+            status_code=401,
+            detail="User authentication required. Please log in.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Verify user_id exists (should be guaranteed by logic above, but double-check)
     user_id = payload.get("user_id")
     if not user_id:
         raise HTTPException(

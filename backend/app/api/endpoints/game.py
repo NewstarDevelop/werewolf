@@ -125,6 +125,8 @@ def verify_game_membership(game_id: str, current_player: Dict):
     - If token has room_id: it must match game_id
     - Always: player_id must exist in game.player_mapping
 
+    WL-BUG-001 Fix: Also try user_id as fallback for cookie-based auth
+
     Args:
         game_id: Game ID from URL path
         current_player: Player info from JWT token
@@ -140,6 +142,7 @@ def verify_game_membership(game_id: str, current_player: Dict):
         raise HTTPException(status_code=404, detail="Game not found")
 
     player_id = current_player["player_id"]
+    user_id = current_player.get("user_id")  # WL-BUG-001: Extract user_id for fallback
     room_id = current_player.get("room_id")
 
     # Room mode: token has room_id, must match game_id
@@ -149,12 +152,21 @@ def verify_game_membership(game_id: str, current_player: Dict):
             detail="Game does not match your room"
         )
 
-    # Always enforce membership via player_mapping
+    # WL-BUG-001 Fix: Try player_id first, then fallback to user_id
+    effective_player_id = player_id
     if player_id not in game.player_mapping:
-        raise HTTPException(
-            status_code=403,
-            detail="You are not a player in this game"
-        )
+        if user_id and user_id in game.player_mapping:
+            # Fallback: use user_id (cookie auth may have user_id mapped)
+            effective_player_id = user_id
+            logger.info(f"WL-BUG-001: Used user_id {user_id} as fallback for game {game_id}")
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not a player in this game"
+            )
+
+    # Store effective_player_id in current_player for use by callers
+    current_player["effective_player_id"] = effective_player_id
 
     return game
 
@@ -226,8 +238,8 @@ def get_game_state(
     # T-SEC-003: Verify game membership (handles 404 and 403)
     game = verify_game_membership(game_id, current_player)
 
-    # Use proper multi-player support with JWT authentication
-    player_id = current_player["player_id"]
+    # WL-BUG-001 Fix: Use effective_player_id which may be user_id fallback
+    player_id = current_player.get("effective_player_id") or current_player["player_id"]
     return game.get_state_for_player(player_id)
 
 
@@ -443,8 +455,8 @@ async def submit_action(
     # T-SEC-003: Verify game membership (handles 404 and 403)
     game = verify_game_membership(game_id, current_player)
 
-    # Get seat_id from token mapping (don't trust client-provided seat_id)
-    player_id = current_player["player_id"]
+    # WL-BUG-001 Fix: Use effective_player_id which may be user_id fallback
+    player_id = current_player.get("effective_player_id") or current_player["player_id"]
 
     # Use seat_id from token mapping for security
     seat_id = game.player_mapping.get(player_id)
