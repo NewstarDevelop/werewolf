@@ -228,17 +228,19 @@ class PerGameSoftLimiter:
         async with self._global_lock:
             self._last_call[game_id] = time.monotonic()
 
-    def cleanup_game(self, game_id: str) -> None:
-        """Clean up resources for a finished game.
+    async def cleanup_game(self, game_id: str) -> None:
+        """Clean up resources for a finished game (async + thread-safe).
 
         Call this when a game ends to prevent memory leaks.
+        Must be called from async context.
+
+        Args:
+            game_id: The game identifier to clean up
         """
-        # Note: This is synchronous and should be called from a sync context
-        # or wrapped in asyncio.create_task if called from async
-        if game_id in self._semaphores:
-            del self._semaphores[game_id]
-        if game_id in self._last_call:
-            del self._last_call[game_id]
+        async with self._global_lock:
+            self._semaphores.pop(game_id, None)
+            self._last_call.pop(game_id, None)
+            logger.debug(f"Cleaned up rate limiter resources for game {game_id}")
 
     @asynccontextmanager
     async def limit(self, game_id: str, *, max_wait_seconds: Optional[float] = None):

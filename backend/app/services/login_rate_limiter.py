@@ -5,8 +5,7 @@ brute-force attacks on authentication endpoints.
 """
 import time
 import logging
-from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 from threading import Lock
 
@@ -52,12 +51,17 @@ class LoginRateLimiter:
         self.lockout_seconds = lockout_seconds
         self.max_lockout_seconds = max_lockout_seconds
 
-        self._records: Dict[str, AttemptRecord] = defaultdict(AttemptRecord)
-        self._lockout_counts: Dict[str, int] = defaultdict(int)
+        # FIX: Use regular dict instead of defaultdict to prevent memory leak
+        # Only create records when actually recording attempts, not on checks
+        self._records: Dict[str, AttemptRecord] = {}
+        self._lockout_counts: Dict[str, int] = {}
         self._lock = Lock()
 
     def check_rate_limit(self, identifier: str) -> Tuple[bool, Optional[int]]:
         """Check if identifier is rate limited.
+
+        FIX: No longer creates records on check - only reads existing ones.
+        This prevents memory leak from attackers checking with random identifiers.
 
         Args:
             identifier: IP address or username to check
@@ -70,6 +74,10 @@ class LoginRateLimiter:
         now = time.time()
 
         with self._lock:
+            # FIX: Don't create record if it doesn't exist
+            if identifier not in self._records:
+                return True, None  # New identifier, allow
+
             record = self._records[identifier]
 
             # Check if currently locked out
@@ -100,6 +108,10 @@ class LoginRateLimiter:
         now = time.time()
 
         with self._lock:
+            # FIX: Create record only when recording attempts
+            if identifier not in self._records:
+                self._records[identifier] = AttemptRecord()
+
             record = self._records[identifier]
 
             if success:
@@ -124,6 +136,10 @@ class LoginRateLimiter:
 
             # Check if should lock out
             if record.attempts >= self.max_attempts:
+                # FIX: Initialize lockout count if not exists
+                if identifier not in self._lockout_counts:
+                    self._lockout_counts[identifier] = 0
+
                 self._lockout_counts[identifier] += 1
                 lockout_multiplier = min(
                     self._lockout_counts[identifier],

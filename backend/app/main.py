@@ -1,4 +1,5 @@
 """FastAPI application entry point."""
+import asyncio
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -135,6 +136,35 @@ async def startup_event():
     # Initialize game logging
     init_game_logging()
     logger.info("Game logging initialized")
+
+    # FIX: Start background task for periodic rate limiter cleanup
+    asyncio.create_task(_periodic_rate_limiter_cleanup())
+    logger.info("Rate limiter cleanup task started")
+
+
+async def _periodic_rate_limiter_cleanup():
+    """Background task to periodically clean up expired rate limit records.
+
+    Runs every hour to prevent memory leaks from accumulated login attempt records.
+    """
+    from app.services.login_rate_limiter import admin_login_limiter, user_login_limiter
+
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Run every hour
+
+            # Clean up both limiters
+            admin_cleaned = admin_login_limiter.cleanup_expired()
+            user_cleaned = user_login_limiter.cleanup_expired()
+
+            if admin_cleaned > 0 or user_cleaned > 0:
+                logger.info(
+                    f"Rate limiter cleanup: admin={admin_cleaned}, user={user_cleaned} records removed"
+                )
+        except Exception as e:
+            logger.error(f"Error in rate limiter cleanup task: {e}")
+            # Continue running even if cleanup fails
+            await asyncio.sleep(60)  # Wait 1 minute before retry
 
 
 @app.on_event("shutdown")
