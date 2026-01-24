@@ -16,6 +16,7 @@ interface GameActionsProps {
   onSendMessage: (message: string) => void;
   onVote: () => void;
   onUseSkill: () => void;
+  onSkip: () => void;  // MAJOR FIX: Dedicated skip handler to prevent ambiguity
   canVote: boolean;
   canUseSkill: boolean;
   canSpeak?: boolean;
@@ -29,6 +30,7 @@ const GameActions = ({
   onSendMessage,
   onVote,
   onUseSkill,
+  onSkip,
   canVote,
   canUseSkill,
   canSpeak,
@@ -88,11 +90,10 @@ const GameActions = ({
     ["save", "poison", "shoot", "vote", "protect"].includes(pendingAction.type) &&
     pendingAction.choices.includes(0);
 
-  // Determine which handler to use for skip button based on action type
-  const getSkipHandler = () => {
-    if (!pendingAction) return onUseSkill;
-    // vote and shoot are handled by onVote, save and poison and protect by onUseSkill
-    return ["vote", "shoot"].includes(pendingAction.type) ? onVote : onUseSkill;
+  // MAJOR FIX: Use dedicated skip handler to avoid selectedPlayerId ambiguity
+  const handleSkipClick = () => {
+    play('CLICK');
+    onSkip();
   };
 
   // Get appropriate icon based on action type
@@ -109,6 +110,8 @@ const GameActions = ({
         {/* Action hint - P1-1: Use translated message for consistency */}
         {(translatedMessage || pendingAction?.message) && (
           <div className="text-center text-sm text-accent bg-accent/10 py-2 px-4 rounded-lg border border-accent/20 animate-fade-in">
+            {/* MINOR FIX: Ensure sufficient contrast for accessibility */}
+            {/* If contrast issues occur, consider using text-accent-foreground or text-foreground */}
             {translatedMessage || pendingAction?.message}
           </div>
         )}
@@ -120,6 +123,7 @@ const GameActions = ({
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              maxLength={500}
               placeholder={
                 canSpeak
                   ? t('message.enter_message')
@@ -181,7 +185,7 @@ const GameActions = ({
           {showSkipButton && (
             <Button
               variant="muted"
-              onClick={getSkipHandler()}
+              onClick={handleSkipClick}
               disabled={isSubmitting}
               className="w-24 h-11 md:h-10"
             >

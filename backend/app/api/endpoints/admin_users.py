@@ -57,7 +57,7 @@ def sanitize_csv_value(value) -> str:
 
 
 @router.get("", response_model=UserListResponse)
-async def list_users(
+def list_users(
     actor: Dict = Depends(verify_admin),
     db: Session = Depends(get_db),
     q: Optional[str] = Query(None, min_length=1, max_length=100),
@@ -143,7 +143,7 @@ async def list_users(
 
 
 @router.get("/export.csv")
-async def export_users_csv(
+def export_users_csv(
     actor: Dict = Depends(verify_admin),
     db: Session = Depends(get_db),
     q: Optional[str] = Query(None, min_length=1, max_length=100),
@@ -249,7 +249,7 @@ async def export_users_csv(
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
-async def get_user_detail(
+def get_user_detail(
     user_id: str,
     actor: Dict = Depends(verify_admin),
     db: Session = Depends(get_db),
@@ -267,7 +267,7 @@ async def get_user_detail(
 
 
 @router.patch("/{user_id}/profile", response_model=UserDetailResponse)
-async def update_user_profile(
+def update_user_profile(
     user_id: str,
     body: AdminUpdateUserProfileRequest,
     actor: Dict = Depends(verify_admin),
@@ -312,7 +312,7 @@ async def update_user_profile(
 
 
 @router.patch("/{user_id}/status", response_model=UserDetailResponse)
-async def set_user_status(
+def set_user_status(
     user_id: str,
     body: AdminSetUserActiveRequest,
     actor: Dict = Depends(verify_admin),
@@ -349,7 +349,7 @@ async def set_user_status(
 
 
 @router.patch("/{user_id}/admin", response_model=UserDetailResponse)
-async def set_user_admin(
+def set_user_admin(
     user_id: str,
     body: AdminSetUserAdminRequest,
     actor: Dict = Depends(verify_admin),
@@ -386,7 +386,7 @@ async def set_user_admin(
 
 
 @router.post("/batch", response_model=AdminUserBatchResponse)
-async def batch_operation(
+def batch_operation(
     body: AdminUserBatchRequest,
     actor: Dict = Depends(verify_admin),
     db: Session = Depends(get_db),

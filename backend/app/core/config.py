@@ -1,37 +1,40 @@
-"""Application configuration with multi-AI provider support."""
+"""Application configuration with multi-AI provider support.
+
+Refactored: Provider, security, and analysis configs extracted to separate modules.
+"""
 import os
-import json
 import logging
 from typing import Optional
-from dataclasses import dataclass, field
 from pathlib import Path
 from dotenv import load_dotenv
 
+from .config_providers import AIProviderConfig, AIPlayerConfig, ProviderManager
+from .config_security import SecurityConfig, OAuthConfig
+from .config_analysis import AnalysisConfig
+
 logger = logging.getLogger(__name__)
 
-# Resolved .env path used at startup (if any). Used by admin tooling to avoid read/write mismatch.
+# Re-export for backward compatibility
+__all__ = ["settings", "AIProviderConfig", "AIPlayerConfig", "ENV_FILE_PATH", "ENV_FILE_LOADED"]
+
+# Resolved .env path used at startup
 ENV_FILE_PATH: Optional[Path] = None
 ENV_FILE_LOADED: bool = False
 
-# Smart .env loading with fallback support
-# Priority: environment variables (docker-compose) > .env file (local dev) > defaults
+
 def _load_env_file():
     """Load .env file from multiple possible locations with error handling."""
     global ENV_FILE_PATH, ENV_FILE_LOADED
-    # Possible .env locations (in priority order)
     current_file = Path(__file__).resolve()
     possible_paths = [
-        # Docker environment: /app/.env (same level as backend/)
         current_file.parent.parent.parent / '.env',
-        # Local development: project_root/.env
         current_file.parent.parent.parent.parent / '.env',
-        # Fallback: current working directory
         Path.cwd() / '.env',
     ]
 
     for env_path in possible_paths:
         if env_path.exists():
-            load_dotenv(dotenv_path=env_path, override=False)  # Don't override existing env vars
+            load_dotenv(dotenv_path=env_path, override=False)
             ENV_FILE_PATH = env_path
             ENV_FILE_LOADED = True
             logger.info(f"Loaded .env from: {env_path}")
@@ -40,50 +43,8 @@ def _load_env_file():
     logger.warning("No .env file found - using environment variables and defaults")
     return False
 
+
 _load_env_file()
-
-
-@dataclass
-class AIProviderConfig:
-    """Configuration for a single AI provider."""
-    name: str
-    api_key: str
-    base_url: Optional[str] = None
-    model: str = "gpt-4o-mini"
-    max_retries: int = 2
-    temperature: float = 0.7
-    max_tokens: int = 500
-    # Rate limiting configuration
-    requests_per_minute: int = 60  # RPM limit for this provider
-    max_concurrency: int = 5  # Max concurrent in-flight requests
-    burst: int = 3  # Token bucket burst capacity (should match expected concurrency)
-
-    @classmethod
-    def from_env(cls, prefix: str, name: str) -> "AIProviderConfig":
-        """Create config from environment variables with given prefix."""
-        return cls(
-            name=name,
-            api_key=os.getenv(f"{prefix}_API_KEY", ""),
-            base_url=os.getenv(f"{prefix}_BASE_URL") or None,
-            model=os.getenv(f"{prefix}_MODEL", "gpt-4o-mini"),
-            max_retries=int(os.getenv(f"{prefix}_MAX_RETRIES", "2")),
-            temperature=float(os.getenv(f"{prefix}_TEMPERATURE", "0.7")),
-            max_tokens=int(os.getenv(f"{prefix}_MAX_TOKENS", "500")),
-            requests_per_minute=int(os.getenv(f"{prefix}_REQUESTS_PER_MINUTE", "60")),
-            max_concurrency=int(os.getenv(f"{prefix}_MAX_CONCURRENCY", "5")),
-            burst=int(os.getenv(f"{prefix}_BURST", "3")),
-        )
-
-    def is_valid(self) -> bool:
-        """Check if this provider has valid configuration."""
-        return bool(self.api_key)
-
-
-@dataclass
-class AIPlayerConfig:
-    """Configuration for AI player to provider mapping."""
-    seat_id: int
-    provider_name: str  # References AIProviderConfig.name
 
 
 class Settings:
@@ -102,93 +63,17 @@ class Settings:
         # Application settings
         self.DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
         self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-        # 数据存储目录：Docker 环境使用绝对路径 /app/data，本地开发使用相对路径 data
         self.DATA_DIR: str = os.getenv("DATA_DIR", "/app/data" if os.path.exists("/app") else "data")
 
         # Database configuration
-        # DATABASE_URL: Single source of truth for database connection
-        # Examples:
-        #   SQLite (dev):      sqlite:///data/werewolf.db
-        #   SQLite async:      sqlite+aiosqlite:///data/werewolf.db
-        #   PostgreSQL (prod): postgresql+asyncpg://user:pass@host/db
         default_db_url = f"sqlite:///{self.DATA_DIR}/werewolf.db"
         self.DATABASE_URL: str = os.getenv("DATABASE_URL", default_db_url)
-
-        # Derive async URL from sync URL if needed
         self.DATABASE_URL_ASYNC: str = self._derive_async_database_url(self.DATABASE_URL)
 
-        # Frontend URL for CORS and WebSocket origin validation
-        self.FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL") or None
-
-        # Allowed WebSocket origins (comma-separated, or derived from FRONTEND_URL)
-        ws_origins_str = os.getenv("ALLOWED_WS_ORIGINS", "")
-        if ws_origins_str:
-            self.ALLOWED_WS_ORIGINS: list[str] = [o.strip() for o in ws_origins_str.split(",") if o.strip()]
-        elif self.FRONTEND_URL:
-            self.ALLOWED_WS_ORIGINS = [self.FRONTEND_URL]
-        else:
-            self.ALLOWED_WS_ORIGINS = []
-
-        # Admin-only runtime config management (disabled by default; enable explicitly in .env)
+        # Admin runtime config management
         self.ENV_MANAGEMENT_ENABLED: bool = os.getenv("ENV_MANAGEMENT_ENABLED", "false").lower() == "true"
 
-        # Security settings
-        self.DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "false").lower() == "true"
-        # Admin panel password authentication (simple password login)
-        self.ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
-
-        # P1-SEC-003: Trusted proxies for X-Forwarded-For header
-        # Only trust forwarded headers when request comes from these IPs
-        # Example: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-        # Empty string means don't trust any proxy (use direct client IP only)
-        trusted_proxies_str = os.getenv("TRUSTED_PROXIES", "")
-        self.TRUSTED_PROXIES: list[str] = [
-            p.strip() for p in trusted_proxies_str.split(",") if p.strip()
-        ]
-
-        # FIX: Maximum allowed proxy hops in X-Forwarded-For chain
-        # Prevents attackers from injecting long XFF chains to bypass detection
-        # Typical setup: client -> CDN -> load balancer = 2 hops
-        self.MAX_PROXY_HOPS: int = int(os.getenv("MAX_PROXY_HOPS", "5"))
-
-        # T-SEC-005: CORS configuration
-        # CORS_ORIGINS: comma-separated list of allowed origins, or "*" for all
-        # Example: "http://localhost:3000,https://example.com"
-        # If "*", credentials will be disabled (per CORS spec)
-        #
-        # SECURITY WARNING: In production, NEVER use "*" with cookie-based authentication.
-        # Always specify exact origins to prevent CSRF attacks.
-        cors_origins_str = os.getenv("CORS_ORIGINS", "*")
-        if cors_origins_str == "*":
-            self.CORS_ORIGINS: list[str] = ["*"]
-            self.CORS_ALLOW_CREDENTIALS: bool = False  # Cannot use credentials with wildcard
-            # Log warning if running in production mode
-            if not os.getenv("DEBUG", "false").lower() == "true":
-                import logging
-                logging.warning(
-                    "SECURITY WARNING: CORS_ORIGINS='*' in production mode. "
-                    "This is insecure with cookie-based authentication. "
-                    "Set specific origins (e.g., CORS_ORIGINS='https://example.com')"
-                )
-        else:
-            self.CORS_ORIGINS = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
-            self.CORS_ALLOW_CREDENTIALS = True
-
-        # JWT Authentication settings
-        self.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
-        self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-        self.JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24 * 7)))  # 7 days
-
-        # OAuth2 Configuration - linux.do
-        self.LINUXDO_CLIENT_ID: str = os.getenv("LINUXDO_CLIENT_ID", "")
-        self.LINUXDO_CLIENT_SECRET: str = os.getenv("LINUXDO_CLIENT_SECRET", "")
-        self.LINUXDO_AUTHORIZE_URL: str = os.getenv("LINUXDO_AUTHORIZE_URL", "https://connect.linux.do/oauth2/authorize")
-        self.LINUXDO_TOKEN_URL: str = os.getenv("LINUXDO_TOKEN_URL", "https://connect.linux.do/oauth2/token")
-        self.LINUXDO_USERINFO_URL: str = os.getenv("LINUXDO_USERINFO_URL", "https://connect.linux.do/api/user")
-        self.LINUXDO_REDIRECT_URI: str = os.getenv("LINUXDO_REDIRECT_URI", "")
-        self.LINUXDO_SCOPES: str = os.getenv("LINUXDO_SCOPES", "user")
-
-        # Update Agent configuration (方案 B: 更新代理)
+        # Update Agent configuration
         self.UPDATE_AGENT_ENABLED: bool = os.getenv("UPDATE_AGENT_ENABLED", "false").lower() == "true"
         self.UPDATE_AGENT_URL: str = os.getenv("UPDATE_AGENT_URL", "")
         self.UPDATE_AGENT_TOKEN: str = os.getenv("UPDATE_AGENT_TOKEN", "")
@@ -197,32 +82,60 @@ class Settings:
         self.UPDATE_BLOCK_IF_ACTIVE_GAME_WS: bool = os.getenv("UPDATE_BLOCK_IF_ACTIVE_GAME_WS", "true").lower() == "true"
         self.UPDATE_FORCE_CONFIRM_PHRASE: str = os.getenv("UPDATE_FORCE_CONFIRM_PHRASE", "UPDATE")
 
-        # AI Analysis configuration (independent from game AI)
-        self.ANALYSIS_PROVIDER: Optional[str] = os.getenv("ANALYSIS_PROVIDER") or None
-        self.ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", self.LLM_MODEL)
-        self.ANALYSIS_MAX_TOKENS: int = int(os.getenv("ANALYSIS_MAX_TOKENS", "4000"))
-        self.ANALYSIS_TEMPERATURE: float = float(os.getenv("ANALYSIS_TEMPERATURE", "0.7"))
-        self.ANALYSIS_MODE: str = os.getenv("ANALYSIS_MODE", "comprehensive")  # comprehensive/quick/custom
-        self.ANALYSIS_LANGUAGE: str = os.getenv("ANALYSIS_LANGUAGE", "auto")  # auto/zh/en
-        self.ANALYSIS_CACHE_ENABLED: bool = os.getenv("ANALYSIS_CACHE_ENABLED", "true").lower() == "true"
+        # Initialize security config
+        self._security = SecurityConfig()
+        self._oauth = OAuthConfig()
 
-        # Multi-provider configuration
-        self._providers: dict[str, AIProviderConfig] = {}
-        self._player_mappings: dict[int, str] = {}  # seat_id -> provider_name
+        # Copy security settings to top level for backward compatibility
+        self.DEBUG_MODE = self._security.DEBUG_MODE
+        self.ADMIN_PASSWORD = self._security.ADMIN_PASSWORD
+        self.TRUSTED_PROXIES = self._security.TRUSTED_PROXIES
+        self.MAX_PROXY_HOPS = self._security.MAX_PROXY_HOPS
+        self.CORS_ORIGINS = self._security.CORS_ORIGINS
+        self.CORS_ALLOW_CREDENTIALS = self._security.CORS_ALLOW_CREDENTIALS
+        self.JWT_SECRET_KEY = self._security.JWT_SECRET_KEY
+        self.JWT_ALGORITHM = self._security.JWT_ALGORITHM
+        self.JWT_EXPIRE_MINUTES = self._security.JWT_EXPIRE_MINUTES
+        self.FRONTEND_URL = self._security.FRONTEND_URL
+        self.ALLOWED_WS_ORIGINS = self._security.ALLOWED_WS_ORIGINS
 
-        self._load_providers()
-        self._load_player_mappings()
+        # Copy OAuth settings
+        self.LINUXDO_CLIENT_ID = self._oauth.LINUXDO_CLIENT_ID
+        self.LINUXDO_CLIENT_SECRET = self._oauth.LINUXDO_CLIENT_SECRET
+        self.LINUXDO_AUTHORIZE_URL = self._oauth.LINUXDO_AUTHORIZE_URL
+        self.LINUXDO_TOKEN_URL = self._oauth.LINUXDO_TOKEN_URL
+        self.LINUXDO_USERINFO_URL = self._oauth.LINUXDO_USERINFO_URL
+        self.LINUXDO_REDIRECT_URI = self._oauth.LINUXDO_REDIRECT_URI
+        self.LINUXDO_SCOPES = self._oauth.LINUXDO_SCOPES
+
+        # Initialize provider manager
+        self._provider_manager = ProviderManager()
+        self._provider_manager.load_providers(
+            self.OPENAI_API_KEY,
+            self.OPENAI_BASE_URL,
+            self.LLM_MODEL,
+            self.LLM_MAX_RETRIES
+        )
+        self._provider_manager.load_player_mappings()
+
+        # Initialize analysis config
+        self._analysis = AnalysisConfig(self.LLM_MODEL)
+
+        # Copy analysis settings for backward compatibility
+        self.ANALYSIS_PROVIDER = self._analysis.ANALYSIS_PROVIDER
+        self.ANALYSIS_MODEL = self._analysis.ANALYSIS_MODEL
+        self.ANALYSIS_MAX_TOKENS = self._analysis.ANALYSIS_MAX_TOKENS
+        self.ANALYSIS_TEMPERATURE = self._analysis.ANALYSIS_TEMPERATURE
+        self.ANALYSIS_MODE = self._analysis.ANALYSIS_MODE
+        self.ANALYSIS_LANGUAGE = self._analysis.ANALYSIS_LANGUAGE
+        self.ANALYSIS_CACHE_ENABLED = self._analysis.ANALYSIS_CACHE_ENABLED
+
+        # Log configuration summary
         self._log_configuration_summary()
         self._validate_security_config()
 
     def _derive_async_database_url(self, url: str) -> str:
-        """Derive async database URL from sync URL.
-
-        Transforms:
-        - sqlite:/// -> sqlite+aiosqlite:///
-        - postgresql:// -> postgresql+asyncpg://
-        - Already async URLs are returned as-is
-        """
+        """Derive async database URL from sync URL."""
         if "+aiosqlite" in url or "+asyncpg" in url:
             return url
         if url.startswith("sqlite:///"):
@@ -234,343 +147,49 @@ class Settings:
         return url
 
     def _validate_security_config(self) -> tuple[list[str], list[str]]:
-        """Validate security-critical configuration at startup.
+        """Validate security-critical configuration at startup."""
+        return self._security.validate()
 
-        In production (DEBUG=false), dangerous defaults will be treated as errors.
+    # Provider management methods (delegate to ProviderManager)
+    @property
+    def _providers(self) -> dict[str, AIProviderConfig]:
+        """MINOR FIX: Return a copy to prevent external modification of internal state."""
+        return self._provider_manager._providers.copy()
 
-        Returns:
-            Tuple of (warnings, errors) lists
-        """
-        warnings = []
-        errors = []
-
-        if self.DEBUG:
-            return warnings, errors  # Skip strict validation in debug mode
-
-        # Check CORS_ORIGINS
-        if self.CORS_ORIGINS == ["*"]:
-            errors.append(
-                "CORS_ORIGINS='*' is not allowed in production. "
-                "Set specific origins (e.g., CORS_ORIGINS='https://example.com')"
-            )
-
-        # Check JWT_SECRET_KEY
-        if not self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
-            errors.append(
-                "JWT_SECRET_KEY must be at least 32 characters in production. "
-                "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
-            )
-
-        # Check FRONTEND_URL for WebSocket origin validation
-        if not self.FRONTEND_URL and not self.ALLOWED_WS_ORIGINS:
-            warnings.append(
-                "FRONTEND_URL or ALLOWED_WS_ORIGINS not set. "
-                "WebSocket origin validation may not work correctly."
-            )
-
-        # Log warnings
-        for warning in warnings:
-            logger.warning(f"SECURITY CONFIG: {warning}")
-
-        # Log errors
-        for error in errors:
-            logger.error(f"SECURITY CONFIG ERROR: {error}")
-
-        return warnings, errors
-
-    def _load_providers(self):
-        """Load AI provider configurations from environment.
-
-        This method only loads provider definitions, does not establish player mappings.
-        Player mappings are handled separately in _load_player_mappings().
-        """
-        # Default provider (OpenAI)
-        default_provider = AIProviderConfig(
-            name="default",
-            api_key=self.OPENAI_API_KEY,
-            base_url=self.OPENAI_BASE_URL,
-            model=self.LLM_MODEL,
-            max_retries=self.LLM_MAX_RETRIES,
-            requests_per_minute=int(os.getenv("DEFAULT_REQUESTS_PER_MINUTE", "60")),
-            max_concurrency=int(os.getenv("DEFAULT_MAX_CONCURRENCY", "5")),
-            burst=int(os.getenv("DEFAULT_BURST", "3")),
-        )
-        if default_provider.is_valid():
-            self._providers["default"] = default_provider
-
-        # Load named providers: OPENAI_*, ANTHROPIC_*, DEEPSEEK_*, etc.
-        # FIX: Unified burst default to match max_concurrency (was 1, now 5)
-        named_providers = ["OPENAI", "ANTHROPIC", "DEEPSEEK", "MOONSHOT", "QWEN", "GLM", "DOUBAO", "MINIMAX"]
-        for provider_name in named_providers:
-            api_key = os.getenv(f"{provider_name}_API_KEY")
-            if api_key:
-                provider = AIProviderConfig(
-                    name=provider_name.lower(),
-                    api_key=api_key,
-                    base_url=os.getenv(f"{provider_name}_BASE_URL") or None,
-                    model=os.getenv(f"{provider_name}_MODEL", self._get_default_model(provider_name)),
-                    max_retries=int(os.getenv(f"{provider_name}_MAX_RETRIES", "2")),
-                    temperature=float(os.getenv(f"{provider_name}_TEMPERATURE", "0.7")),
-                    max_tokens=int(os.getenv(f"{provider_name}_MAX_TOKENS", "500")),
-                    requests_per_minute=int(os.getenv(f"{provider_name}_REQUESTS_PER_MINUTE", "60")),
-                    max_concurrency=int(os.getenv(f"{provider_name}_MAX_CONCURRENCY", "5")),
-                    burst=int(os.getenv(f"{provider_name}_BURST", "5")),  # FIX: Changed from 1 to 5
-                )
-                self._providers[provider_name.lower()] = provider
-
-        # Load additional custom providers from AI_PROVIDER_* env vars
-        # Format: AI_PROVIDER_1_NAME, AI_PROVIDER_1_API_KEY, etc.
-        for i in range(1, 10):  # Support up to 9 custom providers
-            prefix = f"AI_PROVIDER_{i}"
-            name = os.getenv(f"{prefix}_NAME")
-            if name:
-                provider = AIProviderConfig.from_env(prefix, name)
-                if provider.is_valid():
-                    self._providers[name] = provider
-
-        # Load per-player specific providers (座位 2-9)
-        # Format: AI_PLAYER_2_API_KEY, AI_PLAYER_2_MODEL, etc.
-        # These create dedicated providers named "player_{seat_id}"
-        # Note: Mapping is NOT established here, only provider definition is created
-        # FIX: Unified burst default to match max_concurrency (was 1, now 5)
-        for seat_id in range(2, 10):
-            prefix = f"AI_PLAYER_{seat_id}"
-            api_key = os.getenv(f"{prefix}_API_KEY")
-
-            # Only create player-specific provider if API_KEY is explicitly configured
-            if api_key:
-                provider_name = f"player_{seat_id}"
-                provider = AIProviderConfig(
-                    name=provider_name,
-                    api_key=api_key,
-                    base_url=os.getenv(f"{prefix}_BASE_URL") or None,
-                    model=os.getenv(f"{prefix}_MODEL", "gpt-4o-mini"),
-                    max_retries=int(os.getenv(f"{prefix}_MAX_RETRIES", "2")),
-                    temperature=float(os.getenv(f"{prefix}_TEMPERATURE", "0.7")),
-                    max_tokens=int(os.getenv(f"{prefix}_MAX_TOKENS", "500")),
-                    requests_per_minute=int(os.getenv(f"{prefix}_REQUESTS_PER_MINUTE", "60")),
-                    max_concurrency=int(os.getenv(f"{prefix}_MAX_CONCURRENCY", "5")),
-                    burst=int(os.getenv(f"{prefix}_BURST", "5")),  # FIX: Changed from 1 to 5
-                )
-                if provider.is_valid():
-                    self._providers[provider_name] = provider
-
-    def _get_default_model(self, provider_name: str) -> str:
-        """Get default model for a provider."""
-        defaults = {
-            "OPENAI": "gpt-4o-mini",
-            "ANTHROPIC": "claude-3-haiku-20240307",
-            "DEEPSEEK": "deepseek-chat",
-            "MOONSHOT": "moonshot-v1-8k",
-            "QWEN": "qwen-turbo",
-            "GLM": "glm-4-flash",
-            "DOUBAO": "doubao-pro-4k",
-            "MINIMAX": "abab6.5s-chat",
-        }
-        return defaults.get(provider_name, "gpt-4o-mini")
-
-    def _load_player_mappings(self):
-        """Load AI player to provider mappings with correct priority.
-
-        Priority order (low to high, later overrides earlier):
-        1. Auto-mapping for player-specific configs (player_{seat_id})
-        2. JSON batch mapping (AI_PLAYER_MAPPING)
-        3. Individual mapping (AI_PLAYER_{seat}_PROVIDER) - highest priority
-
-        This ensures that explicit provider mappings always take precedence.
-        """
-        # Priority 1 (Lowest): Auto-map players with specific provider configs
-        # If player_{seat_id} provider exists, automatically map to it
-        for seat_id in range(2, 10):
-            provider_name = f"player_{seat_id}"
-            if provider_name in self._providers:
-                self._player_mappings[seat_id] = provider_name
-
-        # Priority 2 (Medium): JSON batch mapping
-        # Format: AI_PLAYER_MAPPING={"2":"openai","3":"anthropic",...}
-        mapping_json = os.getenv("AI_PLAYER_MAPPING")
-        if mapping_json:
-            try:
-                mapping = json.loads(mapping_json)
-                for seat_str, provider in mapping.items():
-                    seat_id = int(seat_str)
-                    if provider in self._providers:
-                        self._player_mappings[seat_id] = provider
-                    else:
-                        logger.warning(
-                            f"AI_PLAYER_MAPPING: provider '{provider}' not found for seat {seat_id}"
-                        )
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"Failed to parse AI_PLAYER_MAPPING: {e}")
-
-        # Priority 3 (Highest): Individual mapping per seat
-        # Format: AI_PLAYER_{seat}_PROVIDER=openai
-        # This overrides both auto-mapping and JSON mapping
-        for seat_id in range(1, 13):  # Support up to 12 players
-            provider = os.getenv(f"AI_PLAYER_{seat_id}_PROVIDER")
-            if provider:
-                if provider in self._providers:
-                    self._player_mappings[seat_id] = provider
-                else:
-                    # P2-2 Fix: Use module-level logger instead of re-importing
-                    logger.warning(
-                        f"AI_PLAYER_{seat_id}_PROVIDER: provider '{provider}' not found, "
-                        f"falling back to default or auto-mapped provider"
-                    )
+    @property
+    def _player_mappings(self) -> dict[int, str]:
+        """MINOR FIX: Return a copy to prevent external modification of internal state."""
+        return self._provider_manager._player_mappings.copy()
 
     def get_provider(self, name: str) -> Optional[AIProviderConfig]:
         """Get provider configuration by name."""
-        return self._providers.get(name)
+        return self._provider_manager.get_provider(name)
 
     def get_provider_for_player(self, seat_id: int) -> Optional[AIProviderConfig]:
         """Get provider configuration for a specific player seat."""
-        provider_name = self._player_mappings.get(seat_id, "default")
-        return self._providers.get(provider_name) or self._providers.get("default")
+        return self._provider_manager.get_provider_for_player(seat_id)
 
     def get_all_providers(self) -> dict[str, AIProviderConfig]:
         """Get all configured providers."""
-        return self._providers.copy()
+        return self._provider_manager.get_all_providers()
 
     def get_player_mappings(self) -> dict[int, str]:
         """Get all player to provider mappings."""
-        return self._player_mappings.copy()
+        return self._provider_manager.get_player_mappings()
 
+    # Analysis methods (delegate to AnalysisConfig)
     def get_analysis_provider(self) -> Optional[AIProviderConfig]:
-        """Get provider configuration for game analysis (prioritized).
-
-        Priority:
-        1. Dedicated ANALYSIS_PROVIDER if specified
-        2. Default provider with analysis settings
-        3. None (will use fallback mode)
-        """
-        # Priority 1: Dedicated ANALYSIS_PROVIDER
-        if self.ANALYSIS_PROVIDER:
-            provider = self._providers.get(self.ANALYSIS_PROVIDER.lower())
-            if provider and provider.is_valid():
-                # Override with analysis-specific settings
-                return AIProviderConfig(
-                    name=f"analysis_{provider.name}",
-                    api_key=provider.api_key,
-                    base_url=provider.base_url,
-                    model=self.ANALYSIS_MODEL,
-                    max_retries=provider.max_retries,
-                    temperature=self.ANALYSIS_TEMPERATURE,
-                    max_tokens=self.ANALYSIS_MAX_TOKENS,
-                )
-
-        # Priority 2: Default provider with analysis settings
-        default = self._providers.get("default")
-        if default and default.is_valid():
-            return AIProviderConfig(
-                name="analysis_default",
-                api_key=default.api_key,
-                base_url=default.base_url,
-                model=self.ANALYSIS_MODEL,
-                max_retries=default.max_retries,
-                temperature=self.ANALYSIS_TEMPERATURE,
-                max_tokens=self.ANALYSIS_MAX_TOKENS,
-            )
-
-        # No valid provider found - log detailed warning
-        logger.warning(
-            "No valid AI provider configured for analysis. "
-            "Analysis will use fallback mode (basic statistics only). "
-            "To enable AI analysis, configure one of: "
-            "1) Set OPENAI_API_KEY in .env "
-            "2) Configure another provider (e.g., DEEPSEEK_API_KEY) and set ANALYSIS_PROVIDER=deepseek"
-        )
-        return None
+        """Get provider configuration for game analysis."""
+        return self._analysis.get_provider(self._provider_manager.get_all_providers())
 
     def validate_analysis_config(self) -> tuple[bool, list[str]]:
-        """Validate analysis configuration.
-
-        Returns:
-            (is_valid, error_messages)
-        """
-        errors = []
-
-        # Check if any provider is available
-        if not self._providers:
-            errors.append("No AI provider configured. Set OPENAI_API_KEY or other provider.")
-
-        # Check analysis provider if specified
-        if self.ANALYSIS_PROVIDER:
-            provider_key = self.ANALYSIS_PROVIDER.lower()
-            if provider_key not in self._providers:
-                errors.append(f"ANALYSIS_PROVIDER '{self.ANALYSIS_PROVIDER}' not found in configured providers.")
-            elif not self._providers[provider_key].is_valid():
-                errors.append(f"ANALYSIS_PROVIDER '{self.ANALYSIS_PROVIDER}' has invalid configuration.")
-
-        # Check analysis mode
-        valid_modes = ["comprehensive", "quick", "custom"]
-        if self.ANALYSIS_MODE not in valid_modes:
-            errors.append(f"ANALYSIS_MODE must be one of {valid_modes}, got '{self.ANALYSIS_MODE}'")
-
-        # Check analysis language
-        valid_languages = ["auto", "zh", "en"]
-        if self.ANALYSIS_LANGUAGE not in valid_languages:
-            errors.append(f"ANALYSIS_LANGUAGE must be one of {valid_languages}, got '{self.ANALYSIS_LANGUAGE}'")
-
-        return (len(errors) == 0, errors)
+        """Validate analysis configuration."""
+        return self._analysis.validate(self._provider_manager.get_all_providers())
 
     def _log_configuration_summary(self):
         """Log configuration summary for debugging."""
-        logger.info(f"AI Configuration loaded: {len(self._providers)} providers configured")
-
-        # FIX: Validate burst vs max_concurrency for all providers
-        burst_warnings = []
-        for name, provider in self._providers.items():
-            logger.info(
-                f"  Provider '{name}': model={provider.model}, "
-                f"base_url={provider.base_url or 'default'}"
-            )
-
-            # FIX: Warn if burst < max_concurrency
-            if provider.burst < provider.max_concurrency:
-                burst_warnings.append(
-                    f"Provider '{name}': burst ({provider.burst}) < max_concurrency ({provider.max_concurrency}). "
-                    f"This may cause unexpected throttling. Consider setting burst >= max_concurrency."
-                )
-
-        # Log burst warnings
-        if burst_warnings:
-            logger.warning("=" * 50)
-            logger.warning("Rate Limiter Configuration Warnings:")
-            for warning in burst_warnings:
-                logger.warning(f"  ⚠️  {warning}")
-            logger.warning("=" * 50)
-
-        # Log player mappings
-        if self._player_mappings:
-            logger.info("Player to provider mappings:")
-            for seat_id in sorted(self._player_mappings.keys()):
-                provider_name = self._player_mappings[seat_id]
-                provider = self._providers.get(provider_name)
-                model_info = f" (model: {provider.model})" if provider else ""
-                logger.info(f"  Seat {seat_id} -> {provider_name}{model_info}")
-        else:
-            logger.info("No explicit player mappings - all players use default provider")
-
-        # Log analysis configuration
-        logger.info("=" * 50)
-        logger.info("Analysis Configuration:")
-        logger.info(f"  Mode: {self.ANALYSIS_MODE}")
-        logger.info(f"  Language: {self.ANALYSIS_LANGUAGE}")
-        logger.info(f"  Model: {self.ANALYSIS_MODEL}")
-        logger.info(f"  Max Tokens: {self.ANALYSIS_MAX_TOKENS}")
-        logger.info(f"  Cache Enabled: {self.ANALYSIS_CACHE_ENABLED}")
-
-        analysis_provider = self.get_analysis_provider()
-        if analysis_provider:
-            logger.info(f"  Provider: {analysis_provider.name} (model: {analysis_provider.model})")
-        else:
-            logger.warning("  Provider: None - Analysis will use fallback mode")
-
-        is_valid, errors = self.validate_analysis_config()
-        if not is_valid:
-            logger.warning("Analysis configuration issues:")
-            for error in errors:
-                logger.warning(f"  - {error}")
+        self._provider_manager.log_summary()
+        self._analysis.log_summary(self._provider_manager.get_all_providers())
 
 
 settings = Settings()

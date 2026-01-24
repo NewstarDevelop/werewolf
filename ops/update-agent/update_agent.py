@@ -64,7 +64,9 @@ class _AgentConfig:
             or _read_env("COMPOSE_PROJECT_NAME", "werewolf")
         )
         self.compose_file = _read_env("UPDATE_AGENT_COMPOSE_FILE")
-        self.git_set_safe_directory = _read_env("UPDATE_AGENT_GIT_SET_SAFE_DIRECTORY", "true").lower() == "true"
+        self.git_set_safe_directory = _read_env("UPDATE_AGENT_GIT_SET_SAFE_DIRECTORY", "false").lower() == "true"
+        # CRITICAL: Command timeout to prevent hanging tasks
+        self.command_timeout = int(_read_env("UPDATE_AGENT_COMMAND_TIMEOUT", "300") or "300")  # 5 minutes default
 
     def validate_common(self) -> None:
         if not self.repo_path:
@@ -76,6 +78,27 @@ class _AgentConfig:
         self.validate_common()
         if not self.token:
             raise RuntimeError("UPDATE_AGENT_TOKEN is required")
+        # CRITICAL: Enforce strong token (min 32 chars)
+        if len(self.token) < 32:
+            raise RuntimeError("UPDATE_AGENT_TOKEN must be at least 32 characters for security")
+        # MAJOR FIX: Enforce localhost binding by default for security
+        # Docker.sock access = root-equivalent access to host system
+        if self.host not in ("127.0.0.1", "localhost", "::1"):
+            # Check if explicit override is set
+            allow_remote = _read_env("UPDATE_AGENT_ALLOW_REMOTE_BINDING", "false").lower() == "true"
+            if not allow_remote:
+                raise RuntimeError(
+                    f"SECURITY: Refusing to bind to {self.host}. "
+                    "Update agent has docker.sock access (root-equivalent). "
+                    "Set UPDATE_AGENT_ALLOW_REMOTE_BINDING=true to override (NOT RECOMMENDED)."
+                )
+            logger.warning(
+                "⚠️  SECURITY WARNING: Update Agent binding to %s:%s "
+                "with docker.sock access = remote root access! "
+                "Ensure firewall/network isolation is properly configured.",
+                self.host,
+                self.port
+            )
 
     def validate_runner(self) -> None:
         self.validate_common()
@@ -108,6 +131,10 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict:
     length = int(handler.headers.get("Content-Length") or "0")
     if length <= 0:
         return {}
+    # CRITICAL: Limit request body size to prevent DoS
+    MAX_BODY_SIZE = 1024 * 1024  # 1MB
+    if length > MAX_BODY_SIZE:
+        raise ValueError(f"Request body too large: {length} bytes (max {MAX_BODY_SIZE})")
     raw = handler.rfile.read(length)
     try:
         return json.loads(raw.decode("utf-8"))
@@ -115,23 +142,37 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict:
         return {}
 
 
-def _run_cmd(args: list[str], cwd: str) -> tuple[int, str]:
-    """Run a command and return (returncode, stdout+stderr)."""
-    proc = subprocess.run(
-        args,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    return proc.returncode, proc.stdout or ""
+def _run_cmd(args: list[str], cwd: str, timeout: int | None = None) -> tuple[int, str]:
+    """Run a command and return (returncode, stdout+stderr).
+
+    Args:
+        args: Command and arguments
+        cwd: Working directory
+        timeout: Timeout in seconds (default: use CFG.command_timeout)
+    """
+    if timeout is None:
+        timeout = CFG.command_timeout
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+        return proc.returncode, proc.stdout or ""
+    except subprocess.TimeoutExpired as e:
+        return -1, f"Command timed out after {timeout}s: {' '.join(args)}"
 
 
 def _ensure_git_safe_directory() -> None:
+    """Set git safe.directory using LOCAL config to avoid polluting global config."""
     if not CFG.git_set_safe_directory:
         return
-    _run_cmd(["git", "config", "--global", "--add", "safe.directory", CFG.repo_path], cwd=CFG.repo_path)
+    # CRITICAL FIX: Use --local instead of --global to avoid polluting host's global git config
+    _run_cmd(["git", "config", "--local", "--add", "safe.directory", CFG.repo_path], cwd=CFG.repo_path)
 
 
 def _git(args: list[str]) -> tuple[int, str]:
@@ -162,8 +203,13 @@ def _compute_revisions(fetch: bool = True) -> tuple[str | None, str | None, bool
     Returns:
         (current_revision, remote_revision, update_available, error_message)
     """
+    # CRITICAL: Validate remote/branch to prevent git parameter injection
+    if CFG.remote.startswith("-") or CFG.branch.startswith("-"):
+        return None, None, False, "Invalid remote or branch name (cannot start with '-')"
+
     if fetch:
-        code, out = _git(["fetch", CFG.remote, CFG.branch])
+        # Use -- to separate options from arguments
+        code, out = _git(["fetch", "--", CFG.remote, CFG.branch])
         if code != 0:
             return None, None, False, out.strip()[-4000:]
 
@@ -585,18 +631,34 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _serve_main() -> None:
+    print(f"[config] repo_path={CFG.repo_path or '(not set)'}", flush=True)
+    print(f"[config] token={'(set)' if CFG.token else '(NOT SET)'}", flush=True)
+    print(f"[config] remote={CFG.remote} branch={CFG.branch}", flush=True)
+
     CFG.validate_server()
     httpd = ThreadingHTTPServer((CFG.host, CFG.port), UpdateAgentHandler)
-    print(f"Update Agent listening on http://{CFG.host}:{CFG.port}")
-    print(f"Repository path: {CFG.repo_path}")
-    print(f"Remote: {CFG.remote}/{CFG.branch}")
-    print(f"Runner image: {CFG.runner_image}")
-    print(f"Compose project: {CFG.compose_project_name}")
+    print(f"Update Agent listening on http://{CFG.host}:{CFG.port}", flush=True)
+    print(f"Repository path: {CFG.repo_path}", flush=True)
+    print(f"Remote: {CFG.remote}/{CFG.branch}", flush=True)
+    print(f"Runner image: {CFG.runner_image}", flush=True)
+    print(f"Compose project: {CFG.compose_project_name}", flush=True)
     httpd.serve_forever()
 
 
 if __name__ == "__main__":
-    a = _parse_args()
-    if a.mode == "runner":
-        raise SystemExit(_runner_main(force=bool(getattr(a, "force", False))))
-    _serve_main()
+    import sys
+    import traceback
+
+    print("=" * 44, flush=True)
+    print("Werewolf Update Agent Starting", flush=True)
+    print("=" * 44, flush=True)
+
+    try:
+        a = _parse_args()
+        if a.mode == "runner":
+            raise SystemExit(_runner_main(force=bool(getattr(a, "force", False))))
+        _serve_main()
+    except Exception as e:
+        print(f"[FATAL] Failed to start update agent: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc()
+        raise SystemExit(1)

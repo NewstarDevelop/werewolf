@@ -49,9 +49,57 @@ class UpdateAgentClient:
     def __init__(
         self, base_url: str, token: str, timeout_seconds: float = 3.0
     ) -> None:
+        # MAJOR FIX: Validate base_url to prevent token leakage
+        self._validate_base_url(base_url)
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._timeout = timeout_seconds
+
+    @staticmethod
+    def _validate_base_url(url: str) -> None:
+        """Validate base_url to prevent security issues.
+
+        Only allows localhost addresses to prevent SSRF and token leakage.
+
+        Raises:
+            ValueError: If URL is not a valid localhost address
+        """
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(url)
+        except Exception as e:
+            raise ValueError(f"Invalid UPDATE_AGENT_URL: {url}. Failed to parse: {e}")
+
+        # Enforce scheme is http or https only
+        if parsed.scheme not in ["http", "https"]:
+            raise ValueError(
+                f"Invalid UPDATE_AGENT_URL: {url}. "
+                f"Scheme must be 'http' or 'https', got '{parsed.scheme}'."
+            )
+
+        # Reject URLs with userinfo (username:password@host)
+        if parsed.username or parsed.password:
+            raise ValueError(
+                f"Invalid UPDATE_AGENT_URL: {url}. "
+                "URLs with credentials are not allowed."
+            )
+
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError(f"Invalid UPDATE_AGENT_URL: {url}. Missing hostname.")
+
+        hostname_lower = hostname.lower()
+
+        # SECURITY: Only allow localhost/loopback addresses (exact match)
+        # This prevents SSRF attacks and token leakage to external servers
+        if hostname_lower not in ["127.0.0.1", "localhost", "::1", "0.0.0.0"]:
+            raise ValueError(
+                f"Invalid UPDATE_AGENT_URL: {url}. "
+                f"Only localhost addresses are allowed (127.0.0.1, localhost, ::1, 0.0.0.0), got '{hostname}'."
+            )
+
+        logger.info(f"Update agent URL validated: {url}")
 
     @classmethod
     def from_settings(cls, settings: "Settings") -> "UpdateAgentClient":

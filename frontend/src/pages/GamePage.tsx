@@ -87,6 +87,24 @@ const GamePage = () => {
     }
   }, [isGameOver]);
 
+  // MAJOR FIX: Handle game state reset (server restart scenario)
+  // If room status reverts from 'playing' to 'waiting', redirect to room waiting page
+  useEffect(() => {
+    if (gameState?.status === 'waiting' && gameIdFromRoute) {
+      // Game was reset to waiting state (likely due to server restart)
+      toast.warning(t('common:toast.game_reset_warning'), {
+        description: t('common:toast.game_reset_description'),
+      });
+      // Extract room_id from game state if available, otherwise navigate to lobby
+      const roomId = gameState.room_id;
+      if (roomId) {
+        navigate(`/room/${roomId}`, { replace: true });
+      } else {
+        navigate('/lobby', { replace: true });
+      }
+    }
+  }, [gameState?.status, gameState?.room_id, gameIdFromRoute, navigate, t]);
+
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
@@ -161,6 +179,21 @@ const GamePage = () => {
       toast.success(t('common:toast.speech_success'));
     } catch (err) {
       toast.error(t('common:toast.speech_failed'), {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  };
+
+  // MAJOR FIX: Dedicated skip handler that ignores selectedPlayerId
+  const handleSkip = async () => {
+    if (!gameState || !needsAction) return;
+
+    try {
+      await skip();
+      toast.info(t('common:toast.action_skipped'));
+      setSelectedPlayerId(null);
+    } catch (err) {
+      toast.error(t('common:toast.action_failed'), {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     }
@@ -377,6 +410,7 @@ const GamePage = () => {
           onSendMessage={handleSendMessage}
           onVote={handleVote}
           onUseSkill={handleUseSkill}
+          onSkip={handleSkip}
           canVote={canVote && selectedPlayerId !== null}
           canUseSkill={canUseSkill}
           canSpeak={canSpeak}

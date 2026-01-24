@@ -7,11 +7,12 @@ import logging
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.game import verify_admin
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.models.room import Room, RoomStatus
 from app.schemas.admin_update import (
     AdminUpdateCheckResponse,
@@ -45,7 +46,7 @@ def _get_client_ip(request: Request) -> Optional[str]:
     return "unknown"
 
 
-def _get_update_blocking_reasons(db: Session) -> list[str]:
+async def _get_update_blocking_reasons(db: AsyncSession) -> list[str]:
     """Check conditions that should block an update.
 
     Returns:
@@ -55,9 +56,10 @@ def _get_update_blocking_reasons(db: Session) -> list[str]:
 
     # Check for active games (rooms in PLAYING status)
     if settings.UPDATE_BLOCK_IF_PLAYING_ROOMS:
-        playing_count = (
-            db.query(Room).filter(Room.status == RoomStatus.PLAYING).count()
+        result = await db.execute(
+            select(func.count()).select_from(Room).filter(Room.status == RoomStatus.PLAYING)
         )
+        playing_count = result.scalar() or 0
         if playing_count > 0:
             reasons.append(
                 f"存在进行中对局（rooms.status=playing，count={playing_count}）"
@@ -79,7 +81,7 @@ def _get_update_blocking_reasons(db: Session) -> list[str]:
 async def check_update(
     request: Request,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Check if repository updates are available.
@@ -92,10 +94,23 @@ async def check_update(
     actor_id = actor.get("player_id", "unknown")
     client_ip = _get_client_ip(request)
 
-    blocking_reasons = _get_update_blocking_reasons(db)
+    blocking_reasons = await _get_update_blocking_reasons(db)
     blocked = len(blocking_reasons) > 0
 
-    client = UpdateAgentClient.from_settings(settings)
+    try:
+        client = UpdateAgentClient.from_settings(settings)
+    except ValueError as e:
+        logger.error(
+            "UPDATE_CONFIG_INVALID actor=%s ip=%s error=%s",
+            actor_id,
+            client_ip,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Update agent configuration error: {str(e)}"
+        ) from e
+
     try:
         agent_check = await client.check()
         agent_status = await client.status(job_id=None)
@@ -134,7 +149,7 @@ async def run_update(
     request: Request,
     body: AdminUpdateRunRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Trigger update via update agent.
@@ -149,7 +164,7 @@ async def run_update(
     actor_id = actor.get("player_id", "unknown")
     client_ip = _get_client_ip(request)
 
-    blocking_reasons = _get_update_blocking_reasons(db)
+    blocking_reasons = await _get_update_blocking_reasons(db)
     if blocking_reasons and not body.force:
         logger.warning(
             "UPDATE_BLOCKED actor=%s ip=%s reasons=%s",
@@ -174,7 +189,20 @@ async def run_update(
                 detail=f"Invalid confirmation phrase. Provide confirm_phrase='{expected}' to force update.",
             )
 
-    client = UpdateAgentClient.from_settings(settings)
+    try:
+        client = UpdateAgentClient.from_settings(settings)
+    except ValueError as e:
+        logger.error(
+            "UPDATE_CONFIG_INVALID actor=%s ip=%s error=%s",
+            actor_id,
+            client_ip,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Update agent configuration error: {str(e)}"
+        ) from e
+
     try:
         agent_status = await client.status(job_id=None)
         if agent_status.state in ("running", "queued"):

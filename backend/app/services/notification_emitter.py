@@ -147,7 +147,7 @@ async def emit_to_users(
     broadcast_id: Optional[str] = None,
 ) -> None:
     """
-    Emit the same notification to multiple users.
+    Emit the same notification to multiple users (best-effort).
 
     A6-FIX: Now uses batch emit for better performance (1 commit vs N commits).
 
@@ -161,6 +161,10 @@ async def emit_to_users(
         persist_policy: DURABLE or VOLATILE
         idempotency_key_prefix: Prefix for idempotency keys (key = prefix:user_id)
         broadcast_id: Optional broadcast ID for admin-sent broadcasts
+
+    Note:
+        This is a best-effort operation. Failures are logged but do not raise exceptions.
+        Use emit_to_users_strict() if you need to handle failures explicitly.
     """
     if not user_ids:
         return
@@ -185,3 +189,61 @@ async def emit_to_users(
     except Exception as e:
         db.rollback()
         logger.warning(f"[notifications] batch emit failed: {e}")
+        # Best-effort: do not re-raise
+
+
+async def emit_to_users_strict(
+    db: Session,
+    *,
+    user_ids: list[str],
+    category: NotificationCategory,
+    title: str,
+    body: str,
+    data: Optional[dict[str, Any]] = None,
+    persist_policy: NotificationPersistPolicy = NotificationPersistPolicy.DURABLE,
+    idempotency_key_prefix: Optional[str] = None,
+    broadcast_id: Optional[str] = None,
+) -> None:
+    """
+    Emit the same notification to multiple users (strict mode).
+
+    Same as emit_to_users() but raises exceptions on failure.
+    Use this when you need to track failures and handle them explicitly.
+
+    Args:
+        db: Database session
+        user_ids: List of target user IDs
+        category: Notification category
+        title: Notification title
+        body: Notification body text
+        data: Optional additional data
+        persist_policy: DURABLE or VOLATILE
+        idempotency_key_prefix: Prefix for idempotency keys (key = prefix:user_id)
+        broadcast_id: Optional broadcast ID for admin-sent broadcasts
+
+    Raises:
+        Exception: Re-raises any exception after rollback to allow caller to handle failures
+    """
+    if not user_ids:
+        return
+
+    try:
+        publisher = await _get_publisher()
+        service = NotificationService(publisher=publisher)
+
+        await service.emit_batch(
+            db,
+            user_ids=user_ids,
+            category=category,
+            title=title,
+            body=body,
+            data=data,
+            persist_policy=persist_policy,
+            idempotency_key_prefix=idempotency_key_prefix,
+            broadcast_id=broadcast_id,
+        )
+        logger.debug(f"[notifications] batch emitted {category.value} to {len(user_ids)} users")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"[notifications] batch emit failed: {e}")
+        raise  # Re-raise to allow caller to track failures

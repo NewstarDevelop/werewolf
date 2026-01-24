@@ -15,6 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# MINOR FIX: Track background tasks for proper cleanup
+_background_tasks: list[asyncio.Task] = []
+
 app = FastAPI(
     title="Werewolf AI Game API",
     description="狼人杀 AI 游戏后端 API",
@@ -25,12 +28,13 @@ app = FastAPI(
 # T-SEC-005: CORS configuration from environment
 # Use CORS_ORIGINS env var to specify allowed origins (comma-separated)
 # If "*", credentials are automatically disabled per CORS spec
+# MINOR FIX: Explicitly specify allowed methods and headers to minimize attack surface
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 # Include API routes
@@ -136,8 +140,14 @@ async def startup_event():
     logger.info("Game logging initialized")
 
     # FIX: Start background task for periodic rate limiter cleanup
-    asyncio.create_task(_periodic_rate_limiter_cleanup())
+    task1 = asyncio.create_task(_periodic_rate_limiter_cleanup())
+    _background_tasks.append(task1)
     logger.info("Rate limiter cleanup task started")
+
+    # FIX: Start background task for periodic game store cleanup
+    task2 = asyncio.create_task(_periodic_game_store_cleanup())
+    _background_tasks.append(task2)
+    logger.info("Game store cleanup task started")
 
 
 async def _periodic_rate_limiter_cleanup():
@@ -165,6 +175,34 @@ async def _periodic_rate_limiter_cleanup():
             await asyncio.sleep(60)  # Wait 1 minute before retry
 
 
+async def _periodic_game_store_cleanup():
+    """Background task to periodically clean up expired games.
+
+    Runs every 30 minutes to prevent memory leaks from abandoned games.
+    This complements the on-demand cleanup in create_game().
+    """
+    from app.models.game import game_store
+
+    while True:
+        try:
+            await asyncio.sleep(1800)  # Run every 30 minutes
+
+            # Clean up expired games
+            cleaned = game_store._cleanup_old_games()
+
+            if cleaned > 0:
+                logger.info(
+                    f"Game store cleanup: {cleaned} expired game(s) removed. "
+                    f"Active games: {len(game_store.games)}"
+                )
+            else:
+                logger.debug(f"Game store cleanup: no expired games. Active: {len(game_store.games)}")
+
+        except Exception as e:
+            logger.error(f"Error in game store cleanup task: {e}")
+            await asyncio.sleep(60)  # Wait 1 minute before retry
+
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """
@@ -174,6 +212,16 @@ async def shutdown_event():
     to prevent resource leaks (unclosed httpx connection pools).
     """
     logger.info("Werewolf AI Game API shutting down...")
+
+    # MINOR FIX: Cancel and wait for background tasks
+    if _background_tasks:
+        logger.info(f"Cancelling {len(_background_tasks)} background task(s)...")
+        for task in _background_tasks:
+            task.cancel()
+
+        # Wait for all tasks to complete cancellation
+        await asyncio.gather(*_background_tasks, return_exceptions=True)
+        logger.info("Background tasks cancelled")
 
     # Close game engine (which closes LLM clients)
     from app.services.game_engine import game_engine
