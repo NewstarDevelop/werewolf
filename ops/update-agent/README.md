@@ -196,6 +196,7 @@ UPDATE_FORCE_CONFIRM_PHRASE=UPDATE
 | `UPDATE_AGENT_BRANCH` | `main` | Git 分支名称 |
 | `UPDATE_AGENT_BIND_HOST` | `127.0.0.1` | 监听地址（容器化时使用 `0.0.0.0`） |
 | `UPDATE_AGENT_BIND_PORT` | `9999` | 监听端口 |
+| `UPDATE_AGENT_ALLOW_REMOTE_BINDING` | `false` | 是否允许非 localhost 绑定（docker.sock 安全检查） |
 | `UPDATE_AGENT_KEEP_LOG_LINES` | `200` | 保留日志行数 |
 | `UPDATE_AGENT_RUNNER_IMAGE` | `werewolf-update-agent` | Runner 容器使用的镜像 |
 | `UPDATE_AGENT_RUNNER_CONTAINER_PREFIX` | `werewolf-update-runner` | Runner 容器名称前缀 |
