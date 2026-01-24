@@ -26,6 +26,7 @@ import argparse
 import datetime as _dt
 import hmac
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -33,6 +34,13 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+
+# Initialize logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
