@@ -68,15 +68,15 @@ chmod +x deploy.sh && ./deploy.sh
 
 | 文档 | 说明 |
 |------|------|
-| [项目概述](docs/overview.md) | 业务定位与核心能力 |
-| [系统架构](docs/architecture.md) | 技术架构与数据流 |
-| [部署指南](docs/deployment.md) | Docker Compose 部署详解 |
-| [开发指南](docs/development.md) | 本地开发环境搭建 |
-| [配置详解](docs/configuration.md) | 环境变量完整说明 |
-| [LLM Provider](docs/llm-providers.md) | 多 Provider 配置规范 |
-| [玩家级别 AI](docs/per-player-ai.md) | 座位级 AI 配置 |
-| [认证配置](docs/auth.md) | JWT 与 OAuth 配置 |
-| [故障排查](docs/troubleshooting.md) | 常见问题与解决方案 |
+| [项目概述](docs/zh/overview.md) | 业务定位与核心能力 |
+| [系统架构](docs/zh/architecture.md) | 技术架构与数据流 |
+| [部署指南](docs/zh/deployment.md) | Docker Compose 部署详解 |
+| [开发指南](docs/zh/development.md) | 本地开发环境搭建 |
+| [配置详解](docs/zh/configuration.md) | 环境变量完整说明 |
+| [LLM Provider](docs/zh/llm-providers.md) | 多 Provider 配置规范 |
+| [玩家级别 AI](docs/zh/per-player-ai.md) | 座位级 AI 配置 |
+| [认证配置](docs/zh/auth.md) | JWT 与 OAuth 配置 |
+| [故障排查](docs/zh/troubleshooting.md) | 常见问题与解决方案 |
 
 ## 运行限制
 
@@ -97,4 +97,4 @@ chmod +x deploy.sh && ./deploy.sh
 
 ---
 
-[English](README.en.md) | [详细文档](docs/index.md)
+[English](README.en.md) | [中文文档](docs/zh/index.md) | [English Docs](docs/index.md)

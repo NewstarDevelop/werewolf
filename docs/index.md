@@ -39,6 +39,7 @@ Welcome to Werewolf AI documentation. This guide covers everything from quick st
 
 ## Quick Links
 
+- [中文文档 / Chinese Documentation](zh/index.md)
 - [.env.example](../.env.example) - Configuration template
 - [API Documentation](http://localhost:8082/docs) - Swagger UI (after starting)
-- [GitHub Repository](https://github.com/your-username/werewolf)
+- [GitHub Repository](https://github.com/NewstarDevelop/werewolf)
