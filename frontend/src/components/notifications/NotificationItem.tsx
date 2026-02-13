@@ -3,6 +3,7 @@
  */
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 import { Gamepad2, Users, Bell, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseServerDate } from '@/utils/date';
@@ -48,6 +49,7 @@ export function NotificationItem({
   notification,
   onClick,
 }: NotificationItemProps) {
+  const { t } = useTranslation();
   const isUnread = !notification.read_at;
   const config = CATEGORY_CONFIG[notification.category] || {
     icon: Bell,
@@ -82,7 +84,7 @@ export function NotificationItem({
       onClick={handleClick}
       role="button"
       tabIndex={0}
-      aria-label={`${isUnread ? '未读通知: ' : ''}${notification.title}`}
+      aria-label={`${isUnread ? t('notifications.unread_label', '未读通知: ') : ''}${notification.title}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           handleClick();

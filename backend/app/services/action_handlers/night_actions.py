@@ -71,10 +71,10 @@ def handle_white_wolf_king_action(
 
     elif action_type == ActionType.SELF_DESTRUCT and target_id:
         if game.white_wolf_king_used_explode:
-            return ActionResult.fail("你已使用过自爆技能").to_dict()
+            return ActionResult.fail(t("action_result.self_destruct_used", language=game.language)).to_dict()
 
         if target_id == player.seat_id:
-            return ActionResult.fail("白狼王自爆必须选择其他玩家作为目标").to_dict()
+            return ActionResult.fail(t("action_result.self_destruct_self", language=game.language)).to_dict()
 
         try:
             validate_target(game, target_id, ActionType.SELF_DESTRUCT, player.seat_id, allow_abstain=False)
@@ -85,7 +85,7 @@ def handle_white_wolf_king_action(
         game.white_wolf_king_used_explode = True
         game.wolf_votes[player.seat_id] = -1  # Special marker
         game.add_action(player.seat_id, ActionType.SELF_DESTRUCT, target_id)
-        return ActionResult.ok(f"白狼王自爆，带走{target_id}号玩家！今晚无狼刀。").to_dict()
+        return ActionResult.ok(t("action_result.self_destruct_success", language=game.language, target=target_id)).to_dict()
 
     return ActionResult.fail(
         t("api_responses.invalid_action_for_phase", language=game.language)
@@ -108,7 +108,7 @@ def handle_guard_action(
     if target_id == 0:
         game.guard_target = None
         game.guard_decided = True
-        return ActionResult.ok("已跳过守护").to_dict()
+        return ActionResult.ok(t("action_result.guard_skipped", language=game.language)).to_dict()
 
     if target_id is not None:
         try:
@@ -118,12 +118,12 @@ def handle_guard_action(
 
         # Check consecutive guard rule
         if target_id == game.guard_last_target:
-            return ActionResult.fail("不能连续两夜守护同一人").to_dict()
+            return ActionResult.fail(t("action_result.guard_consecutive", language=game.language)).to_dict()
 
         game.guard_target = target_id
         game.guard_decided = True
         game.add_action(player.seat_id, ActionType.PROTECT, target_id)
-        return ActionResult.ok(f"已守护{target_id}号玩家").to_dict()
+        return ActionResult.ok(t("action_result.guard_success", language=game.language, target=target_id)).to_dict()
 
     return ActionResult.fail(
         t("api_responses.invalid_action_for_phase", language=game.language)

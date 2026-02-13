@@ -375,7 +375,7 @@ export function EnvVariablesTable({ variables, onEdit, onDelete }: EnvVariablesT
             </TableHeader>
             <TableHeader className="bg-yellow-50/50 dark:bg-yellow-950/10">
               <TableRow>
-                <TableHead>描述</TableHead>
+                <TableHead>Description</TableHead>
                 <TableHead>Variable Name</TableHead>
                 <TableHead>Value</TableHead>
                 <TableHead className="text-right">Actions</TableHead>

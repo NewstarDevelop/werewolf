@@ -3,6 +3,7 @@
  */
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,12 +18,14 @@ import { Loader2, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { getErrorMessage, logError } from '@/utils/errorHandler';
 
-const loginSchema = z.object({
-  email: z.string().email({ message: '请输入有效的邮箱地址' }),
-  password: z.string().min(1, { message: '请输入密码' }),
-});
+function createLoginSchema(t: (key: string) => string) {
+  return z.object({
+    email: z.string().email({ message: t('auth.email_invalid') }),
+    password: z.string().min(1, { message: t('auth.password_required') }),
+  });
+}
 
-type LoginFormData = z.infer<typeof loginSchema>;
+type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>;
 
 interface LocationState {
   from?: { pathname: string };
@@ -34,9 +37,11 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
   const { setTheme, resolvedTheme } = useTheme();
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
 
+  const loginSchema = createLoginSchema(t);
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -50,8 +55,8 @@ export default function LoginPage() {
     try {
       await login(data.email, data.password);
       toast({
-        title: '登录成功',
-        description: '欢迎回来！',
+        title: t('auth.login_success'),
+        description: t('auth.login_welcome'),
       });
 
       // Read the original target page from ProtectedRoute
@@ -67,8 +72,8 @@ export default function LoginPage() {
       logError('LoginPage.onSubmit', error);
       toast({
         variant: 'destructive',
-        title: '登录失败',
-        description: getErrorMessage(error, '邮箱或密码错误'),
+        title: t('auth.login_failed'),
+        description: getErrorMessage(error, t('auth.login_error')),
       });
     } finally {
       setIsLoading(false);
@@ -84,8 +89,8 @@ export default function LoginPage() {
       logError('LoginPage.handleLinuxdoLogin', error);
       toast({
         variant: 'destructive',
-        title: 'OAuth 登录失败',
-        description: getErrorMessage(error, 'OAuth 登录过程中出现错误'),
+        title: t('auth.oauth_failed'),
+        description: getErrorMessage(error, t('auth.oauth_error')),
       });
       setIsOAuthLoading(false);
     }
@@ -99,7 +104,7 @@ export default function LoginPage() {
         size="icon"
         className="absolute top-4 right-4"
         onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-        aria-label="切换主题"
+        aria-label={t('auth.toggle_theme')}
       >
         <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
         <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
@@ -107,9 +112,9 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">欢迎回来</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">{t('auth.login_title')}</CardTitle>
           <CardDescription className="text-center">
-            登录您的账户以继续游戏
+            {t('auth.login_subtitle')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -123,14 +128,14 @@ export default function LoginPage() {
             {isOAuthLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                跳转中...
+                {t('auth.oauth_redirecting')}
               </>
             ) : (
               <>
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
                 </svg>
-                通过 linux.do 登录
+                {t('auth.oauth_login')}
               </>
             )}
           </Button>
@@ -142,7 +147,7 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-background px-2 text-muted-foreground">
-                或使用邮箱登录
+                {t('auth.or_email_login')}
               </span>
             </div>
           </div>
@@ -155,7 +160,7 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>邮箱</FormLabel>
+                    <FormLabel>{t('auth.email')}</FormLabel>
                     <FormControl>
                       <Input
                         type="email"
@@ -174,7 +179,7 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>密码</FormLabel>
+                    <FormLabel>{t('auth.password')}</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
@@ -192,10 +197,10 @@ export default function LoginPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    登录中...
+                    {t('auth.logging_in')}
                   </>
                 ) : (
-                  '登录'
+                  t('auth.login_button')
                 )}
               </Button>
             </form>
@@ -203,9 +208,9 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-center text-muted-foreground">
-            还没有账户？{' '}
+            {t('auth.no_account')}{' '}
             <Link to="/auth/register" className="text-primary hover:underline">
-              立即注册
+              {t('auth.register_now')}
             </Link>
           </div>
         </CardFooter>

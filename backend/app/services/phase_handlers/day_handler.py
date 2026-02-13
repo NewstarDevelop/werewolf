@@ -19,9 +19,9 @@ _rng = secrets.SystemRandom()
 async def handle_day_announcement(game: Game) -> dict:
     """Announce night deaths and check for hunter trigger."""
     if game.last_night_deaths:
-        separator = "、" if game.language == "zh" else ", "
-        seat_suffix = "号" if game.language == "zh" else ""
-        deaths_str = separator.join([f"{s}{seat_suffix}" for s in game.last_night_deaths])
+        death_sep = t("vote_format.death_separator", language=game.language)
+        seat_suffix = t("vote_format.seat_suffix", language=game.language)
+        deaths_str = death_sep.join([f"{s}{seat_suffix}" for s in game.last_night_deaths])
         game.add_message(0, t("system_messages.day_breaks_deaths", language=game.language, deaths=deaths_str), MessageType.SYSTEM)
 
         # Check win condition immediately after night deaths (before hunter shoot)
@@ -62,7 +62,7 @@ async def handle_day_announcement(game: Game) -> dict:
 
     game.phase = GamePhase.DAY_SPEECH
     game._spoken_seats_this_round.clear()  # P0 Fix: Reset speech tracker
-    seat_suffix = "号" if game.language == "zh" else ""
+    seat_suffix = t("vote_format.seat_suffix", language=game.language)
     game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
     game.increment_version()
     return {"status": "updated", "new_phase": game.phase}
@@ -150,10 +150,11 @@ async def handle_day_vote_result(game: Game) -> dict:
 
     # Announce votes
     vote_summary = []
-    seat_suffix = "号" if game.language == "zh" else ""
-    separator = "，" if game.language == "zh" else ", "
-    vote_word = "投" if game.language == "zh" else " voted for "
-    abstain_word = "弃票" if game.language == "zh" else " abstained"
+    lang = game.language
+    seat_suffix = t("vote_format.seat_suffix", language=lang)
+    separator = t("vote_format.separator", language=lang)
+    vote_word = t("vote_format.vote_word", language=lang)
+    abstain_word = t("vote_format.abstain_word", language=lang)
     for voter, target in game.day_votes.items():
         if target and target > 0:
             vote_summary.append(f"{voter}{seat_suffix}{vote_word}{target}{seat_suffix}")
@@ -172,7 +173,6 @@ async def handle_day_vote_result(game: Game) -> dict:
             game.add_message(0, t("system_messages.vote_tie", language=game.language), MessageType.SYSTEM)
         else:
             eliminated = top_targets[0]
-            seat_suffix = "号" if game.language == "zh" else ""
             game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM)
             game.kill_player(eliminated)
 

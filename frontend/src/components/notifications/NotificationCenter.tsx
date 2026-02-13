@@ -7,6 +7,7 @@
  * - Responsive design with useIsMobile hook
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Popover,
   PopoverContent,
@@ -35,6 +36,7 @@ export function NotificationCenter({
 }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
 
   // Get unread count from query
   const { unreadCount } = useNotifications({ pageSize: 1 });
@@ -66,7 +68,7 @@ export function NotificationCenter({
         <SheetTrigger asChild>{trigger}</SheetTrigger>
         <SheetContent side="bottom" className="h-[80vh] p-0">
           <SheetHeader className="sr-only">
-            <SheetTitle>通知</SheetTitle>
+            <SheetTitle>{t('notifications.title', '通知')}</SheetTitle>
           </SheetHeader>
           <NotificationList
             onNotificationClick={handleNotificationClick}

@@ -96,10 +96,26 @@
     "vote_prompt": "Please vote to exile a player, or abstain",
     "hunter_shoot_prompt": "You can shoot to take down a player"
   },
+  "vote_ui": {
+    "vote_result": "Vote Result",
+    "abstain_count": "{{count}} abstained",
+    "hide_details": "Hide Details",
+    "show_details": "Show Details"
+  },
   "analysis": {
     "fallback_mode": "AI Analysis Not Configured",
     "fallback_hint": "Please configure .env file in project root to enable AI analysis. Recommended:",
     "generating": "Generating AI analysis...",
-    "may_take_time": "This may take 10-30 seconds, please wait"
+    "may_take_time": "This may take 10-30 seconds, please wait",
+    "config_steps": "Configuration Steps:",
+    "config_step1": "Locate .env file in project root directory",
+    "config_step2": "Replace your-api-key-here with your real API key",
+    "config_step3": "Restart backend service",
+    "copy_config": "Copy configuration",
+    "config_copied": "Configuration copied to clipboard",
+    "copy_failed": "Copy failed",
+    "file_path": "📁 File Path: ",
+    "project_root": "(project root)",
+    "verify_config": "Verify Configuration:"
   }
 }

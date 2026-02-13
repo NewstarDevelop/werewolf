@@ -4,11 +4,13 @@
  */
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 export default function OAuthCallback() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { refreshUser } = useAuth();
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function OAuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-4">
         <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-        <p className="text-muted-foreground">正在登录...</p>
+        <p className="text-muted-foreground">{t('auth.oauth_logging_in')}</p>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { authService, User, AuthError } from '@/services/authService';
 import { clearUserToken } from '@/utils/token';
 import { clearPlayerData } from '@/utils/player';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -44,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('Server error during auth:', error);
           toast({
             variant: "destructive",
-            title: "服务连接失败",
-            description: "无法连接到服务器，请稍后再试。",
+            title: t("auth.server_error"),
+            description: t("auth.server_error_desc"),
           });
           setUser(null);
         } else {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { formatVoteStats, formatDetailedVotes, VoteStats } from "@/utils/voteUtils";
 
 interface VoteResultMessageProps {
@@ -14,7 +15,7 @@ interface VoteResultMessageProps {
  */
 const VoteResultMessage = ({ voteStats, language }: VoteResultMessageProps) => {
   const [showDetails, setShowDetails] = useState(false);
-  const isZh = language === "zh";
+  const { t } = useTranslation('game');
 
   const formattedVotes = formatVoteStats(voteStats, language);
 
@@ -23,7 +24,7 @@ const VoteResultMessage = ({ voteStats, language }: VoteResultMessageProps) => {
       <div className="flex flex-col items-center gap-2 px-4 py-3 rounded-lg bg-accent/10 border border-accent/20">
         {/* Vote Result Header */}
         <div className="text-accent text-sm font-medium">
-          {isZh ? "投票结果" : "Vote Result"}
+          {t('vote_ui.vote_result')}
         </div>
 
         {/* Vote Stats - Horizontal Layout */}
@@ -41,9 +42,7 @@ const VoteResultMessage = ({ voteStats, language }: VoteResultMessageProps) => {
         {/* Abstain count if any */}
         {voteStats.abstainCount > 0 && (
           <div className="text-xs text-muted-foreground">
-            {isZh
-              ? `${voteStats.abstainCount}人弃票`
-              : `${voteStats.abstainCount} abstained`}
+            {t('vote_ui.abstain_count', { count: voteStats.abstainCount })}
           </div>
         )}
 
@@ -53,8 +52,8 @@ const VoteResultMessage = ({ voteStats, language }: VoteResultMessageProps) => {
           className="text-xs text-accent/70 hover:text-accent transition-colors flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:rounded-sm"
         >
           {showDetails
-            ? (isZh ? "收起详情" : "Hide Details")
-            : (isZh ? "查看详情" : "Show Details")
+            ? t('vote_ui.hide_details')
+            : t('vote_ui.show_details')
           }
           <span className={`transition-transform ${showDetails ? "rotate-180" : ""}`}>▼</span>
         </button>

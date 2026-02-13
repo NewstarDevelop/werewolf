@@ -22,16 +22,16 @@ def handle_death_shoot_action(
 
     # Only hunter or wolf king can shoot in this phase
     if player.role not in [Role.HUNTER, Role.WOLF_KING]:
-        return ActionResult.fail("只有猎人或狼王可以在此阶段开枪").to_dict()
+        return ActionResult.fail(t("action_result.only_hunter_wolf_king", language=game.language)).to_dict()
 
-    seat_suffix = "号" if game.language == "zh" else ""
-    shooter_name = "猎人" if player.role == Role.HUNTER else "狼王"
+    lang = game.language
+    shooter_name = t("action_result.role_hunter", language=lang) if player.role == Role.HUNTER else t("action_result.role_wolf_king", language=lang)
 
     # Skip shooting (SKIP action or target_id = 0)
     if action_type == ActionType.SKIP or target_id == 0:
-        abstain_message = f"{shooter_name}{player.seat_id}{seat_suffix}放弃开枪"
+        abstain_message = t("action_result.shoot_abstain", language=lang, role=shooter_name, seat=player.seat_id, suffix=t("vote_format.seat_suffix", language=lang))
         game.add_message(0, abstain_message, MessageType.SYSTEM)
-        return ActionResult.ok("已放弃开枪").to_dict()
+        return ActionResult.ok(t("action_result.shoot_abstained", language=lang)).to_dict()
 
     # Validate and execute shoot
     if target_id is not None:
@@ -40,11 +40,11 @@ def handle_death_shoot_action(
         except ValueError as e:
             return ActionResult.fail(str(e)).to_dict()
 
-        shoot_message = f"{shooter_name}{player.seat_id}{seat_suffix}开枪带走了{target_id}{seat_suffix}"
+        shoot_message = t("action_result.shoot_hit", language=lang, role=shooter_name, seat=player.seat_id, suffix=t("vote_format.seat_suffix", language=lang), target=target_id)
         game.add_message(0, shoot_message, MessageType.SYSTEM)
         game.kill_player(target_id)
         game.add_action(player.seat_id, ActionType.SHOOT, target_id)
-        return ActionResult.ok(f"已射击{target_id}号玩家").to_dict()
+        return ActionResult.ok(t("action_result.shoot_success", language=lang, target=target_id)).to_dict()
 
     return ActionResult.fail(
         t("api_responses.invalid_action_for_phase", language=game.language)
@@ -68,7 +68,8 @@ def handle_hunter_shoot_action(
             t("api_responses.cannot_shoot", language=game.language)
         ).to_dict()
 
-    seat_suffix = "号" if game.language == "zh" else ""
+    lang = game.language
+    seat_suffix = t("vote_format.seat_suffix", language=lang)
 
     if action_type == ActionType.SHOOT and target_id:
         try:

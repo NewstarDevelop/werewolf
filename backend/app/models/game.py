@@ -10,28 +10,41 @@ from app.schemas.enums import (
     GameStatus, GamePhase, Role, ActionType, MessageType, Winner
 )
 from app.schemas.player import Personality
+from app.i18n import t
 
 
 _rng = secrets.SystemRandom()
 
-# AI personality templates (14 unique personalities for 12-player games)
-AI_PERSONALITIES = [
-    Personality(name="暴躁的老王", trait="激进", speaking_style="口语化"),
-    Personality(name="理性的Alice", trait="逻辑流", speaking_style="严谨"),
-    Personality(name="沉默的张三", trait="保守", speaking_style="简短"),
-    Personality(name="热情的小红", trait="直觉流", speaking_style="幽默"),
-    Personality(name="老练的李四", trait="随波逐流", speaking_style="口语化"),
-    Personality(name="精明的王五", trait="逻辑流", speaking_style="严谨"),
-    Personality(name="冲动的赵六", trait="激进", speaking_style="口语化"),
-    Personality(name="稳重的钱七", trait="保守", speaking_style="简短"),
-    # 新增6个角色，确保12人局不重名
-    Personality(name="狡猾的孙八", trait="逻辑流", speaking_style="幽默"),
-    Personality(name="憨厚的周九", trait="随波逐流", speaking_style="简短"),
-    Personality(name="机敏的吴十", trait="直觉流", speaking_style="严谨"),
-    Personality(name="淡定的郑十一", trait="保守", speaking_style="口语化"),
-    Personality(name="火爆的陈十二", trait="激进", speaking_style="幽默"),
-    Personality(name="睿智的林十三", trait="逻辑流", speaking_style="口语化"),
+# AI personality trait/style templates (14 unique combos for 12-player games)
+# Names are loaded from i18n at runtime via get_ai_personalities()
+_PERSONALITY_TEMPLATES = [
+    ("激进", "口语化"),
+    ("逻辑流", "严谨"),
+    ("保守", "简短"),
+    ("直觉流", "幽默"),
+    ("随波逐流", "口语化"),
+    ("逻辑流", "严谨"),
+    ("激进", "口语化"),
+    ("保守", "简短"),
+    ("逻辑流", "幽默"),
+    ("随波逐流", "简短"),
+    ("直觉流", "严谨"),
+    ("保守", "口语化"),
+    ("激进", "幽默"),
+    ("逻辑流", "口语化"),
 ]
+
+
+def get_ai_personalities(language: str = "zh") -> list:
+    """Get AI personalities with names from i18n translations."""
+    from app.i18n.translations import load_translations
+    translations = load_translations(language)
+    names = translations.get("personality", {}).get("names", [])
+    result = []
+    for i, (trait, style) in enumerate(_PERSONALITY_TEMPLATES):
+        name = names[i] if i < len(names) else f"Player_{i+1}"
+        result.append(Personality(name=name, trait=trait, speaking_style=style))
+    return result
 
 
 # Role alignment sets for win condition and game logic
@@ -371,7 +384,7 @@ class Game:
                     return {
                         "type": ActionType.SHOOT.value,
                         "choices": alive_seats + [0],  # 0 = skip
-                        "message": "你可以开枪带走一名玩家"
+                        "message": t("pending_action.shoot_prompt", language=self.language)
                     }
 
         # Legacy hunter shoot phase (backward compatibility)
@@ -381,7 +394,7 @@ class Game:
                 return {
                     "type": ActionType.SHOOT.value,
                     "choices": alive_seats + [0],  # 0 = skip
-                    "message": "你可以开枪带走一名玩家"
+                    "message": t("pending_action.shoot_prompt", language=self.language)
                 }
 
         if not player.is_alive:
@@ -396,7 +409,7 @@ class Game:
                 return {
                     "type": ActionType.SPEAK.value,
                     "choices": [],
-                    "message": "与狼队友讨论今晚击杀目标（发言后自动进入投票）"
+                    "message": t("pending_action.wolf_chat_prompt", language=self.language)
                 }
 
         # Night werewolf phase - regular werewolf and wolf king vote (white wolf king handled separately below)
@@ -407,20 +420,19 @@ class Game:
                 return {
                     "type": ActionType.KILL.value,
                     "choices": kill_targets,
-                    "message": "请选择今晚要击杀的目标"
+                    "message": t("pending_action.wolf_kill_prompt", language=self.language)
                 }
 
         # Night werewolf phase - White wolf king can choose to self-destruct
         elif phase == GamePhase.NIGHT_WEREWOLF and role == Role.WHITE_WOLF_KING:
             if player.seat_id not in self.wolf_votes:
                 # White wolf king can either vote for kill OR self-destruct
-                # 白狼王可以击杀任何存活玩家（包括自己，实现自刀策略）
                 if not self.white_wolf_king_used_explode:
                     kill_targets = alive_seats[:]
                     return {
                         "type": ActionType.KILL.value,  # Frontend will show both KILL and SELF_DESTRUCT options
                         "choices": kill_targets,
-                        "message": "请投票击杀目标，或选择自爆（使用自爆动作）"
+                        "message": t("pending_action.white_wolf_king_prompt", language=self.language)
                     }
                 else:
                     # Already used self-destruct, can only vote for normal kill
@@ -428,7 +440,7 @@ class Game:
                     return {
                         "type": ActionType.KILL.value,
                         "choices": kill_targets,
-                        "message": "请选择今晚要击杀的目标"
+                        "message": t("pending_action.wolf_kill_prompt", language=self.language)
                     }
 
         # Night guard phase
@@ -446,7 +458,7 @@ class Game:
             return {
                 "type": ActionType.PROTECT.value,
                 "choices": protect_choices + [0],  # 0 = skip
-                "message": "请选择今晚要守护的玩家，或跳过"
+                "message": t("pending_action.guard_prompt", language=self.language)
             }
 
         # Night seer phase
@@ -459,7 +471,7 @@ class Game:
             return {
                 "type": ActionType.VERIFY.value,
                 "choices": unverified,
-                "message": "请选择要查验的玩家"
+                "message": t("pending_action.seer_prompt", language=self.language)
             }
 
         # Night witch phase
@@ -477,14 +489,14 @@ class Game:
                     return {
                         "type": ActionType.SAVE.value,
                         "choices": [self.night_kill_target, 0],  # 0 = skip
-                        "message": f"今晚{self.night_kill_target}号被杀，是否使用解药？"
+                        "message": t("pending_action.witch_save_prompt", language=self.language, target=self.night_kill_target)
                     }
 
-                no_save_reason = "今晚无人被杀" if self.night_kill_target is None else "你没有解药"
+                msg_key = "pending_action.witch_no_target" if self.night_kill_target is None else "pending_action.witch_no_antidote"
                 return {
                     "type": ActionType.SAVE.value,
                     "choices": [0],
-                    "message": f"{no_save_reason}，点击技能按钮跳过解药决策"
+                    "message": t(msg_key, language=self.language)
                 }
 
             # Step 2: Poison potion decision
@@ -493,22 +505,22 @@ class Game:
                     return {
                         "type": ActionType.POISON.value,
                         "choices": [0],
-                        "message": "你今晚已使用解药，无法再使用毒药，点击技能按钮继续"
+                        "message": t("pending_action.witch_used_save", language=self.language)
                     }
 
                 if player.has_poison_potion:
                     return {
                         "type": ActionType.POISON.value,
                         "choices": other_alive + [0],  # 0 = skip
-                        "message": f"今晚{self.night_kill_target}号被杀，是否使用毒药？选择目标或跳过"
+                        "message": t("pending_action.witch_poison_prompt", language=self.language, target=self.night_kill_target)
                         if self.night_kill_target is not None
-                        else "是否使用毒药？选择目标或跳过"
+                        else t("pending_action.witch_poison_prompt_no_kill", language=self.language)
                     }
 
                 return {
                     "type": ActionType.POISON.value,
                     "choices": [0],
-                    "message": "你没有可用的毒药，点击技能按钮继续"
+                    "message": t("pending_action.witch_no_poison", language=self.language)
                 }
 
         # Day speech phase
@@ -518,7 +530,7 @@ class Game:
                 return {
                     "type": ActionType.SPEAK.value,
                     "choices": [],
-                    "message": "轮到你发言了"
+                    "message": t("pending_action.speech_prompt", language=self.language)
                 }
 
         # Day vote phase
@@ -527,7 +539,7 @@ class Game:
                 return {
                     "type": ActionType.VOTE.value,
                     "choices": other_alive + [0],  # 0 = abstain
-                    "message": "请投票选择要放逐的玩家，或弃票"
+                    "message": t("pending_action.vote_prompt", language=self.language)
                 }
 
         return None
@@ -795,8 +807,8 @@ class GameStore:
         else:
             _rng.shuffle(roles)
 
-        # Shuffle personalities
-        personalities = AI_PERSONALITIES.copy()
+        # Shuffle personalities (names loaded from i18n based on game language)
+        personalities = get_ai_personalities(language)
         _rng.shuffle(personalities)
 
         # Create players

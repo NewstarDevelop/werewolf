@@ -24,18 +24,19 @@ async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
 
     # Determine shooter type and eligibility
     can_shoot = False
+    lang = game.language
     shooter_name = ""
     if shooter.role == Role.HUNTER:
         can_shoot = shooter.can_shoot  # Hunter can't shoot if poisoned
-        shooter_name = "猎人" if game.language == "zh" else "Hunter"
+        shooter_name = t("action_result.role_hunter", language=lang)
     elif shooter.role == Role.WOLF_KING:
         can_shoot = True  # Wolf king can always shoot when voted out
-        shooter_name = "狼王" if game.language == "zh" else "Wolf King"
+        shooter_name = t("action_result.role_wolf_king", language=lang)
 
     if not can_shoot:
-        seat_suffix = "号" if game.language == "zh" else ""
+        seat_suffix = t("vote_format.seat_suffix", language=lang)
         if shooter.role == Role.HUNTER:
-            game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
         return continue_after_death_shoot(game)
 
     if game.is_human_player(shooter.seat_id):
@@ -45,15 +46,14 @@ async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
     targets = [p.seat_id for p in game.get_alive_players()]
     if targets:
         target = await llm.decide_shoot_target(shooter, game, targets)
+        seat_suffix = t("vote_format.seat_suffix", language=lang)
         if target:
-            seat_suffix = "号" if game.language == "zh" else ""
-            shoot_message = f"{shooter_name}{shooter.seat_id}{seat_suffix}开枪带走了{target}{seat_suffix}"
+            shoot_message = t("shoot_message.shoot_hit", language=lang, shooter_name=shooter_name, shooter_seat=shooter.seat_id, suffix=seat_suffix, target=target)
             game.add_message(0, shoot_message, MessageType.SYSTEM)
             game.kill_player(target)
             game.add_action(shooter.seat_id, ActionType.SHOOT, target)
         else:
-            seat_suffix = "号" if game.language == "zh" else ""
-            abstain_message = f"{shooter_name}{shooter.seat_id}{seat_suffix}放弃开枪"
+            abstain_message = t("shoot_message.shoot_abstain", language=lang, shooter_name=shooter_name, shooter_seat=shooter.seat_id, suffix=seat_suffix)
             game.add_message(0, abstain_message, MessageType.SYSTEM)
 
     game.increment_version()
@@ -92,8 +92,8 @@ def continue_after_death_shoot(game: Game) -> dict:
                 game.current_actor_seat = game.speech_order[0]
                 game.phase = GamePhase.DAY_SPEECH
                 game._spoken_seats_this_round.clear()
-                seat_suffix = "号" if game.language == "zh" else ""
-                game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
+                seat_suffix = t("vote_format.seat_suffix", language=lang)
+                game.add_message(0, t("system_messages.speech_start", language=lang, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
         else:
             # Died during day vote - go to next night
             game.day += 1
@@ -110,9 +110,10 @@ async def handle_hunter_shoot(game: Game, llm: "LLMService") -> dict:
         # Skip if not hunter
         return continue_after_hunter(game)
 
+    lang = game.language
     if not hunter.can_shoot:
-        seat_suffix = "号" if game.language == "zh" else ""
-        game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+        seat_suffix = t("vote_format.seat_suffix", language=lang)
+        game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
         return continue_after_hunter(game)
 
     if game.is_human_player(hunter.seat_id):
@@ -122,14 +123,13 @@ async def handle_hunter_shoot(game: Game, llm: "LLMService") -> dict:
     targets = [p.seat_id for p in game.get_alive_players()]
     if targets:
         target = await llm.decide_shoot_target(hunter, game, targets)
+        seat_suffix = t("vote_format.seat_suffix", language=lang)
         if target:
-            seat_suffix = "号" if game.language == "zh" else ""
-            game.add_message(0, t("system_messages.hunter_shot", language=game.language, hunter_id=f"{hunter.seat_id}{seat_suffix}", target_id=f"{target}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_shot", language=lang, hunter_id=f"{hunter.seat_id}{seat_suffix}", target_id=f"{target}{seat_suffix}"), MessageType.SYSTEM)
             game.kill_player(target)
             game.add_action(hunter.seat_id, ActionType.SHOOT, target)
         else:
-            seat_suffix = "号" if game.language == "zh" else ""
-            game.add_message(0, t("system_messages.hunter_abstain", language=game.language, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_abstain", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
 
     return continue_after_hunter(game)
 
@@ -168,7 +168,7 @@ def continue_after_hunter(game: Game) -> dict:
                 game.current_actor_seat = game.speech_order[0]
                 game.phase = GamePhase.DAY_SPEECH
                 game._spoken_seats_this_round.clear()  # P0 Fix: Reset speech tracker
-                seat_suffix = "号" if game.language == "zh" else ""
+                seat_suffix = t("vote_format.seat_suffix", language=game.language)
                 game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
         else:
             # Hunter died during day vote - go to next night

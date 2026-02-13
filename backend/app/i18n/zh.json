@@ -14,6 +14,22 @@
     }
   },
   "personality": {
+    "names": [
+      "暴躁的老王",
+      "理性的Alice",
+      "沉默的张三",
+      "热情的小红",
+      "老练的李四",
+      "精明的王五",
+      "冲动的赵六",
+      "稳重的钱七",
+      "狡猾的孙八",
+      "憨厚的周九",
+      "机敏的吴十",
+      "淡定的郑十一",
+      "火爆的陈十二",
+      "睿智的林十三"
+    ],
     "traits": {
       "激进": "你性格激进，说话直接，喜欢主动发起攻击和质疑他人",
       "保守": "你谨慎且规避风险。你只在逻辑确凿时投票，不信任情绪化玩家，寻找硬证据。你是冷静分析者，而非盲目跟随者",
@@ -54,6 +70,65 @@
     "wolf_strategy_first_claim": "\n**首日抢跳策略**：\n- 首夜有倒牌且无人跳预言家，真预言家可能已死\n- **可以考虑主动抢跳单边预言家**，抢占叙事高地\n- **高级战术选项**：\n  * 给队友发查杀（卖队友换取全场信任）\n  * 给好人发金水（建立信任网络）\n  * 利用场上情绪化/激进玩家作为带节奏的代理人\n- **风险评估**：确保后续能维持预言家身份的逻辑自洽\n",
     "wolf_strategy_emotional": "\n**利用情绪化玩家**：\n- 识别场上发言激进、情绪化的好人\n- 顺着他们的愤怒/怀疑，推动错误归票\n- 自己保持克制与证据化表达，避免暴露\n"
   },
+  "pending_action": {
+    "shoot_prompt": "你可以开枪带走一名玩家",
+    "wolf_chat_prompt": "与狼队友讨论今晚击杀目标（发言后自动进入投票）",
+    "wolf_kill_prompt": "请选择今晚要击杀的目标",
+    "white_wolf_king_prompt": "请投票击杀目标，或选择自爆（使用自爆动作）",
+    "guard_prompt": "请选择今晚要守护的玩家，或跳过",
+    "seer_prompt": "请选择要查验的玩家",
+    "witch_save_prompt": "今晚{target}号被杀，是否使用解药？",
+    "witch_no_target": "今晚无人被杀，点击技能按钮跳过解药决策",
+    "witch_no_antidote": "你没有解药，点击技能按钮跳过解药决策",
+    "witch_used_save": "你今晚已使用解药，无法再使用毒药，点击技能按钮继续",
+    "witch_poison_prompt": "今晚{target}号被杀，是否使用毒药？选择目标或跳过",
+    "witch_poison_prompt_no_kill": "是否使用毒药？选择目标或跳过",
+    "witch_no_poison": "你没有可用的毒药，点击技能按钮继续",
+    "speech_prompt": "轮到你发言了",
+    "vote_prompt": "请投票选择要放逐的玩家，或弃票",
+    "last_words_prompt": "请留下你的遗言"
+  },
+  "action_result": {
+    "only_hunter_wolf_king": "只有猎人或狼王可以在此阶段开枪",
+    "shoot_abstain": "{role}{seat}{suffix}放弃开枪",
+    "shoot_abstained": "已放弃开枪",
+    "shoot_hit": "{role}{seat}{suffix}开枪带走了{target}{suffix}",
+    "shoot_success": "已射击{target}号玩家",
+    "self_destruct_used": "你已使用过自爆技能",
+    "self_destruct_self": "白狼王自爆必须选择其他玩家作为目标",
+    "self_destruct_success": "白狼王自爆，带走{target}号玩家！今晚无狼刀。",
+    "guard_skipped": "已跳过守护",
+    "guard_consecutive": "不能连续两夜守护同一人",
+    "guard_success": "已守护{target}号玩家",
+    "role_hunter": "猎人",
+    "role_wolf_king": "狼王"
+  },
+  "validation": {
+    "invalid_target_zero": "无效的目标：不能选择 0",
+    "player_not_exist": "无效的目标：{target} 号玩家不存在",
+    "player_dead": "无效的目标：{target} 号玩家已死亡",
+    "cannot_self_target": "不能{action}自己",
+    "action_poison": "毒",
+    "action_vote": "投票给",
+    "action_shoot": "射击",
+    "action_verify": "验证",
+    "action_default": "选择"
+  },
+  "vote_format": {
+    "seat_suffix": "号",
+    "separator": "，",
+    "death_separator": "、",
+    "vote_word": "投",
+    "abstain_word": "弃票"
+  },
+  "wolf_strategy": {
+    "self_knife": "自刀战术",
+    "claim_seer": "悍跳预言家",
+    "target": "目标{number}号"
+  },
+  "log_messages": {
+    "guard_witch_double_save": "同守同救: {seat}号玩家因同时被守卫守护和女巫救治而死亡"
+  },
   "api_responses": {
     "wolf_chat_sent": "消息已发送",
     "vote_recorded": "投票已记录",
@@ -81,6 +156,10 @@
     "invalid_phase_action": "当前阶段无法执行该操作",
     "message_empty": "消息不能为空",
     "invalid_action_for_phase": "当前阶段不支持该操作"
+  },
+  "shoot_message": {
+    "shoot_hit": "{shooter_name}{shooter_seat}{suffix}开枪带走了{target}{suffix}",
+    "shoot_abstain": "{shooter_name}{shooter_seat}{suffix}放弃开枪"
   },
   "system_messages": {
     "night_falls": "第{day}天夜晚降临，请闭眼。",

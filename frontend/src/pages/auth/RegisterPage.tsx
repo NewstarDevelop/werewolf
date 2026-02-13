@@ -3,6 +3,7 @@
  */
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,17 +16,19 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { getErrorMessage, logError } from '@/utils/errorHandler';
 
-const registerSchema = z.object({
-  email: z.string().email({ message: '请输入有效的邮箱地址' }),
-  nickname: z.string().min(2, { message: '昵称至少需要2个字符' }).max(50, { message: '昵称不能超过50个字符' }),
-  password: z.string().min(6, { message: '密码至少需要6个字符' }).max(100, { message: '密码不能超过100个字符' }),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: '两次输入的密码不一致',
-  path: ['confirmPassword'],
-});
+function createRegisterSchema(t: (key: string) => string) {
+  return z.object({
+    email: z.string().email({ message: t('auth.email_invalid') }),
+    nickname: z.string().min(2, { message: t('auth.nickname_min') }).max(50, { message: t('auth.nickname_max') }),
+    password: z.string().min(6, { message: t('auth.password_min') }).max(100, { message: t('auth.password_max') }),
+    confirmPassword: z.string(),
+  }).refine((data) => data.password === data.confirmPassword, {
+    message: t('auth.password_mismatch'),
+    path: ['confirmPassword'],
+  });
+}
 
-type RegisterFormData = z.infer<typeof registerSchema>;
+type RegisterFormData = z.infer<ReturnType<typeof createRegisterSchema>>;
 
 interface LocationState {
   from?: { pathname: string };
@@ -36,8 +39,10 @@ export default function RegisterPage() {
   const location = useLocation();
   const { register: registerUser } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
 
+  const registerSchema = createRegisterSchema(t);
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -53,8 +58,8 @@ export default function RegisterPage() {
     try {
       await registerUser(data.email, data.password, data.nickname);
       toast({
-        title: '注册成功',
-        description: '欢迎加入狼人杀！',
+        title: t('auth.register_success'),
+        description: t('auth.register_welcome'),
       });
 
       // Read the original target page from ProtectedRoute
@@ -70,8 +75,8 @@ export default function RegisterPage() {
       logError('RegisterPage.onSubmit', error);
       toast({
         variant: 'destructive',
-        title: '注册失败',
-        description: getErrorMessage(error, '注册过程中出现错误'),
+        title: t('auth.register_failed'),
+        description: getErrorMessage(error, t('auth.register_error')),
       });
     } finally {
       setIsLoading(false);
@@ -82,9 +87,9 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">创建账户</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">{t('auth.register_title')}</CardTitle>
           <CardDescription className="text-center">
-            填写以下信息以开始游戏
+            {t('auth.register_subtitle')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -95,7 +100,7 @@ export default function RegisterPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>邮箱</FormLabel>
+                    <FormLabel>{t('auth.email')}</FormLabel>
                     <FormControl>
                       <Input
                         type="email"
@@ -114,11 +119,11 @@ export default function RegisterPage() {
                 name="nickname"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>昵称</FormLabel>
+                    <FormLabel>{t('auth.nickname')}</FormLabel>
                     <FormControl>
                       <Input
                         type="text"
-                        placeholder="玩家昵称"
+                        placeholder={t('auth.nickname_placeholder')}
                         {...field}
                         disabled={isLoading}
                       />
@@ -133,11 +138,11 @@ export default function RegisterPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>密码</FormLabel>
+                    <FormLabel>{t('auth.password')}</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="至少6个字符"
+                        placeholder={t('auth.password_placeholder')}
                         {...field}
                         disabled={isLoading}
                       />
@@ -152,11 +157,11 @@ export default function RegisterPage() {
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>确认密码</FormLabel>
+                    <FormLabel>{t('auth.confirm_password')}</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="再次输入密码"
+                        placeholder={t('auth.confirm_password_placeholder')}
                         {...field}
                         disabled={isLoading}
                       />
@@ -170,10 +175,10 @@ export default function RegisterPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    注册中...
+                    {t('auth.registering')}
                   </>
                 ) : (
-                  '注册'
+                  t('auth.register_button')
                 )}
               </Button>
             </form>
@@ -181,9 +186,9 @@ export default function RegisterPage() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-center text-muted-foreground">
-            已有账户？{' '}
+            {t('auth.have_account')}{' '}
             <Link to="/auth/login" className="text-primary hover:underline">
-              立即登录
+              {t('auth.login_now')}
             </Link>
           </div>
         </CardFooter>

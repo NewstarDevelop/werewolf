@@ -2,6 +2,7 @@
 from typing import Optional
 from app.models.game import Game, WOLF_ROLES
 from app.schemas.enums import ActionType
+from app.i18n import t
 
 
 def validate_target(
@@ -24,26 +25,28 @@ def validate_target(
     Raises:
         ValueError: If target is invalid
     """
+    lang = game.language
+
     # Allow abstain/skip (target_id = 0) if permitted
     if target_id == 0:
         if allow_abstain:
             return
-        raise ValueError("无效的目标：不能选择 0")
+        raise ValueError(t("validation.invalid_target_zero", language=lang))
 
     # Check if target seat exists
     if target_id not in game.players:
-        raise ValueError(f"无效的目标：{target_id} 号玩家不存在")
+        raise ValueError(t("validation.player_not_exist", language=lang, target=target_id))
 
     target_player = game.get_player(target_id)
     if not target_player:
-        raise ValueError(f"无效的目标：{target_id} 号玩家不存在")
+        raise ValueError(t("validation.player_not_exist", language=lang, target=target_id))
 
     # Check if target is alive (required for most actions)
     if not target_player.is_alive:
-        raise ValueError(f"无效的目标：{target_id} 号玩家已死亡")
+        raise ValueError(t("validation.player_dead", language=lang, target=target_id))
 
     # Prevent self-targeting for certain actions
-    # Note: KILL is intentionally excluded — wolves may self-kill (自刀策略)
+    # Note: KILL is intentionally excluded — wolves may self-kill
     no_self_target_actions = [
         ActionType.POISON,
         ActionType.VOTE,
@@ -53,13 +56,13 @@ def validate_target(
 
     if action_type in no_self_target_actions and target_id == actor_seat:
         action_names = {
-            ActionType.POISON: "毒",
-            ActionType.VOTE: "投票给",
-            ActionType.SHOOT: "射击",
-            ActionType.VERIFY: "验证"
+            ActionType.POISON: t("validation.action_poison", language=lang),
+            ActionType.VOTE: t("validation.action_vote", language=lang),
+            ActionType.SHOOT: t("validation.action_shoot", language=lang),
+            ActionType.VERIFY: t("validation.action_verify", language=lang),
         }
-        action_name = action_names.get(action_type, "选择")
-        raise ValueError(f"不能{action_name}自己")
+        action_name = action_names.get(action_type, t("validation.action_default", language=lang))
+        raise ValueError(t("validation.cannot_self_target", language=lang, action=action_name))
 
 
 class ActionResult:

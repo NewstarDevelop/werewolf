@@ -14,6 +14,22 @@
     }
   },
   "personality": {
+    "names": [
+      "Grumpy Wang",
+      "Rational Alice",
+      "Silent Zhang",
+      "Enthusiastic Ruby",
+      "Seasoned Li",
+      "Shrewd Victor",
+      "Impulsive Rex",
+      "Steady Quinn",
+      "Cunning Sam",
+      "Honest Joe",
+      "Sharp Wendy",
+      "Cool Zane",
+      "Fiery Chris",
+      "Wise Forest"
+    ],
     "traits": {
       "激进": "You are aggressive, direct in speech, and proactive in attacking and questioning others.",
       "保守": "You are cautious and risk-averse. You only vote when logic is solid, distrust emotional players, and seek hard evidence. You are a calm analyzer, not a blind follower.",
@@ -54,6 +70,65 @@
     "wolf_strategy_first_claim": "\n**First Day Claim Strategy**:\n- There were deaths on first night and no Seer claim - real Seer may be dead\n- **Consider proactively claiming as solo Seer** to control the narrative\n- **Advanced tactics**:\n  * Give kill result to teammate (sacrifice for trust)\n  * Give safe result to villagers (build trust network)\n  * Leverage emotional/aggressive players as proxies to drive mislynches\n- **Risk assessment**: Ensure you can maintain logical consistency for the Seer identity\n",
     "wolf_strategy_emotional": "\n**Leverage Emotional Players**:\n- Identify aggressive or emotional villagers in the game\n- Follow their anger/suspicion to push wrong votes\n- Maintain composure and evidence-based speech to avoid exposure\n"
   },
+  "pending_action": {
+    "shoot_prompt": "You can shoot to take down a player",
+    "wolf_chat_prompt": "Discuss tonight's kill target with your wolf teammates (voting starts after speaking)",
+    "wolf_kill_prompt": "Select tonight's kill target",
+    "white_wolf_king_prompt": "Vote for kill target, or choose self-destruct",
+    "guard_prompt": "Select a player to protect tonight, or skip",
+    "seer_prompt": "Select a player to inspect",
+    "witch_save_prompt": "Player {target} was killed tonight. Use antidote?",
+    "witch_no_target": "No one was killed tonight. Click skill button to skip",
+    "witch_no_antidote": "You have no antidote. Click skill button to skip",
+    "witch_used_save": "You already used antidote tonight. Cannot use poison. Click skill button to continue",
+    "witch_poison_prompt": "Player {target} was killed tonight. Use poison? Select target or skip",
+    "witch_poison_prompt_no_kill": "Use poison? Select target or skip",
+    "witch_no_poison": "You have no poison available. Click skill button to continue",
+    "speech_prompt": "It's your turn to speak",
+    "vote_prompt": "Vote to exile a player, or abstain",
+    "last_words_prompt": "Please leave your last words"
+  },
+  "action_result": {
+    "only_hunter_wolf_king": "Only Hunter or Wolf King can shoot in this phase",
+    "shoot_abstain": "{role} #{seat} chose not to shoot",
+    "shoot_abstained": "Chose not to shoot",
+    "shoot_hit": "{role} #{seat} shot Player #{target}",
+    "shoot_success": "Shot Player #{target}",
+    "self_destruct_used": "You have already used self-destruct",
+    "self_destruct_self": "White Wolf King must choose another player as target",
+    "self_destruct_success": "White Wolf King self-destructed, taking down Player #{target}! No wolf kill tonight.",
+    "guard_skipped": "Skipped protection",
+    "guard_consecutive": "Cannot protect the same player two nights in a row",
+    "guard_success": "Protected Player #{target}",
+    "role_hunter": "Hunter",
+    "role_wolf_king": "Wolf King"
+  },
+  "validation": {
+    "invalid_target_zero": "Invalid target: cannot select 0",
+    "player_not_exist": "Invalid target: Player #{target} does not exist",
+    "player_dead": "Invalid target: Player #{target} is dead",
+    "cannot_self_target": "Cannot {action} yourself",
+    "action_poison": "poison",
+    "action_vote": "vote for",
+    "action_shoot": "shoot",
+    "action_verify": "verify",
+    "action_default": "target"
+  },
+  "vote_format": {
+    "seat_suffix": "",
+    "separator": ", ",
+    "death_separator": ", ",
+    "vote_word": " voted for ",
+    "abstain_word": " abstained"
+  },
+  "wolf_strategy": {
+    "self_knife": "Self-knife tactic",
+    "claim_seer": "Fake seer claim",
+    "target": "Target #{number}"
+  },
+  "log_messages": {
+    "guard_witch_double_save": "Double-save rule: Player #{seat} dies because both guard and witch saved them"
+  },
   "api_responses": {
     "wolf_chat_sent": "Message sent",
     "vote_recorded": "Vote recorded",
@@ -81,6 +156,10 @@
     "invalid_phase_action": "Cannot perform this action in current phase",
     "message_empty": "Message cannot be empty",
     "invalid_action_for_phase": "This action is not supported in current phase"
+  },
+  "shoot_message": {
+    "shoot_hit": "{shooter_name} #{shooter_seat} shot Player #{target}",
+    "shoot_abstain": "{shooter_name} #{shooter_seat} chose not to shoot"
   },
   "system_messages": {
     "night_falls": "Night falls on Day {day}. Please close your eyes.",

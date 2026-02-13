@@ -258,7 +258,7 @@ async def handle_night_witch(game: Game, llm: "LLMService") -> dict:
             # Add the target back to pending_deaths if it was removed by witch
             if game.night_kill_target not in game.pending_deaths:
                 game.pending_deaths.append(game.night_kill_target)
-            logger.info(f"同守同救: {game.night_kill_target}号玩家因同时被守卫守护和女巫救治而死亡")
+            logger.info(t("log_messages.guard_witch_double_save", language=game.language, seat=game.night_kill_target))
         else:
             # Normal guard protection (no witch save)
             if game.night_kill_target in game.pending_deaths:
@@ -319,14 +319,14 @@ def summarize_wolf_plan(game: Game) -> str:
         for strategy, patterns in keywords[lang].items():
             if any(pattern in content for pattern in patterns):
                 if strategy == "self_knife":
-                    strategy_points.append("自刀战术" if lang == "zh" else "Self-knife tactic")
+                    strategy_points.append(t("wolf_strategy.self_knife", language=game.language))
                 elif strategy == "claim_seer":
-                    strategy_points.append("悍跳预言家" if lang == "zh" else "Fake seer claim")
+                    strategy_points.append(t("wolf_strategy.claim_seer", language=game.language))
                 elif strategy == "target":
                     # Extract target number if mentioned
                     numbers = re.findall(r'(\d+)号', content) if lang == "zh" else re.findall(r'#(\d+)', content)
                     if numbers:
-                        strategy_points.append(f"目标{numbers[0]}号" if lang == "zh" else f"Target #{numbers[0]}")
+                        strategy_points.append(t("wolf_strategy.target", language=game.language, number=numbers[0]))
 
     # Remove duplicates and join
     strategy_points = list(dict.fromkeys(strategy_points))

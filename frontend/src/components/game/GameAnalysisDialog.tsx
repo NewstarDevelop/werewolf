@@ -32,7 +32,7 @@ interface AnalysisData {
 }
 
 const GameAnalysisDialog = ({ gameId, isOpen, onClose }: GameAnalysisDialogProps) => {
-  const { t, i18n } = useTranslation(['common', 'game']);
+  const { t } = useTranslation(['common', 'game']);
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,10 +116,10 @@ ANALYSIS_MODEL=gpt-4o`;
 
     navigator.clipboard.writeText(configText).then(() => {
       setCopied(true);
-      toast.success(i18n.language === 'zh' ? '配置已复制到剪贴板' : 'Configuration copied to clipboard');
+      toast.success(t('game:analysis.config_copied'));
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
-      toast.error(i18n.language === 'zh' ? '复制失败' : 'Copy failed');
+      toast.error(t('game:analysis.copy_failed'));
     });
   };
 
@@ -175,12 +175,12 @@ ANALYSIS_MODEL=gpt-4o`;
                       {/* Configuration Steps */}
                       <div className="space-y-2">
                         <p className="text-sm font-medium">
-                          {i18n.language === 'zh' ? '配置步骤：' : 'Configuration Steps:'}
+                          {t('game:analysis.config_steps')}
                         </p>
                         <ol className="text-xs space-y-1 list-decimal list-inside text-muted-foreground">
-                          <li>{i18n.language === 'zh' ? '在项目根目录找到 .env 文件' : 'Locate .env file in project root directory'}</li>
-                          <li>{i18n.language === 'zh' ? '将 your-api-key-here 替换为真实API密钥' : 'Replace your-api-key-here with your real API key'}</li>
-                          <li>{i18n.language === 'zh' ? '重启后端服务' : 'Restart backend service'}</li>
+                          <li>{t('game:analysis.config_step1')}</li>
+                          <li>{t('game:analysis.config_step2')}</li>
+                          <li>{t('game:analysis.config_step3')}</li>
                         </ol>
                       </div>
 
@@ -196,7 +196,7 @@ ANALYSIS_MODEL=gpt-4o`;
                           variant="ghost"
                           className="absolute top-2 right-2 h-6 w-6 p-0"
                           onClick={handleCopyConfig}
-                          aria-label={i18n.language === 'zh' ? '复制配置' : 'Copy configuration'}
+                          aria-label={t('game:analysis.copy_config')}
                         >
                           {copied ? (
                             <CheckCircle className="h-3 w-3 text-green-500" />
@@ -208,17 +208,17 @@ ANALYSIS_MODEL=gpt-4o`;
 
                       {/* File Path Hint */}
                       <p className="text-xs text-muted-foreground">
-                        {i18n.language === 'zh' ? '📁 文件路径：' : '📁 File Path: '}
+                        {t('game:analysis.file_path')}
                         <code className="bg-muted/50 px-1 py-0.5 rounded">.env</code>
                         <span className="ml-1 text-muted-foreground/60">
-                          {i18n.language === 'zh' ? '(项目根目录)' : '(project root)'}
+                          {t('game:analysis.project_root')}
                         </span>
                       </p>
 
                       {/* Verification Command */}
                       <div className="bg-muted/30 p-2 rounded border border-border">
                         <p className="text-xs font-medium mb-1">
-                          {i18n.language === 'zh' ? '验证配置：' : 'Verify Configuration:'}
+                          {t('game:analysis.verify_config')}
                         </p>
                         <code className="text-xs text-muted-foreground">
                           cd backend && python verify_config.py
