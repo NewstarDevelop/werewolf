@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification, NotificationOutbox
 from app.schemas.notification import NotificationCategory, NotificationPersistPolicy, NotificationPublic
@@ -72,7 +72,7 @@ class NotificationService:
 
     async def emit(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         user_id: str,
         category: NotificationCategory,
@@ -114,7 +114,7 @@ class NotificationService:
             broadcast_id=broadcast_id,
         )
         db.add(notification)
-        db.flush()  # ensure notification.id is available
+        await db.flush()  # ensure notification.id is available
 
         public = self._to_public(notification)
 
@@ -133,12 +133,12 @@ class NotificationService:
             payload=outbox_payload,
             status="PENDING",
             attempts=0,
-            available_at=datetime.utcnow(),
+            available_at=datetime.now(timezone.utc),
             broadcast_id=broadcast_id,
         )
         db.add(outbox)
-        db.commit()
-        db.refresh(notification)
+        await db.commit()
+        await db.refresh(notification)
 
         # Best-effort publish now. If this fails, outbox remains PENDING for worker retry.
         await self._best_effort_publish_and_mark_sent(db=db, outbox=outbox)
@@ -172,7 +172,7 @@ class NotificationService:
             title=title,
             body=body,
             data=data,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             read_at=None,
         )
 
@@ -188,7 +188,7 @@ class NotificationService:
         except Exception as e:
             logger.warning(f"[notifications] volatile publish failed: {e}")
 
-    async def _best_effort_publish_and_mark_sent(self, *, db: Session, outbox: NotificationOutbox) -> None:
+    async def _best_effort_publish_and_mark_sent(self, *, db: AsyncSession, outbox: NotificationOutbox) -> None:
         """
         Publish outbox payload and mark SENT if publish succeeds.
 
@@ -205,25 +205,26 @@ class NotificationService:
 
         try:
             outbox.status = "SENT"
-            outbox.sent_at = datetime.utcnow()
-            outbox.updated_at = datetime.utcnow()
-            db.commit()
+            outbox.sent_at = datetime.now(timezone.utc)
+            outbox.updated_at = datetime.now(timezone.utc)
+            await db.commit()
         except Exception as e:
             # Publish succeeded but DB update failed: at-least-once semantics still hold.
             logger.warning(f"[notifications] failed to mark outbox SENT: {e}")
 
-    def get_unread_count(self, db: Session, *, user_id: str) -> int:
+    async def get_unread_count(self, db: AsyncSession, *, user_id: str) -> int:
         """Compute unread count (read_at IS NULL)."""
-        return int(
-            db.query(func.count(Notification.id))
-            .filter(Notification.user_id == user_id, Notification.read_at.is_(None))
-            .scalar()
-            or 0
+        result = await db.execute(
+            select(func.count(Notification.id)).where(
+                Notification.user_id == user_id,
+                Notification.read_at.is_(None),
+            )
         )
+        return int(result.scalar() or 0)
 
     async def emit_batch(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         user_ids: list[str],
         category: NotificationCategory,
@@ -269,7 +270,7 @@ class NotificationService:
         # DURABLE path: batch create all records, single commit
         notifications: list[Notification] = []
         outbox_records: list[NotificationOutbox] = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for user_id in user_ids:
             notification = Notification(
@@ -284,7 +285,7 @@ class NotificationService:
             db.add(notification)
 
         # Single flush to get all IDs
-        db.flush()
+        await db.flush()
 
         # Now create outbox records with notification IDs available
         public_notifications: list[NotificationPublic] = []
@@ -317,11 +318,7 @@ class NotificationService:
             db.add(outbox)
 
         # Single commit for entire batch
-        db.commit()
-
-        # Refresh all notifications to get final state
-        for notification in notifications:
-            db.refresh(notification)
+        await db.commit()
 
         # Best-effort publish all (non-blocking, failures stay PENDING for worker)
         for outbox in outbox_records:

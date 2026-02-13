@@ -11,7 +11,7 @@ def datetime_to_utc_z(value: datetime) -> str:
     Serialize datetime to RFC3339 with trailing 'Z'.
 
     Policy:
-    - Naive datetime is treated as UTC (matches backend usage of datetime.utcnow()).
+    - Naive datetime is treated as UTC (matches backend usage of datetime.now(timezone.utc)).
     - Aware datetime is converted to UTC.
     """
     if value.tzinfo is None:

@@ -1,10 +1,13 @@
-"""Game history API endpoints."""
+"""Game history API endpoints.
+
+Migrated to async database access using SQLAlchemy 2.0 async API.
+"""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, and_, select
 
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.api.dependencies import get_current_user
 from app.models.game_history import GameSession, GameParticipant
 from app.models.room import Room
@@ -24,7 +27,7 @@ router = APIRouter(prefix="/game-history", tags=["game-history"])
 @router.get("", response_model=GameHistoryListResponse)
 async def get_game_history_list(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     winner: Optional[str] = Query(None, description="Filter by winner: 'werewolf', 'villager', or 'draw'"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page")
@@ -45,36 +48,45 @@ async def get_game_history_list(
         )
 
     # Optimized query using JOINs to avoid N+1 queries in the loop
-    player_counts = db.query(
-        GameParticipant.game_id,
-        func.count(GameParticipant.id).label("count")
-    ).group_by(GameParticipant.game_id).subquery()
+    player_counts = (
+        select(
+            GameParticipant.game_id,
+            func.count(GameParticipant.id).label("count")
+        ).group_by(GameParticipant.game_id)
+    ).subquery()
 
-    query = db.query(
-        GameSession,
-        Room.name.label("room_name"),
-        GameParticipant.role.label("my_role"),
-        GameParticipant.is_winner.label("my_is_winner"),
-        player_counts.c.count.label("player_count")
-    ).join(
-        GameParticipant,
-        and_(GameSession.id == GameParticipant.game_id, GameParticipant.user_id == user_id)
-    ).outerjoin(
-        Room, GameSession.room_id == Room.id
-    ).join(
-        player_counts, GameSession.id == player_counts.c.game_id
-    ).filter(
-        GameSession.finished_at.isnot(None)
-    )
-
+    conditions = [
+        GameSession.finished_at.isnot(None),
+    ]
     if winner:
-        query = query.filter(GameSession.winner == winner)
+        conditions.append(GameSession.winner == winner)
 
-    total = query.count()
-    results = query.order_by(GameSession.finished_at.desc()) \
-        .offset((page - 1) * page_size) \
-        .limit(page_size) \
-        .all()
+    # Count total
+    count_stmt = (
+        select(func.count(GameSession.id))
+        .join(GameParticipant, and_(GameSession.id == GameParticipant.game_id, GameParticipant.user_id == user_id))
+        .where(*conditions)
+    )
+    total = int((await db.execute(count_stmt)).scalar() or 0)
+
+    # Fetch page with JOINs
+    stmt = (
+        select(
+            GameSession,
+            Room.name.label("room_name"),
+            GameParticipant.role.label("my_role"),
+            GameParticipant.is_winner.label("my_is_winner"),
+            player_counts.c.count.label("player_count"),
+        )
+        .join(GameParticipant, and_(GameSession.id == GameParticipant.game_id, GameParticipant.user_id == user_id))
+        .outerjoin(Room, GameSession.room_id == Room.id)
+        .join(player_counts, GameSession.id == player_counts.c.game_id)
+        .where(*conditions)
+        .order_by(GameSession.finished_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    results = (await db.execute(stmt)).all()
 
     game_items = [
         GameHistoryItem(
@@ -102,7 +114,7 @@ async def get_game_history_list(
 async def get_game_history_detail(
     game_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get detailed information about a specific game.
@@ -114,7 +126,7 @@ async def get_game_history_detail(
     user_id = current_user["user_id"]
 
     # Get game with permission check
-    game = GameHistoryService.get_game_detail(db, game_id, user_id)
+    game = await GameHistoryService.get_game_detail(db, game_id, user_id)
 
     if not game:
         raise HTTPException(
@@ -123,15 +135,15 @@ async def get_game_history_detail(
         )
 
     # Get room name
-    room_name = GameHistoryService.get_room_name(db, game.room_id) if game.room_id else "Unknown Room"
+    room_name = await GameHistoryService.get_room_name(db, game.room_id) if game.room_id else "Unknown Room"
 
     # Get user's participant info
-    participant = GameHistoryService.get_user_participant(db, game.id, user_id)
+    participant = await GameHistoryService.get_user_participant(db, game.id, user_id)
     my_role = participant.role if participant and participant.role else "Unknown"
     is_winner = participant.is_winner if participant else False
 
     # Get all participants
-    all_participants = GameHistoryService.get_all_participants(db, game.id)
+    all_participants = await GameHistoryService.get_all_participants(db, game.id)
 
     # Build player list
     players = [
@@ -166,7 +178,7 @@ async def get_game_history_detail(
 async def get_game_replay(
     game_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(2000, ge=1, le=5000, description="Pagination limit (max 5000)"),
 ):
@@ -179,7 +191,7 @@ async def get_game_replay(
     """
     user_id = current_user["user_id"]
 
-    result = GameHistoryService.get_game_replay_messages(db, game_id, user_id, offset=offset, limit=limit)
+    result = await GameHistoryService.get_game_replay_messages(db, game_id, user_id, offset=offset, limit=limit)
     if not result:
         raise HTTPException(
             status_code=404,

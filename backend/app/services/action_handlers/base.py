@@ -43,8 +43,8 @@ def validate_target(
         raise ValueError(f"无效的目标：{target_id} 号玩家已死亡")
 
     # Prevent self-targeting for certain actions
+    # Note: KILL is intentionally excluded — wolves may self-kill (自刀策略)
     no_self_target_actions = [
-        ActionType.KILL,      # MAJOR FIX: Add KILL to prevent wolves from voting themselves
         ActionType.POISON,
         ActionType.VOTE,
         ActionType.SHOOT,
@@ -53,7 +53,6 @@ def validate_target(
 
     if action_type in no_self_target_actions and target_id == actor_seat:
         action_names = {
-            ActionType.KILL: "击杀",
             ActionType.POISON: "毒",
             ActionType.VOTE: "投票给",
             ActionType.SHOOT: "射击",

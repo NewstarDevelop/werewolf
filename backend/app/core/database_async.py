@@ -55,7 +55,11 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency injection: Get async database session with auto-commit.
+    Dependency injection: Get async database session.
+
+    Callers MUST commit explicitly via ``await db.commit()``.
+    Rollback is performed automatically if an exception propagates.
+    The session is closed after the request.
 
     Usage:
         @router.get("/api/rooms")
@@ -63,62 +67,16 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
             result = await db.execute(select(Room))
             ...
 
-    The session is automatically closed after the request.
-    Rollback is performed if an exception occurs.
-
-    IMPORTANT: Auto-commit on success is convenient but has trade-offs:
-    - Pros: Less boilerplate, works well for simple CRUD operations
-    - Cons: External side effects (WebSocket, notifications) may execute before commit,
-            leading to consistency issues if commit fails
-
-    BEST PRACTICE for operations with external side effects:
-    1. Use get_async_db_no_autocommit() instead for explicit control
-    2. Perform all DB operations first
-    3. Call await db.commit() explicitly
-    4. Only trigger external side effects (WebSocket, notifications) AFTER successful commit
-
-    Example:
-        async def create_room(db: AsyncSession = Depends(get_async_db_no_autocommit)):
-            room = Room(...)
-            db.add(room)
-            await db.commit()  # Explicit commit
-            # Only send notifications after commit succeeds
-            await notify_users(room.id)
-    """
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-async def get_async_db_no_autocommit() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependency injection: Get async database session WITHOUT auto-commit.
-
-    Use this when you need explicit transaction control, especially when:
-    - Performing operations with external side effects (WebSocket, notifications)
-    - Need to ensure side effects only happen after successful commit
-    - Require fine-grained transaction boundaries
-
-    Usage:
         @router.post("/api/rooms")
-        async def create_room(db: AsyncSession = Depends(get_async_db_no_autocommit)):
+        async def create_room(db: AsyncSession = Depends(get_async_db)):
             room = Room(...)
             db.add(room)
-            await db.commit()  # Must commit explicitly
-            # Side effects only after commit
+            await db.commit()
             await notify_users(room.id)
-
-    The session is automatically closed after the request.
-    Rollback is performed if an exception occurs.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            # No auto-commit - caller must commit explicitly
         except Exception:
             await session.rollback()
             raise
@@ -130,6 +88,8 @@ async def init_async_db():
     This should be called during application startup for development.
     In production, use Alembic migrations instead.
     """
+    _ensure_db_config_logged()
+
     from app.models.base import Base
 
     if settings.DEBUG:
@@ -164,4 +124,16 @@ def _sanitize_db_url(url: str) -> str:
     except Exception:
         return url[:20] + "***"
 
-logger.info(f"Async database configured: {_sanitize_db_url(settings.DATABASE_URL_ASYNC)}")
+def _log_db_config():
+    """Log database configuration. Called lazily to ensure logging is configured."""
+    logger.info(f"Async database configured: {_sanitize_db_url(settings.DATABASE_URL_ASYNC)}")
+
+# Defer logging until first use rather than at import time,
+# when the logging system may not yet be configured.
+_db_config_logged = False
+
+def _ensure_db_config_logged():
+    global _db_config_logged
+    if not _db_config_logged:
+        _db_config_logged = True
+        _log_db_config()

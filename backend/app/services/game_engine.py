@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.models.game import Game, Player, game_store, WOLF_ROLES
 from app.schemas.enums import (
-    GamePhase, GameStatus, Role, ActionType, MessageType, Winner
+    GamePhase, GameStatus, Role, ActionType
 )
 from app.services.llm import LLMService, sanitize_text_input
 from app.services.phase_handlers import (
@@ -28,8 +28,6 @@ from app.services.phase_handlers import (
     # Shoot handlers
     handle_death_shoot,
     handle_hunter_shoot,
-    continue_after_death_shoot,
-    continue_after_hunter,
 )
 from app.services.action_handlers import (
     handle_wolf_chat_action,
@@ -44,7 +42,6 @@ from app.services.action_handlers import (
     handle_death_shoot_action,
     handle_hunter_shoot_action,
 )
-from app.services.action_handlers.base import validate_target
 from app.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -55,6 +52,11 @@ class GameEngine:
 
     def __init__(self):
         self.llm = LLMService()
+        # Register per-game rate limiter cleanup hook so resources are freed
+        # when games are deleted or expire from GameStore.
+        game_store._cleanup_hooks.append(
+            lambda game_id: self.llm._per_game_limiter.cleanup_game(game_id)
+        )
 
     async def close(self) -> None:
         """
@@ -123,11 +125,16 @@ class GameEngine:
                 new_phase_value,
                 extra={"game_id": game.id},
             )
+            # Persist snapshot after phase transition, or clean up on game over
+            if result.get("status") == "game_over":
+                game_store._delete_snapshot(game_id)
+            else:
+                game_store.save_game_state(game_id)
             return result
 
         return {"status": "error", "message": f"Unknown phase: {game.phase}"}
 
-    def process_human_action(
+    async def process_human_action(
         self,
         game_id: str,
         seat_id: int,
@@ -135,7 +142,7 @@ class GameEngine:
         target_id: Optional[int] = None,
         content: Optional[str] = None
     ) -> dict:
-        """Process an action from the human player."""
+        """Process an action from the human player (async for lock compatibility)."""
         game = game_store.get_game(game_id)
         if not game:
             return {"success": False, "message": "Game not found"}
@@ -149,11 +156,7 @@ class GameEngine:
             return {"success": False, "message": "Invalid player"}
 
         # T-STAB-001 Fix: Use human_seats for multi-player, fallback to is_human for single-player
-        is_human_player = (
-            (game.human_seats and seat_id in game.human_seats) or
-            (not game.human_seats and player.is_human)
-        )
-        if not is_human_player:
+        if not game.is_human_player(seat_id):
             return {"success": False, "message": "Invalid player"}
 
         # Allow dead Hunter or Wolf King to shoot in their respective phases
@@ -181,6 +184,10 @@ class GameEngine:
         )
         if result.get("success") and game.state_version == start_version:
             game.increment_version()
+
+        # Persist snapshot after human action
+        if result.get("success"):
+            game_store.save_game_state(game_id)
 
         return result
 

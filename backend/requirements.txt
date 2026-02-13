@@ -23,6 +23,7 @@ python-multipart==0.0.20
 # Security
 PyJWT==2.10.1
 bcrypt==4.2.1
+cryptography==44.0.0
 
 # Database - SQLAlchemy with async support
 sqlalchemy==2.0.37
@@ -67,5 +68,4 @@ uvloop==0.21.0; sys_platform != "win32"
 httptools==0.6.4
 watchfiles==1.0.4
 websockets==14.2
-python-dotenv==1.0.1
 PyYAML==6.0.2

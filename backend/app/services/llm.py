@@ -1,7 +1,7 @@
 """LLM Service - Multi-provider AI implementation with retry and fallback."""
 import os
 import json
-import random
+import secrets
 import logging
 import asyncio
 import re
@@ -21,6 +21,8 @@ from app.services.prompts import (
 
 if TYPE_CHECKING:
     from app.models.game import Game, Player
+
+_rng = secrets.SystemRandom()
 
 logger = logging.getLogger(__name__)
 
@@ -462,16 +464,16 @@ class LLMService:
         role = player.role.value
         lang_speeches = FALLBACK_SPEECHES.get(language, FALLBACK_SPEECHES["zh"])
         speeches = lang_speeches.get(role, lang_speeches["villager"])
-        speak = random.choice(speeches)
+        speak = _rng.choice(speeches)
 
         # Determine action target for non-speech actions
         action_target = None
         if action_type in ["vote", "kill", "verify", "shoot"] and targets:
-            action_target = random.choice(targets)
+            action_target = _rng.choice(targets)
         elif action_type in ["witch_save", "witch_poison"]:
             # 50% chance to use potion
-            if random.random() < 0.5 and targets:
-                action_target = targets[0] if action_type == "witch_save" else random.choice(targets)
+            if _rng.random() < 0.5 and targets:
+                action_target = targets[0] if action_type == "witch_save" else _rng.choice(targets)
             else:
                 action_target = 0  # Skip
 
@@ -557,7 +559,7 @@ class LLMService:
                             logger.warning(
                                 f"Invalid target {response.action_target}, expected one of {targets}"
                             )
-                            response.action_target = random.choice(targets)
+                            response.action_target = _rng.choice(targets)
 
                 # Safe logging with None check for speak
                 speak_preview = (response.speak or "")[:50]
@@ -605,14 +607,14 @@ class LLMService:
     ) -> int:
         """Decide who to kill as werewolf (WL-010: async)."""
         response = await self.generate_response(player, game, "kill", targets)
-        return response.action_target if response.action_target else random.choice(targets)
+        return response.action_target if response.action_target else _rng.choice(targets)
 
     async def decide_verify_target(
         self, player: "Player", game: "Game", targets: list[int]
     ) -> int:
         """Decide who to verify as seer (WL-010: async)."""
         response = await self.generate_response(player, game, "verify", targets)
-        return response.action_target if response.action_target else random.choice(targets)
+        return response.action_target if response.action_target else _rng.choice(targets)
 
     async def decide_witch_action(self, player: "Player", game: "Game") -> dict:
         """Decide witch action (save/poison) with value calculation (WL-010: async)."""
@@ -685,7 +687,7 @@ class LLMService:
     ) -> int:
         """Decide who to vote for (WL-010: async)."""
         response = await self.generate_response(player, game, "vote", targets + [0])
-        return response.action_target if response.action_target is not None else random.choice(targets)
+        return response.action_target if response.action_target is not None else _rng.choice(targets)
 
     async def decide_shoot_target(
         self, player: "Player", game: "Game", targets: list[int]

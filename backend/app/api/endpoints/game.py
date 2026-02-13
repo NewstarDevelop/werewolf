@@ -6,13 +6,11 @@ from typing import List, Dict, Optional
 from app.core.config import settings
 from app.core.auth import create_player_token
 from app.core.database_async import get_async_db
-from app.models.game import game_store, WOLF_ROLES
+from app.models.game import game_store
 from app.api.dependencies import get_current_player, get_optional_user
-from app.schemas.enums import (
-    GamePhase, GameStatus, Role, ActionType, MessageType
-)
+from app.schemas.enums import GameStatus
 from app.schemas.game import (
-    GameStartRequest, GameStartResponse, GameState, StepResponse, PendingAction
+    GameStartRequest, GameStartResponse, StepResponse
 )
 from app.schemas.action import ActionRequest, ActionResponse
 from app.schemas.player import PlayerPublic
@@ -152,7 +150,7 @@ def verify_game_membership(game_id: str, current_player: Dict):
 
 
 @router.post("/start", response_model=GameStartResponse)
-def start_game(
+async def start_game(
     request: GameStartRequest,
     current_user: Optional[Dict] = Depends(get_optional_user)
 ) -> GameStartResponse:
@@ -203,7 +201,7 @@ def start_game(
 
 
 @router.get("/{game_id}/state")
-def get_game_state(
+async def get_game_state(
     game_id: str,
     current_player: Dict = Depends(get_current_player)
 ) -> dict:
@@ -221,135 +219,6 @@ def get_game_state(
     # WL-BUG-001 Fix: Use effective_player_id which may be user_id fallback
     player_id = current_player.get("effective_player_id") or current_player["player_id"]
     return game.get_state_for_player(player_id)
-
-
-def _get_pending_action(game, human_player) -> PendingAction | None:
-    """Determine what action the human player needs to take."""
-    phase = game.phase
-    role = human_player.role
-
-    # Hunter can shoot after being eliminated (by vote/kill). This phase is explicitly a "last action".
-    if phase == GamePhase.HUNTER_SHOOT and role == Role.HUNTER:
-        if game.current_actor_seat == human_player.seat_id and human_player.can_shoot:
-            alive_seats = game.get_alive_seats()
-            return PendingAction(
-                type=ActionType.SHOOT,
-                choices=alive_seats + [0],  # 0 = skip
-                message="你可以开枪带走一名玩家"
-            )
-
-    if not human_player.is_alive:
-        return None
-
-    alive_seats = game.get_alive_seats()
-    other_alive = [s for s in alive_seats if s != human_player.seat_id]
-
-    # Night werewolf chat phase - all wolf-aligned roles participate
-    if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role in WOLF_ROLES:
-        if human_player.seat_id not in game.wolf_chat_completed:
-            return PendingAction(
-                type=ActionType.SPEAK,
-                choices=[],
-                message="与狼队友讨论今晚击杀目标（发言后自动进入投票）"
-            )
-
-    # Night werewolf phase - regular werewolf and wolf king vote
-    # Note: White wolf king has separate handling in models/game.py with self-destruct option
-    # TODO: Add white wolf king handling here for single-player mode parity
-    if phase == GamePhase.NIGHT_WEREWOLF and role in {Role.WEREWOLF, Role.WOLF_KING}:
-        if human_player.seat_id not in game.wolf_votes:
-            # 狼人可以击杀任何存活玩家（包括自己和队友，实现自刀策略）
-            kill_targets = alive_seats[:]
-            return PendingAction(
-                type=ActionType.KILL,
-                choices=kill_targets,
-                message="请选择今晚要击杀的目标"
-            )
-
-    # Night seer phase
-    elif phase == GamePhase.NIGHT_SEER and role == Role.SEER:
-        # If already verified this night, allow auto-step to proceed.
-        if game.seer_verified_this_night:
-            return None
-        unverified = [s for s in other_alive if s not in human_player.verified_players]
-        if not unverified:
-            return None
-        return PendingAction(
-            type=ActionType.VERIFY,
-            choices=unverified,
-            message="请选择要查验的玩家"
-        )
-
-    # Night witch phase
-    elif phase == GamePhase.NIGHT_WITCH and role == Role.WITCH:
-        used_save_this_night = any(
-            a.day == game.day
-            and a.player_id == human_player.seat_id
-            and a.action_type == ActionType.SAVE
-            for a in game.actions
-        )
-
-        # 第一步：先决策解药（或跳过解药）
-        if not game.witch_save_decided:
-            if human_player.has_save_potion and game.night_kill_target:
-                return PendingAction(
-                    type=ActionType.SAVE,
-                    choices=[game.night_kill_target, 0],  # 0 = skip
-                    message=f"今晚{game.night_kill_target}号被杀，是否使用解药？"
-                )
-
-            no_save_reason = "今晚无人被杀" if game.night_kill_target is None else "你没有解药"
-            # 为保持前端兼容，这里仍返回 SAVE 类型；前端点“技能”按钮将发送 SKIP 来跳过。
-            return PendingAction(
-                type=ActionType.SAVE,
-                choices=[0],
-                message=f"{no_save_reason}，点击技能按钮跳过解药决策"
-            )
-
-        # 第二步：再决策毒药（或跳过毒药）
-        if not game.witch_poison_decided:
-            # 规则：同一晚使用了解药则不能再用毒药
-            if used_save_this_night:
-                return PendingAction(
-                    type=ActionType.POISON,
-                    choices=[0],
-                    message="你今晚已使用解药，无法再使用毒药，点击技能按钮继续"
-                )
-
-            if human_player.has_poison_potion:
-                return PendingAction(
-                    type=ActionType.POISON,
-                    choices=other_alive + [0],  # 0 = skip
-                    message=f"今晚{game.night_kill_target}号被杀，是否使用毒药？选择目标或跳过"
-                    if game.night_kill_target is not None else "是否使用毒药？选择目标或跳过"
-                )
-
-            return PendingAction(
-                type=ActionType.POISON,
-                choices=[0],
-                message="你没有可用的毒药，点击技能按钮继续"
-            )
-
-    # Day speech phase
-    elif phase == GamePhase.DAY_SPEECH:
-        if (game.current_speech_index < len(game.speech_order) and
-            game.speech_order[game.current_speech_index] == human_player.seat_id):
-            return PendingAction(
-                type=ActionType.SPEAK,
-                choices=[],
-                message="轮到你发言了"
-            )
-
-    # Day vote phase
-    elif phase == GamePhase.DAY_VOTE:
-        if human_player.seat_id not in game.day_votes:
-            return PendingAction(
-                type=ActionType.VOTE,
-                choices=other_alive + [0],  # 0 = abstain
-                message="请投票选择要放逐的玩家，或弃票"
-            )
-
-    return None
 
 
 @router.post("/{game_id}/step", response_model=StepResponse)
@@ -448,7 +317,7 @@ async def submit_action(
 
     # P0-STAB-001: Acquire per-game lock to prevent concurrent state corruption
     async with game_store.get_lock(game_id):
-        result = game_engine.process_human_action(
+        result = await game_engine.process_human_action(
             game_id=game_id,
             seat_id=seat_id,  # From token, not request.seat_id
             action_type=request.action_type,
@@ -512,7 +381,7 @@ async def delete_game(
 
 
 @router.get("/{game_id}/logs")
-def get_logs(
+async def get_logs(
     game_id: str,
     limit: int = 100,
     current_player: Dict = Depends(get_current_player)
@@ -532,7 +401,7 @@ def get_logs(
 
 
 @router.get("/{game_id}/debug-messages")
-def get_debug_messages(
+async def get_debug_messages(
     game_id: str,
     current_player: Dict = Depends(get_current_player)
 ) -> Dict[str, List[MessageInGame]]:
@@ -596,8 +465,7 @@ async def analyze_game_performance(
         return analysis
     except Exception as e:
         # P0-2 Fix: Log detailed error, return generic message
-        import logging
-        logging.getLogger(__name__).error(f"Analysis failed for game {game_id}: {e}", exc_info=True)
+        logger.error(f"Analysis failed for game {game_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Analysis failed. Please try again later."

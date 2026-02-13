@@ -7,7 +7,12 @@ from fastapi import HTTPException, status
 
 
 class AppException(Exception):
-    """Base exception for application errors."""
+    """Base exception for application errors.
+
+    Attributes:
+        http_status: HTTP status code for the global exception handler.
+    """
+    http_status: int = 500
 
     def __init__(
         self,
@@ -30,11 +35,12 @@ class AppException(Exception):
 
 class GameException(AppException):
     """Game-related exceptions."""
-    pass
+    http_status = 400
 
 
 class GameNotFoundError(GameException):
     """Raised when a game is not found."""
+    http_status = 404
 
     def __init__(self, game_id: str):
         super().__init__(
@@ -90,7 +96,7 @@ class PlayerDeadError(GameException):
 
 class AuthException(AppException):
     """Authentication-related exceptions."""
-    pass
+    http_status = 401
 
 
 class InvalidCredentialsError(AuthException):
@@ -115,6 +121,7 @@ class TokenExpiredError(AuthException):
 
 class UnauthorizedError(AuthException):
     """Raised when user is not authorized."""
+    http_status = 403
 
     def __init__(self, message: str = "Unauthorized"):
         super().__init__(
@@ -125,11 +132,12 @@ class UnauthorizedError(AuthException):
 
 class RoomException(AppException):
     """Room-related exceptions."""
-    pass
+    http_status = 400
 
 
 class RoomNotFoundError(RoomException):
     """Raised when a room is not found."""
+    http_status = 404
 
     def __init__(self, room_id: str):
         super().__init__(
@@ -141,6 +149,7 @@ class RoomNotFoundError(RoomException):
 
 class RoomFullError(RoomException):
     """Raised when a room is full."""
+    http_status = 409
 
     def __init__(self, room_id: str):
         super().__init__(
@@ -152,6 +161,7 @@ class RoomFullError(RoomException):
 
 class RoomInProgressError(RoomException):
     """Raised when trying to join a room with game in progress."""
+    http_status = 409
 
     def __init__(self, room_id: str):
         super().__init__(
@@ -179,6 +189,7 @@ class InvalidConfigError(ConfigException):
 
 class ServerCapacityError(AppException):
     """Raised when server is at capacity."""
+    http_status = 503
 
     def __init__(self, message: str = "Server at capacity"):
         super().__init__(

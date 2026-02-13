@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import signal
-import time
 from typing import Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.game import verify_admin
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.models.user import User
 from app.schemas.admin import (
     BroadcastNotificationRequest,
@@ -27,10 +28,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_BROADCAST_PAGE_SIZE = 500
 
 
-def _schedule_shutdown():
-    """Schedule graceful shutdown after response is sent."""
+def _send_sigterm():
+    """Send SIGTERM to self for graceful shutdown."""
     try:
-        time.sleep(1)  # Allow response to be sent
         os.kill(os.getpid(), signal.SIGTERM)
     except Exception as e:
         logger.error(f"Failed to send SIGTERM: {e}, pid={os.getpid()}")
@@ -39,7 +39,6 @@ def _schedule_shutdown():
 @router.post("/restart", response_model=RestartResponse, status_code=202)
 async def restart_service(
     request: Request,
-    background_tasks: BackgroundTasks,
     actor: Dict = Depends(verify_admin),
 ):
     """
@@ -60,7 +59,9 @@ async def restart_service(
 
     logger.warning(f"RESTART_REQUESTED by actor={actor_id} from ip={client_ip}")
 
-    background_tasks.add_task(_schedule_shutdown)
+    # Schedule SIGTERM after 1s on the event loop (non-blocking, no threadpool)
+    loop = asyncio.get_event_loop()
+    loop.call_later(1, _send_sigterm)
 
     return RestartResponse(
         status="accepted",
@@ -78,7 +79,7 @@ async def broadcast_notifications(
     request: Request,
     body: BroadcastNotificationRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Broadcast a notification to all registered users.
@@ -103,19 +104,22 @@ async def broadcast_notifications(
     )
 
     # Query active users with pagination
-    base_query = db.query(User.id).filter(User.is_active.is_(True))
-    total_targets = int(base_query.count() or 0)
+    count_result = await db.execute(
+        select(func.count(User.id)).where(User.is_active.is_(True))
+    )
+    total_targets = int(count_result.scalar() or 0)
     processed = 0
     offset = 0
 
     while True:
-        user_ids = [
-            row[0]
-            for row in base_query.order_by(User.id)
+        result = await db.execute(
+            select(User.id)
+            .where(User.is_active.is_(True))
+            .order_by(User.id)
             .offset(offset)
             .limit(DEFAULT_BROADCAST_PAGE_SIZE)
-            .all()
-        ]
+        )
+        user_ids = [row[0] for row in result.all()]
         if not user_ids:
             break
 

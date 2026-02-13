@@ -212,16 +212,18 @@ async def authenticate_admin_websocket(
 
 async def close_with_error(
     websocket: WebSocket,
-    error: WebSocketAuthError,
+    code: int,
+    message: str = "",
 ) -> None:
-    """Close WebSocket with authentication error.
+    """Close WebSocket with an error code and message.
 
     Args:
         websocket: WebSocket connection
-        error: Authentication error
+        code: WebSocket close code (e.g. 4001, 4002, 4003, 4004)
+        message: Human-readable error message
     """
     if websocket.client_state == WebSocketState.CONNECTED:
-        await websocket.close(code=error.code, reason=error.message)
+        await websocket.close(code=code, reason=message)
     elif websocket.client_state == WebSocketState.CONNECTING:
         # Not yet accepted - just close
-        await websocket.close(code=error.code)
+        await websocket.close(code=code)

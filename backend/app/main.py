@@ -1,11 +1,15 @@
 """FastAPI application entry point."""
 import asyncio
 import logging
-from fastapi import FastAPI
+from datetime import datetime, timezone
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.api import api_router
 from app.core.config import settings
+from app.core.exceptions import AppException
 from app.services.log_manager import init_game_logging
 
 # Configure logging
@@ -15,14 +19,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# MINOR FIX: Track background tasks for proper cleanup
-_background_tasks: list[asyncio.Task] = []
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown logic."""
+    # ── Startup ──
+    background_tasks: list[asyncio.Task] = []
+    await _startup(background_tasks)
+    yield
+    # ── Shutdown ──
+    await _shutdown(background_tasks)
+
 
 app = FastAPI(
     title="Werewolf AI Game API",
     description="狼人杀 AI 游戏后端 API",
     version="1.0.0",
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 # T-SEC-005: CORS configuration from environment
@@ -41,8 +55,32 @@ app.add_middleware(
 app.include_router(api_router)
 
 
-@app.on_event("startup")
-async def startup_event():
+# ── Global Exception Handlers ──
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """Convert AppException subclasses to structured JSON responses."""
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler to prevent stack trace leaking in production."""
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "INTERNAL_ERROR",
+            "message": "An unexpected error occurred." if not settings.DEBUG else str(exc),
+            "details": {},
+        },
+    )
+
+
+async def _startup(background_tasks: list[asyncio.Task]):
     """Log startup information and initialize services."""
     logger.info("Werewolf AI Game API starting up...")
 
@@ -118,9 +156,17 @@ async def startup_event():
     # 2. Schema migrations are applied (alembic upgrade head)
     # 3. Health checks don't fail during migration
 
+    # Recover game state from persistence snapshots (crash recovery)
+    from app.models.game import game_store
+    try:
+        recovered = game_store.recover_from_snapshots()
+        if recovered:
+            logger.info(f"Recovered {recovered} game(s) from persistence snapshots")
+    except Exception as e:
+        logger.warning(f"Game snapshot recovery failed (non-fatal): {e}")
+
     # WL-011 Fix: Reset orphaned rooms after restart
-    # Since game state is stored in-memory, rooms in PLAYING state
-    # after restart have lost their game objects and must be reset
+    # Only reset rooms whose games were NOT recovered from snapshots
     from app.core.database_async import AsyncSessionLocal
     from app.services.room_manager import room_manager
 
@@ -141,13 +187,18 @@ async def startup_event():
 
     # FIX: Start background task for periodic rate limiter cleanup
     task1 = asyncio.create_task(_periodic_rate_limiter_cleanup())
-    _background_tasks.append(task1)
+    background_tasks.append(task1)
     logger.info("Rate limiter cleanup task started")
 
     # FIX: Start background task for periodic game store cleanup
     task2 = asyncio.create_task(_periodic_game_store_cleanup())
-    _background_tasks.append(task2)
+    background_tasks.append(task2)
     logger.info("Game store cleanup task started")
+
+    # Start background task for periodic DB token/state cleanup
+    task3 = asyncio.create_task(_periodic_db_token_cleanup())
+    background_tasks.append(task3)
+    logger.info("DB token cleanup task started")
 
 
 async def _periodic_rate_limiter_cleanup():
@@ -203,8 +254,47 @@ async def _periodic_game_store_cleanup():
             await asyncio.sleep(60)  # Wait 1 minute before retry
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
+async def _periodic_db_token_cleanup():
+    """Background task to clean up expired OAuthState and RefreshToken records.
+
+    Runs every 6 hours to prevent unbounded table growth from accumulated
+    expired OAuth states and revoked/expired refresh tokens.
+    """
+    from app.core.database_async import AsyncSessionLocal
+    from app.models.user import OAuthState, RefreshToken
+    from sqlalchemy import delete
+
+    while True:
+        try:
+            await asyncio.sleep(21600)  # Run every 6 hours
+
+            now = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as db:
+                # Clean up expired OAuth states (> 10 min old, should be used or expired)
+                oauth_result = await db.execute(
+                    delete(OAuthState).where(OAuthState.expires_at < now)
+                )
+                oauth_cleaned = oauth_result.rowcount or 0
+
+                # Clean up expired or revoked refresh tokens
+                refresh_result = await db.execute(
+                    delete(RefreshToken).where(RefreshToken.expires_at < now)
+                )
+                refresh_cleaned = refresh_result.rowcount or 0
+
+                await db.commit()
+
+            if oauth_cleaned > 0 or refresh_cleaned > 0:
+                logger.info(
+                    f"DB token cleanup: oauth_states={oauth_cleaned}, "
+                    f"refresh_tokens={refresh_cleaned} expired records removed"
+                )
+        except Exception as e:
+            logger.error(f"Error in DB token cleanup task: {e}")
+            await asyncio.sleep(60)  # Wait 1 minute before retry
+
+
+async def _shutdown(background_tasks: list[asyncio.Task]):
     """
     A7-FIX: Clean up resources on shutdown.
 
@@ -214,13 +304,13 @@ async def shutdown_event():
     logger.info("Werewolf AI Game API shutting down...")
 
     # MINOR FIX: Cancel and wait for background tasks
-    if _background_tasks:
-        logger.info(f"Cancelling {len(_background_tasks)} background task(s)...")
-        for task in _background_tasks:
+    if background_tasks:
+        logger.info(f"Cancelling {len(background_tasks)} background task(s)...")
+        for task in background_tasks:
             task.cancel()
 
         # Wait for all tasks to complete cancellation
-        await asyncio.gather(*_background_tasks, return_exceptions=True)
+        await asyncio.gather(*background_tasks, return_exceptions=True)
         logger.info("Background tasks cancelled")
 
     # Close game engine (which closes LLM clients)
@@ -230,6 +320,13 @@ async def shutdown_event():
         logger.info("Game engine closed successfully")
     except Exception as e:
         logger.warning(f"Error closing game engine: {e}")
+
+    # Close async database connections
+    from app.core.database_async import close_async_db
+    try:
+        await close_async_db()
+    except Exception as e:
+        logger.warning(f"Error closing async database: {e}")
 
     # Close Redis connections if any
     from app.services.notification_emitter import _publisher, _publisher_initialized

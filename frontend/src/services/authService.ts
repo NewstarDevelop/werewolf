@@ -3,11 +3,13 @@
  *
  * Security: Uses HttpOnly cookies as primary authentication mechanism.
  * Token storage in localStorage has been removed to prevent XSS attacks.
+ *
+ * Uses fetchApi for unified timeout, retry, and error handling.
+ * skipRoomToken is set to true for all calls since auth APIs should
+ * only rely on HttpOnly cookie authentication, not room tokens.
  */
 import { clearUserToken } from '@/utils/token';
-import { parseApiError } from '@/utils/errorHandler';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+import { fetchApi, ApiError } from '@/lib/api-client';
 
 export interface User {
   id: string;
@@ -46,101 +48,90 @@ export class AuthError extends Error {
   }
 }
 
+/**
+ * Convert ApiError to AuthError for backward compatibility with consumers.
+ */
+function toAuthError(error: unknown): AuthError {
+  if (error instanceof ApiError) {
+    return new AuthError(error.detail, error.status);
+  }
+  if (error instanceof Error) {
+    return new AuthError(error.message, 0);
+  }
+  return new AuthError('Unknown error', 0);
+}
+
 export const authService = {
   async register(email: string, password: string, nickname: string): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/api/auth/register`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, nickname }),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseApiError(response);
-      throw new AuthError(errorMessage, response.status);
+    try {
+      return await fetchApi<AuthResponse>('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, nickname }),
+        skipRoomToken: true,
+        skipRetry: true,
+      });
+    } catch (error) {
+      throw toAuthError(error);
     }
-
-    return response.json();
   },
 
   async login(email: string, password: string): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseApiError(response);
-      throw new AuthError(errorMessage, response.status);
+    try {
+      return await fetchApi<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+        skipRoomToken: true,
+        skipRetry: true,
+      });
+    } catch (error) {
+      throw toAuthError(error);
     }
-
-    return response.json();
   },
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${API_BASE}/api/auth/logout`, {
+      await fetchApi<void>('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include',
+        skipRoomToken: true,
+        skipRetry: true,
       });
+    } catch (error) {
+      console.error('Logout API call failed:', error);
     } finally {
       clearUserToken();
     }
   },
 
   async getLinuxdoAuthUrl(nextUrl: string = '/lobby'): Promise<string> {
-    const response = await fetch(
-      `${API_BASE}/api/auth/oauth/linuxdo?next=${encodeURIComponent(nextUrl)}`,
-      { credentials: 'include' }
+    const data = await fetchApi<{ authorize_url: string }>(
+      `/api/auth/oauth/linuxdo?next=${encodeURIComponent(nextUrl)}`,
+      { skipRoomToken: true }
     );
-
-    if (!response.ok) {
-      throw new Error('Failed to get OAuth URL');
-    }
-
-    const data = await response.json();
     return data.authorize_url;
   },
 
   async getCurrentUser(): Promise<User> {
-    const response = await fetch(`${API_BASE}/api/users/me`, {
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseApiError(response);
-      throw new AuthError(errorMessage, response.status);
+    try {
+      return await fetchApi<User>('/api/users/me', {
+        skipRoomToken: true,
+      });
+    } catch (error) {
+      throw toAuthError(error);
     }
-
-    return response.json();
   },
 
   async updateProfile(updates: { nickname?: string; bio?: string; avatar_url?: string }): Promise<User> {
-    const response = await fetch(`${API_BASE}/api/users/me`, {
+    return fetchApi<User>('/api/users/me', {
       method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+      skipRoomToken: true,
+      skipRetry: true,
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update profile');
-    }
-
-    return response.json();
   },
 
   async getStats(): Promise<UserStats> {
-    const response = await fetch(`${API_BASE}/api/users/me/stats`, {
-      credentials: 'include',
+    return fetchApi<UserStats>('/api/users/me/stats', {
+      skipRoomToken: true,
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch stats');
-    }
-
-    return response.json();
   },
 };

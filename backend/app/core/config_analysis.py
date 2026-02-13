@@ -1,26 +1,33 @@
 """AI Analysis configuration.
 
 Extracted from config.py for better maintainability.
+Refactored to use Pydantic BaseSettings for declarative environment variable binding.
 """
-import os
 import logging
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from .config_providers import AIProviderConfig
 
 logger = logging.getLogger(__name__)
 
 
-class AnalysisConfig:
+class AnalysisConfig(BaseSettings):
     """Configuration for AI game analysis."""
 
-    def __init__(self, default_model: str):
-        self.ANALYSIS_PROVIDER: Optional[str] = os.getenv("ANALYSIS_PROVIDER") or None
-        self.ANALYSIS_MODEL: str = os.getenv("ANALYSIS_MODEL", default_model)
-        self.ANALYSIS_MAX_TOKENS: int = int(os.getenv("ANALYSIS_MAX_TOKENS", "4000"))
-        self.ANALYSIS_TEMPERATURE: float = float(os.getenv("ANALYSIS_TEMPERATURE", "0.7"))
-        self.ANALYSIS_MODE: str = os.getenv("ANALYSIS_MODE", "comprehensive")
-        self.ANALYSIS_LANGUAGE: str = os.getenv("ANALYSIS_LANGUAGE", "auto")
-        self.ANALYSIS_CACHE_ENABLED: bool = os.getenv("ANALYSIS_CACHE_ENABLED", "true").lower() == "true"
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    ANALYSIS_PROVIDER: Optional[str] = None
+    ANALYSIS_MODEL: str = "gpt-4o-mini"
+    ANALYSIS_MAX_TOKENS: int = 4000
+    ANALYSIS_TEMPERATURE: float = 0.7
+    ANALYSIS_MODE: str = "comprehensive"
+    ANALYSIS_LANGUAGE: str = "auto"
+    ANALYSIS_CACHE_ENABLED: bool = True
 
     def get_provider(self, providers: dict[str, AIProviderConfig]) -> Optional[AIProviderConfig]:
         """Get provider configuration for game analysis.

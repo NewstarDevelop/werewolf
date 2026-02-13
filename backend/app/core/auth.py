@@ -1,7 +1,7 @@
 """JWT authentication utilities."""
 import jwt
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from app.core.config import settings
 
@@ -23,7 +23,7 @@ def create_player_token(player_id: str, room_id: Optional[str] = None) -> str:
     payload = {
         "player_id": player_id,
         "is_admin": False,
-        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     }
 
     if room_id:
@@ -45,7 +45,7 @@ def create_admin_token() -> str:
     payload = {
         "player_id": "admin",
         "is_admin": True,
-        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     }
 
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -78,8 +78,8 @@ def create_user_token(
         "token_type": "user",
         "is_admin": is_admin,
         "jti": str(uuid.uuid4()),
-        "iat": int(datetime.utcnow().timestamp()),
-        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+        "iat": int(datetime.now(timezone.utc).timestamp()),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     }
 
     if room_id:
@@ -104,8 +104,8 @@ def create_access_token(claims: Dict) -> str:
     # Add standard claims
     payload = {
         "jti": str(uuid.uuid4()),
-        "iat": int(datetime.utcnow().timestamp()),
-        "exp": datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
+        "iat": int(datetime.now(timezone.utc).timestamp()),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
         **claims
     }
 

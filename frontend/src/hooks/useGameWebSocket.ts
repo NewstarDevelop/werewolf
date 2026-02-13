@@ -187,7 +187,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         reconnectTimeoutRef.current = setTimeout(connect, 5000);
       }
     }
-  }, [gameId, enabled, cleanup, sendPing, applyIncomingState]); // 绉婚櫎 onError, onFirstUpdate 渚濊禆
+  }, [gameId, enabled, cleanup, sendPing, applyIncomingState]); // Removed onError, onFirstUpdate from deps to avoid infinite reconnects
 
   // Connect on mount and when gameId changes
   useEffect(() => {
@@ -196,7 +196,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
     }
 
     return cleanup;
-  }, [gameId, enabled, connect, cleanup]); // 绉婚櫎 connect 鍜?cleanup 渚濊禆閬垮厤鏃犻檺閲嶈繛
+  }, [gameId, enabled, connect, cleanup]); // connect and cleanup are stable refs via useCallback
 
   return {
     isConnected,

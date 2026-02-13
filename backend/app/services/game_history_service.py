@@ -1,7 +1,10 @@
-"""Game history service - business logic for game history queries."""
+"""Game history service - business logic for game history queries.
+
+Migrated to async database access using SQLAlchemy 2.0 async API.
+"""
 from typing import Tuple, List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, and_, select
 
 from app.models.game_history import GameSession, GameParticipant, GameMessage
 from app.models.room import Room
@@ -11,8 +14,8 @@ class GameHistoryService:
     """Service for game history operations."""
 
     @staticmethod
-    def get_user_games(
-        db: Session,
+    async def get_user_games(
+        db: AsyncSession,
         user_id: str,
         winner_filter: Optional[str] = None,
         page: int = 1,
@@ -31,35 +34,38 @@ class GameHistoryService:
         Returns:
             Tuple of (games list, total count)
         """
-        # Base query: games that user participated in and are finished
-        query = db.query(GameSession).join(
-            GameParticipant,
-            GameSession.id == GameParticipant.game_id
-        ).filter(
-            and_(
-                GameParticipant.user_id == user_id,
-                GameSession.finished_at.isnot(None)
-            )
-        )
-
-        # Apply winner filter if specified
+        # Base WHERE conditions
+        conditions = [
+            GameParticipant.user_id == user_id,
+            GameSession.finished_at.isnot(None),
+        ]
         if winner_filter:
-            query = query.filter(GameSession.winner == winner_filter)
+            conditions.append(GameSession.winner == winner_filter)
 
-        # Get total count before pagination
-        total = query.count()
+        # Count total
+        count_stmt = (
+            select(func.count(GameSession.id))
+            .join(GameParticipant, GameSession.id == GameParticipant.game_id)
+            .where(*conditions)
+        )
+        total = int((await db.execute(count_stmt)).scalar() or 0)
 
-        # Apply pagination and ordering
-        games = query.order_by(GameSession.finished_at.desc()) \
-            .offset((page - 1) * page_size) \
-            .limit(page_size) \
-            .all()
+        # Fetch page
+        stmt = (
+            select(GameSession)
+            .join(GameParticipant, GameSession.id == GameParticipant.game_id)
+            .where(*conditions)
+            .order_by(GameSession.finished_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        games = (await db.execute(stmt)).scalars().all()
 
-        return (games, total)
+        return (list(games), total)
 
     @staticmethod
-    def get_game_detail(
-        db: Session,
+    async def get_game_detail(
+        db: AsyncSession,
         game_id: str,
         user_id: str
     ) -> Optional[GameSession]:
@@ -74,21 +80,19 @@ class GameHistoryService:
         Returns:
             GameSession if found and user has permission, None otherwise
         """
-        # Query game and verify user participated
-        game = db.query(GameSession).join(
-            GameParticipant,
-            GameSession.id == GameParticipant.game_id
-        ).filter(
-            and_(
+        stmt = (
+            select(GameSession)
+            .join(GameParticipant, GameSession.id == GameParticipant.game_id)
+            .where(
                 GameSession.id == game_id,
-                GameParticipant.user_id == user_id
+                GameParticipant.user_id == user_id,
             )
-        ).first()
-
-        return game
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
 
     @staticmethod
-    def get_room_name(db: Session, room_id: str) -> str:
+    async def get_room_name(db: AsyncSession, room_id: str) -> str:
         """
         Get room name by room ID.
 
@@ -99,11 +103,14 @@ class GameHistoryService:
         Returns:
             Room name or "Unknown Room" if not found
         """
-        room = db.query(Room).filter(Room.id == room_id).first()
+        result = await db.execute(
+            select(Room).where(Room.id == room_id)
+        )
+        room = result.scalars().first()
         return room.name if room else "Unknown Room"
 
     @staticmethod
-    def get_user_participant(db: Session, game_id: str, user_id: str) -> Optional[GameParticipant]:
+    async def get_user_participant(db: AsyncSession, game_id: str, user_id: str) -> Optional[GameParticipant]:
         """
         Get user's participant record in a game.
 
@@ -115,15 +122,16 @@ class GameHistoryService:
         Returns:
             GameParticipant if found, None otherwise
         """
-        return db.query(GameParticipant).filter(
-            and_(
+        result = await db.execute(
+            select(GameParticipant).where(
                 GameParticipant.game_id == game_id,
-                GameParticipant.user_id == user_id
+                GameParticipant.user_id == user_id,
             )
-        ).first()
+        )
+        return result.scalars().first()
 
     @staticmethod
-    def get_all_participants(db: Session, game_id: str) -> List[GameParticipant]:
+    async def get_all_participants(db: AsyncSession, game_id: str) -> List[GameParticipant]:
         """
         Get all participants of a game.
 
@@ -134,13 +142,14 @@ class GameHistoryService:
         Returns:
             List of GameParticipant records
         """
-        return db.query(GameParticipant).filter(
-            GameParticipant.game_id == game_id
-        ).all()
+        result = await db.execute(
+            select(GameParticipant).where(GameParticipant.game_id == game_id)
+        )
+        return list(result.scalars().all())
 
     @staticmethod
-    def get_game_replay_messages(
-        db: Session,
+    async def get_game_replay_messages(
+        db: AsyncSession,
         game_id: str,
         user_id: str,
         offset: int = 0,
@@ -162,25 +171,25 @@ class GameHistoryService:
             (messages, total) if user can access the game, otherwise None.
         """
         # Permission check: user must have participated in the game
-        game = GameHistoryService.get_game_detail(db, game_id, user_id)
+        game = await GameHistoryService.get_game_detail(db, game_id, user_id)
         if not game:
             return None
 
         # Get total count
-        total = (
-            db.query(func.count(GameMessage.id))
-            .filter(GameMessage.game_id == game_id)
-            .scalar()
-        ) or 0
+        count_result = await db.execute(
+            select(func.count(GameMessage.id))
+            .where(GameMessage.game_id == game_id)
+        )
+        total = int(count_result.scalar() or 0)
 
         # Get messages with pagination
-        messages = (
-            db.query(GameMessage)
-            .filter(GameMessage.game_id == game_id)
+        result = await db.execute(
+            select(GameMessage)
+            .where(GameMessage.game_id == game_id)
             .order_by(GameMessage.seq.asc(), GameMessage.id.asc())
             .offset(offset)
             .limit(limit)
-            .all()
         )
+        messages = list(result.scalars().all())
 
         return (messages, total)

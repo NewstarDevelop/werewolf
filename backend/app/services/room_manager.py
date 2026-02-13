@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from app.models.room import Room, RoomPlayer, RoomStatus
 from app.models.game import game_store, WOLF_ROLES
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import logging
 
@@ -455,7 +455,7 @@ class RoomManager:
 
         # 更新房间状态
         room.status = RoomStatus.PLAYING
-        room.started_at = datetime.utcnow()
+        room.started_at = datetime.now(timezone.utc)
         await db.commit()
 
         mode = "AI填充模式" if fill_ai else "多人模式"
@@ -490,7 +490,7 @@ class RoomManager:
 
         # 更新房间状态
         room.status = RoomStatus.FINISHED
-        room.finished_at = datetime.utcnow()
+        room.finished_at = datetime.now(timezone.utc)
 
         # 获取游戏实例
         game = game_store.get_game(room_id)
@@ -499,8 +499,8 @@ class RoomManager:
             session = GameSession(
                 id=room_id,  # 使用 room_id 作为主键，确保关联正确
                 room_id=room_id,
-                started_at=room.started_at or datetime.utcnow(),
-                finished_at=datetime.utcnow(),
+                started_at=room.started_at or datetime.now(timezone.utc),
+                finished_at=datetime.now(timezone.utc),
                 winner=game.winner.value
             )
             db.add(session)
@@ -610,12 +610,14 @@ class RoomManager:
         """
         WL-011 Fix: 重启后恢复孤立房间状态
 
-        将所有 PLAYING 状态的房间回滚到 WAITING，因为重启后
-        内存中的 game 对象已丢失，无法继续游戏。
+        将 PLAYING 状态且内存中无对应 game 对象的房间回滚到 WAITING。
+        如果 game 对象已从快照恢复，则跳过该房间。
 
         Returns:
             重置的房间数量
         """
+        from app.models.game import game_store
+
         # Query all PLAYING rooms
         result = await db.execute(
             select(Room).where(Room.status == RoomStatus.PLAYING)
@@ -628,6 +630,13 @@ class RoomManager:
 
         reset_count = 0
         for room in playing_rooms:
+            # Skip rooms whose game was recovered from persistence snapshots
+            if game_store.get_game(room.id) is not None:
+                logger.info(
+                    f"Room {room.id} ('{room.name}') has recovered game state, skipping reset"
+                )
+                continue
+
             # Reset room status
             room.status = RoomStatus.WAITING
             room.started_at = None
@@ -649,7 +658,8 @@ class RoomManager:
                 f"Game state was lost due to server restart."
             )
 
-        await db.commit()
+        if reset_count > 0:
+            await db.commit()
         logger.info(f"Reset {reset_count} orphaned rooms on startup")
         return reset_count
 

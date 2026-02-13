@@ -1,6 +1,7 @@
 """Game data models for in-memory storage."""
+import asyncio
 import uuid
-import random
+import secrets
 import time
 from typing import Optional
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from app.schemas.enums import (
 )
 from app.schemas.player import Personality
 
+
+_rng = secrets.SystemRandom()
 
 # AI personality templates (14 unique personalities for 12-player games)
 AI_PERSONALITIES = [
@@ -197,6 +200,17 @@ class Game:
         """Increment state version on critical state changes."""
         self.state_version += 1
         return self.state_version
+
+    def is_human_player(self, seat_id: int) -> bool:
+        """Check if a seat belongs to a human player.
+
+        P0-HIGH-002: Unified fallback logic for multi-player and single-player modes.
+        Priority: human_seats (room mode) > is_human flag (single-player mode).
+        """
+        if self.human_seats:
+            return seat_id in self.human_seats
+        player = self.players.get(seat_id)
+        return player.is_human if player else False
 
     def get_player(self, seat_id: int) -> Optional[Player]:
         """Get player by seat ID."""
@@ -642,31 +656,56 @@ class Game:
 
 
 class GameStore:
-    """In-memory game storage with LRU/TTL management.
+    """In-memory game storage with LRU/TTL management and optional persistence.
 
     P0-PERF-001 Fix: Added capacity limits and TTL-based cleanup to prevent
     unbounded memory growth from malicious or accidental game creation.
 
     P0-STAB-001 Fix: Added per-game locks to prevent concurrent state corruption.
+
+    Persistence: Snapshots are saved to SQLite on key state changes for crash
+    recovery. The in-memory dict remains the primary store for performance.
     """
 
     MAX_GAMES = 1000  # Maximum concurrent games
     GAME_TTL_SECONDS = 7200  # 2 hours TTL for inactive games
 
-    def __init__(self):
+    def __init__(self, enable_persistence: bool = True):
         self.games: dict[str, Game] = {}
         self._last_access: dict[str, float] = {}  # game_id -> timestamp
         self._locks: dict[str, "asyncio.Lock"] = {}  # P0-STAB-001: per-game locks
+        self._persistence_enabled = enable_persistence
+        self._persistence = None  # Lazy init to avoid import cycles
+        # Cleanup hooks: list of async callables invoked with game_id when a game is removed.
+        # Used by LLMService to clean up per-game rate limiter resources.
+        self._cleanup_hooks: list = []
 
-    def get_lock(self, game_id: str) -> "asyncio.Lock":
+    def get_lock(self, game_id: str) -> asyncio.Lock:
         """Get or create a lock for the specified game.
 
         P0-STAB-001 Fix: Ensures thread-safe access to game state.
+        Uses setdefault() to avoid race condition where two coroutines
+        could create separate Lock instances for the same game_id.
         """
-        import asyncio
-        if game_id not in self._locks:
-            self._locks[game_id] = asyncio.Lock()
-        return self._locks[game_id]
+        return self._locks.setdefault(game_id, asyncio.Lock())
+
+    def _run_cleanup_hooks(self, game_id: str) -> None:
+        """Invoke registered cleanup hooks for a removed game.
+
+        Hooks are best-effort: failures are logged but do not propagate.
+        Supports both sync and async callables (async ones are scheduled).
+        """
+        for hook in self._cleanup_hooks:
+            try:
+                result = hook(game_id)
+                # If the hook returns a coroutine, schedule it
+                if asyncio.iscoroutine(result):
+                    asyncio.ensure_future(result)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Cleanup hook failed for game {game_id}: {e}"
+                )
 
     def _cleanup_old_games(self) -> int:
         """Remove games that haven't been accessed within TTL.
@@ -692,6 +731,10 @@ class GameStore:
                 del self._locks[game_id]
             # Clean up associated logs
             clear_game_logs(game_id)
+            # Clean up persistence snapshot to prevent stale recovery
+            self._delete_snapshot(game_id)
+            # Invoke cleanup hooks (e.g., per-game rate limiter)
+            self._run_cleanup_hooks(game_id)
 
         return len(to_remove)
 
@@ -738,7 +781,7 @@ class GameStore:
 
         # Determine human seat
         if human_seat is None:
-            human_seat = random.randint(1, config.player_count)
+            human_seat = _rng.randint(1, config.player_count)
         game.human_seat = human_seat
 
         # If human role is specified, ensure they get it
@@ -747,14 +790,14 @@ class GameStore:
                 roles.remove(human_role)
             else:
                 raise ValueError(f"Role {human_role} not available in this game mode")
-            random.shuffle(roles)
+            _rng.shuffle(roles)
             roles.insert(human_seat - 1, human_role)
         else:
-            random.shuffle(roles)
+            _rng.shuffle(roles)
 
         # Shuffle personalities
         personalities = AI_PERSONALITIES.copy()
-        random.shuffle(personalities)
+        _rng.shuffle(personalities)
 
         # Create players
         wolf_seats = []  # All wolf-aligned seats (including wolf king variants)
@@ -779,7 +822,7 @@ class GameStore:
         # Set werewolf teammates (includes wolf king/white wolf king)
         # P2优化：为狼人分配差异化战术角色
         shuffled_personas = WOLF_PERSONAS.copy()
-        random.shuffle(shuffled_personas)
+        _rng.shuffle(shuffled_personas)
         for idx, seat_id in enumerate(wolf_seats):
             player = game.players[seat_id]
             player.teammates = [s for s in wolf_seats if s != seat_id]
@@ -790,6 +833,7 @@ class GameStore:
         game.status = GameStatus.PLAYING
         self.games[game_id] = game
         self._last_access[game_id] = time.time()  # P0-PERF-001: Track access time
+        self._save_snapshot(game)
         return game
 
     def get_game(self, game_id: str) -> Optional[Game]:
@@ -820,8 +864,68 @@ class GameStore:
                 del self._locks[game_id]
             # Clean up associated logs
             clear_game_logs(game_id)
+            # Remove snapshot
+            self._delete_snapshot(game_id)
+            # Invoke cleanup hooks (e.g., per-game rate limiter)
+            self._run_cleanup_hooks(game_id)
             return True
         return False
+
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
+
+    def _get_persistence(self):
+        """Lazy-init persistence to avoid import cycles."""
+        if self._persistence is None and self._persistence_enabled:
+            try:
+                from app.services.game_persistence import game_persistence
+                self._persistence = game_persistence
+            except Exception:
+                self._persistence_enabled = False
+        return self._persistence
+
+    def _save_snapshot(self, game: Game) -> None:
+        """Save game snapshot (best-effort, never raises)."""
+        p = self._get_persistence()
+        if p:
+            p.save_snapshot(game)
+
+    def _delete_snapshot(self, game_id: str) -> None:
+        """Delete game snapshot (best-effort, never raises)."""
+        p = self._get_persistence()
+        if p:
+            p.delete_snapshot(game_id)
+
+    def save_game_state(self, game_id: str) -> None:
+        """Explicitly save current game state snapshot.
+
+        Call this after important state transitions (phase changes, etc.)
+        """
+        game = self.games.get(game_id)
+        if game:
+            self._save_snapshot(game)
+
+    def recover_from_snapshots(self) -> int:
+        """Recover active games from persistence on startup.
+
+        Returns:
+            Number of games recovered.
+        """
+        p = self._get_persistence()
+        if not p:
+            return 0
+        recovered = p.load_all_active()
+        count = 0
+        for game_id, game in recovered.items():
+            if game_id not in self.games:
+                self.games[game_id] = game
+                self._last_access[game_id] = time.time()
+                count += 1
+        if count:
+            import logging
+            logging.getLogger(__name__).info(f"Recovered {count} games from snapshots")
+        return count
 
 
 # Global game store instance

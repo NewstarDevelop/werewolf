@@ -5,17 +5,17 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.game import verify_admin
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.models.user import User
 from app.schemas.admin_users import (
     AdminFlagFilter,
@@ -57,9 +57,9 @@ def sanitize_csv_value(value) -> str:
 
 
 @router.get("", response_model=UserListResponse)
-def list_users(
+async def list_users(
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     q: Optional[str] = Query(None, min_length=1, max_length=100),
     status: UserStatusFilter = Query(default=UserStatusFilter.ALL),
     admin: AdminFlagFilter = Query(default=AdminFlagFilter.ALL),
@@ -71,8 +71,36 @@ def list_users(
     List users with filtering and pagination.
     GET /api/admin/users
     """
-    # Select only list fields to avoid loading preferences JSON
-    query = db.query(
+    # Build WHERE conditions
+    conditions = []
+    if status == UserStatusFilter.ACTIVE:
+        conditions.append(User.is_active.is_(True))
+    elif status == UserStatusFilter.BANNED:
+        conditions.append(User.is_active.is_(False))
+
+    if admin == AdminFlagFilter.YES:
+        conditions.append(User.is_admin.is_(True))
+    elif admin == AdminFlagFilter.NO:
+        conditions.append(User.is_admin.is_(False))
+
+    if q:
+        search_pattern = f"%{q}%"
+        conditions.append(
+            or_(
+                func.lower(User.nickname).like(func.lower(search_pattern)),
+                func.lower(User.email).like(func.lower(search_pattern)),
+            )
+        )
+
+    # Get total count
+    count_result = await db.execute(
+        select(func.count(User.id)).where(*conditions) if conditions
+        else select(func.count(User.id))
+    )
+    total = int(count_result.scalar() or 0)
+
+    # Build data query with selected columns
+    stmt = select(
         User.id,
         User.nickname,
         User.email,
@@ -82,45 +110,26 @@ def list_users(
         User.created_at,
         User.last_login_at,
     )
-
-    # Apply filters
-    if status == UserStatusFilter.ACTIVE:
-        query = query.filter(User.is_active.is_(True))
-    elif status == UserStatusFilter.BANNED:
-        query = query.filter(User.is_active.is_(False))
-
-    if admin == AdminFlagFilter.YES:
-        query = query.filter(User.is_admin.is_(True))
-    elif admin == AdminFlagFilter.NO:
-        query = query.filter(User.is_admin.is_(False))
-
-    if q:
-        search_pattern = f"%{q}%"
-        query = query.filter(
-            or_(
-                func.lower(User.nickname).like(func.lower(search_pattern)),
-                func.lower(User.email).like(func.lower(search_pattern)),
-            )
-        )
-
-    # Get total count (remove ordering for count optimization)
-    total = query.order_by(None).count()
+    if conditions:
+        stmt = stmt.where(*conditions)
 
     # Apply sorting
     if sort == UserSort.CREATED_AT_DESC:
-        query = query.order_by(User.created_at.desc(), User.id.desc())
+        stmt = stmt.order_by(User.created_at.desc(), User.id.desc())
     elif sort == UserSort.LAST_LOGIN_AT_DESC:
         # SQLite-compatible NULLS LAST: sort by is_null first, then desc
-        query = query.order_by(
+        stmt = stmt.order_by(
             User.last_login_at.is_(None),
             User.last_login_at.desc(),
             User.id.desc(),
         )
     elif sort == UserSort.ID_ASC:
-        query = query.order_by(User.id.asc())
+        stmt = stmt.order_by(User.id.asc())
 
     # Apply pagination
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(stmt)
+    items = result.all()
 
     return UserListResponse(
         items=[
@@ -143,9 +152,9 @@ def list_users(
 
 
 @router.get("/export.csv")
-def export_users_csv(
+async def export_users_csv(
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     q: Optional[str] = Query(None, min_length=1, max_length=100),
     status: UserStatusFilter = Query(default=UserStatusFilter.ALL),
     admin: AdminFlagFilter = Query(default=AdminFlagFilter.ALL),
@@ -156,8 +165,28 @@ def export_users_csv(
     Export users to CSV with filtering.
     GET /api/admin/users/export.csv
     """
-    # Build query (same as list_users)
-    query = db.query(
+    # Build conditions (same as list_users)
+    conditions = []
+    if status == UserStatusFilter.ACTIVE:
+        conditions.append(User.is_active.is_(True))
+    elif status == UserStatusFilter.BANNED:
+        conditions.append(User.is_active.is_(False))
+
+    if admin == AdminFlagFilter.YES:
+        conditions.append(User.is_admin.is_(True))
+    elif admin == AdminFlagFilter.NO:
+        conditions.append(User.is_admin.is_(False))
+
+    if q:
+        search_pattern = f"%{q}%"
+        conditions.append(
+            or_(
+                func.lower(User.nickname).like(func.lower(search_pattern)),
+                func.lower(User.email).like(func.lower(search_pattern)),
+            )
+        )
+
+    stmt = select(
         User.id,
         User.nickname,
         User.email,
@@ -167,42 +196,24 @@ def export_users_csv(
         User.created_at,
         User.last_login_at,
     )
-
-    # Apply filters
-    if status == UserStatusFilter.ACTIVE:
-        query = query.filter(User.is_active.is_(True))
-    elif status == UserStatusFilter.BANNED:
-        query = query.filter(User.is_active.is_(False))
-
-    if admin == AdminFlagFilter.YES:
-        query = query.filter(User.is_admin.is_(True))
-    elif admin == AdminFlagFilter.NO:
-        query = query.filter(User.is_admin.is_(False))
-
-    if q:
-        search_pattern = f"%{q}%"
-        query = query.filter(
-            or_(
-                func.lower(User.nickname).like(func.lower(search_pattern)),
-                func.lower(User.email).like(func.lower(search_pattern)),
-            )
-        )
+    if conditions:
+        stmt = stmt.where(*conditions)
 
     # Apply sorting
     if sort == UserSort.CREATED_AT_DESC:
-        query = query.order_by(User.created_at.desc(), User.id.desc())
+        stmt = stmt.order_by(User.created_at.desc(), User.id.desc())
     elif sort == UserSort.LAST_LOGIN_AT_DESC:
-        # SQLite-compatible NULLS LAST: sort by is_null first, then desc
-        query = query.order_by(
+        stmt = stmt.order_by(
             User.last_login_at.is_(None),
             User.last_login_at.desc(),
             User.id.desc(),
         )
     elif sort == UserSort.ID_ASC:
-        query = query.order_by(User.id.asc())
+        stmt = stmt.order_by(User.id.asc())
 
     # Limit rows
-    items = query.limit(max_rows).all()
+    result = await db.execute(stmt.limit(max_rows))
+    items = result.all()
 
     # Generate CSV
     def generate():
@@ -236,7 +247,7 @@ def export_users_csv(
             output.seek(0)
             output.truncate(0)
 
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     filename = f"users_{timestamp}.csv"
 
     return StreamingResponse(
@@ -249,16 +260,17 @@ def export_users_csv(
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)
-def get_user_detail(
+async def get_user_detail(
     user_id: str,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get user detail.
     GET /api/admin/users/{user_id}
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -267,28 +279,28 @@ def get_user_detail(
 
 
 @router.patch("/{user_id}/profile", response_model=UserDetailResponse)
-def update_user_profile(
+async def update_user_profile(
     user_id: str,
     body: AdminUpdateUserProfileRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update user profile (nickname, avatar, bio).
     PATCH /api/admin/users/{user_id}/profile
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check nickname uniqueness if changing
     if body.nickname is not None and body.nickname != user.nickname:
-        existing = db.query(User).filter(
-            User.nickname == body.nickname,
-            User.id != user.id
-        ).first()
-        if existing:
+        dup_result = await db.execute(
+            select(User).where(User.nickname == body.nickname, User.id != user.id)
+        )
+        if dup_result.scalars().first():
             raise HTTPException(status_code=409, detail="Nickname already taken")
 
     # Update fields
@@ -299,42 +311,43 @@ def update_user_profile(
     if body.avatar_url is not None:
         user.avatar_url = body.avatar_url
 
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     try:
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=409, detail="Nickname already taken")
 
     return UserDetailResponse.model_validate(user)
 
 
 @router.patch("/{user_id}/status", response_model=UserDetailResponse)
-def set_user_status(
+async def set_user_status(
     user_id: str,
     body: AdminSetUserActiveRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Set user active status (ban/unban).
     PATCH /api/admin/users/{user_id}/status
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     user.is_active = body.is_active
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     try:
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Failed to update user status: {e}")
         raise HTTPException(status_code=500, detail="Failed to update user status")
 
@@ -349,29 +362,30 @@ def set_user_status(
 
 
 @router.patch("/{user_id}/admin", response_model=UserDetailResponse)
-def set_user_admin(
+async def set_user_admin(
     user_id: str,
     body: AdminSetUserAdminRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Set user admin flag.
     PATCH /api/admin/users/{user_id}/admin
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     user.is_admin = body.is_admin
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     try:
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Failed to update user admin status: {e}")
         raise HTTPException(status_code=500, detail="Failed to update user admin status")
 
@@ -386,10 +400,10 @@ def set_user_admin(
 
 
 @router.post("/batch", response_model=AdminUserBatchResponse)
-def batch_operation(
+async def batch_operation(
     body: AdminUserBatchRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Batch operations on users.
@@ -398,8 +412,8 @@ def batch_operation(
     accepted = len(body.ids)
 
     # Find existing users
-    existing_users = db.query(User.id).filter(User.id.in_(body.ids)).all()
-    existing_ids = {user.id for user in existing_users}
+    result = await db.execute(select(User.id).where(User.id.in_(body.ids)))
+    existing_ids = {row[0] for row in result.all()}
     failed = [uid for uid in body.ids if uid not in existing_ids]
 
     # Determine new is_active value based on action
@@ -417,16 +431,18 @@ def batch_operation(
     updated = 0
     if existing_ids:
         try:
-            updated = db.query(User).filter(User.id.in_(existing_ids)).update(
-                {
-                    User.is_active: new_is_active,
-                    User.updated_at: datetime.utcnow(),
-                },
-                synchronize_session=False,
+            result = await db.execute(
+                update(User)
+                .where(User.id.in_(existing_ids))
+                .values(
+                    is_active=new_is_active,
+                    updated_at=datetime.now(timezone.utc),
+                )
             )
-            db.commit()
+            updated = result.rowcount or 0
+            await db.commit()
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             logger.error(f"Batch operation failed: {e}")
             raise HTTPException(status_code=500, detail="Batch operation failed")
 

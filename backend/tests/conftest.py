@@ -11,7 +11,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool, NullPool
 
 # Set test environment before importing app
 os.environ["DEBUG"] = "true"
@@ -21,21 +21,13 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///test_db.sqlite"
 
 from app.models.base import Base
-from app.core.database import get_db
 from app.core.database_async import get_async_db
+from app.models.game import game_store
+
+# Disable persistence for tests (prevents SQLite snapshot writes)
+game_store._persistence_enabled = False
+
 from app.main import app
-
-
-# ============================================================================
-# Event Loop Configuration
-# ============================================================================
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 # ============================================================================
@@ -103,7 +95,7 @@ def get_test_async_engine():
         _async_engine = create_async_engine(
             ASYNC_DATABASE_URL,
             connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+            poolclass=NullPool,
         )
     return _async_engine
 
@@ -149,12 +141,6 @@ def test_app(db_session, sync_engine) -> FastAPI:
     """Create a test FastAPI application with overridden dependencies."""
     import asyncio
 
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
     # Ensure async tables exist (run in event loop)
     loop = asyncio.new_event_loop()
     loop.run_until_complete(_ensure_async_tables())
@@ -171,12 +157,10 @@ def test_app(db_session, sync_engine) -> FastAPI:
         async with test_async_session_factory() as session:
             try:
                 yield session
-                await session.commit()
             except Exception:
                 await session.rollback()
                 raise
 
-    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_async_db] = override_get_async_db
     yield app
     app.dependency_overrides.clear()

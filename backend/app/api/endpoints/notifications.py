@@ -1,20 +1,18 @@
 """Notification REST API endpoints.
 
-A3-FIX: All endpoints are sync (def) to avoid event loop blocking.
-These are pure DB operations with no async I/O, so FastAPI will
-run them in a thread pool automatically.
+Migrated to async database access using SQLAlchemy 2.0 async API.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, update
 
 from app.api.dependencies import get_current_user
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.models.notification import Notification
 from app.schemas.notification import (
     NotificationCategory,
@@ -31,9 +29,9 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("", response_model=NotificationListResponse)
-def list_notifications(
+async def list_notifications(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     category: Optional[NotificationCategory] = Query(None),
     unread_only: bool = Query(False),
     page: int = Query(1, ge=1),
@@ -47,21 +45,28 @@ def list_notifications(
     """
     user_id = current_user["user_id"]
 
-    query = db.query(Notification).filter(Notification.user_id == user_id)
-
+    # Build WHERE conditions
+    conditions = [Notification.user_id == user_id]
     if category:
-        query = query.filter(Notification.category == category.value)
-
+        conditions.append(Notification.category == category.value)
     if unread_only:
-        query = query.filter(Notification.read_at.is_(None))
+        conditions.append(Notification.read_at.is_(None))
 
-    total = int(query.count())
-    items = (
-        query.order_by(Notification.created_at.desc())
+    # Count total
+    count_result = await db.execute(
+        select(func.count(Notification.id)).where(*conditions)
+    )
+    total = int(count_result.scalar() or 0)
+
+    # Fetch page
+    result = await db.execute(
+        select(Notification)
+        .where(*conditions)
+        .order_by(Notification.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
-        .all()
     )
+    items = result.scalars().all()
 
     notifications = [
         NotificationPublic(
@@ -86,26 +91,25 @@ def list_notifications(
 
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
-def unread_count(
+async def unread_count(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Return unread durable notification count."""
     user_id = current_user["user_id"]
-    count = int(
-        db.query(func.count(Notification.id))
-        .filter(Notification.user_id == user_id, Notification.read_at.is_(None))
-        .scalar()
-        or 0
+    result = await db.execute(
+        select(func.count(Notification.id))
+        .where(Notification.user_id == user_id, Notification.read_at.is_(None))
     )
+    count = int(result.scalar() or 0)
     return UnreadCountResponse(unread_count=count)
 
 
 @router.post("/{notification_id}/read", response_model=MarkReadResponse)
-def mark_read(
+async def mark_read(
     notification_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Mark one notification as read.
@@ -114,25 +118,25 @@ def mark_read(
     - Only allows updating notifications owned by current user.
     """
     user_id = current_user["user_id"]
-    n: Optional[Notification] = (
-        db.query(Notification)
-        .filter(Notification.id == notification_id, Notification.user_id == user_id)
-        .first()
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.id == notification_id, Notification.user_id == user_id)
     )
+    n: Optional[Notification] = result.scalars().first()
     if not n:
         raise HTTPException(status_code=404, detail="Notification not found")
 
     if n.read_at is None:
-        n.read_at = datetime.utcnow()
-        db.commit()
+        n.read_at = datetime.now(timezone.utc)
+        await db.commit()
 
-    return MarkReadResponse(notification_id=n.id, read_at=n.read_at or datetime.utcnow())
+    return MarkReadResponse(notification_id=n.id, read_at=n.read_at or datetime.now(timezone.utc))
 
 
 @router.post("/read-all", response_model=ReadAllResponse)
-def mark_all_read(
+async def mark_all_read(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Mark all unread notifications as read for current user.
@@ -140,23 +144,23 @@ def mark_all_read(
     This is implemented as a single SQL UPDATE for performance.
     """
     user_id = current_user["user_id"]
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
-    updated = (
-        db.query(Notification)
-        .filter(Notification.user_id == user_id, Notification.read_at.is_(None))
-        .update({Notification.read_at: now}, synchronize_session=False)
+    result = await db.execute(
+        update(Notification)
+        .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+        .values(read_at=now)
     )
-    db.commit()
+    await db.commit()
 
-    return ReadAllResponse(updated=int(updated or 0), read_at=now)
+    return ReadAllResponse(updated=int(result.rowcount or 0), read_at=now)
 
 
 @router.post("/read-batch", response_model=ReadBatchResponse)
-def mark_batch_read(
+async def mark_batch_read(
     body: ReadBatchRequest,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Mark multiple notifications as read by ID list.
@@ -169,17 +173,17 @@ def mark_batch_read(
     - Already-read notifications are not modified.
     """
     user_id = current_user["user_id"]
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
-    updated = (
-        db.query(Notification)
-        .filter(
+    result = await db.execute(
+        update(Notification)
+        .where(
             Notification.id.in_(body.notification_ids),
             Notification.user_id == user_id,
             Notification.read_at.is_(None),
         )
-        .update({Notification.read_at: now}, synchronize_session=False)
+        .values(read_at=now)
     )
-    db.commit()
+    await db.commit()
 
-    return ReadBatchResponse(updated=int(updated or 0), read_at=now)
+    return ReadBatchResponse(updated=int(result.rowcount or 0), read_at=now)

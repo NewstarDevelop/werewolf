@@ -1,6 +1,7 @@
 """Night phase handlers - werewolf chat, kill, guard, seer, witch phases."""
 import logging
-import random
+import re
+import secrets
 from typing import TYPE_CHECKING
 
 from app.models.game import Game, WOLF_ROLES
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from app.services.llm import LLMService
 
 logger = logging.getLogger(__name__)
+_rng = secrets.SystemRandom()
 
 
 async def handle_night_start(game: Game) -> dict:
@@ -37,23 +39,14 @@ async def handle_night_werewolf_chat(game: Game, llm: "LLMService") -> dict:
     """Handle werewolf chat phase - werewolves discuss before voting."""
     alive_wolves = game.get_alive_werewolves()
 
-    # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-    human_wolves = [
-        w for w in alive_wolves
-        if (game.human_seats and w.seat_id in game.human_seats) or
-           (not game.human_seats and w.is_human)
-    ]
+    # P0-HIGH-002: Check if any human wolves still need to chat
+    human_wolves = [w for w in alive_wolves if game.is_human_player(w.seat_id)]
     if any(w.seat_id not in game.wolf_chat_completed for w in human_wolves):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI werewolves chat
     for wolf in alive_wolves:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_wolf = (
-            (game.human_seats and wolf.seat_id in game.human_seats) or
-            (not game.human_seats and wolf.is_human)
-        )
-        if not is_human_wolf and wolf.seat_id not in game.wolf_chat_completed:
+        if not game.is_human_player(wolf.seat_id) and wolf.seat_id not in game.wolf_chat_completed:
             speech = await llm.generate_speech(wolf, game)
             game.add_message(wolf.seat_id, speech, MessageType.WOLF_CHAT)
             game.wolf_chat_completed.add(wolf.seat_id)
@@ -71,23 +64,14 @@ async def handle_night_werewolf(game: Game, llm: "LLMService") -> dict:
     """Handle werewolf kill phase."""
     alive_wolves = game.get_alive_werewolves()
 
-    # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-    human_wolves = [
-        w for w in alive_wolves
-        if (game.human_seats and w.seat_id in game.human_seats) or
-           (not game.human_seats and w.is_human)
-    ]
+    # P0-HIGH-002: Check if any human wolves still need to vote
+    human_wolves = [w for w in alive_wolves if game.is_human_player(w.seat_id)]
     if any(w.seat_id not in game.wolf_votes for w in human_wolves):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI werewolves vote
     for wolf in alive_wolves:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_wolf = (
-            (game.human_seats and wolf.seat_id in game.human_seats) or
-            (not game.human_seats and wolf.is_human)
-        )
-        if not is_human_wolf and wolf.seat_id not in game.wolf_votes:
+        if not game.is_human_player(wolf.seat_id) and wolf.seat_id not in game.wolf_votes:
             # 狼人可以击杀任何存活玩家（包括队友，实现自刀策略）
             targets = [p.seat_id for p in game.get_alive_players()
                       if p.seat_id != wolf.seat_id]
@@ -119,7 +103,7 @@ async def handle_night_werewolf(game: Game, llm: "LLMService") -> dict:
                 vote_counts[target] = vote_counts.get(target, 0) + 1
             max_votes = max(vote_counts.values())
             top_targets = [t for t, v in vote_counts.items() if v == max_votes]
-            game.night_kill_target = random.choice(top_targets)
+            game.night_kill_target = _rng.choice(top_targets)
             game.pending_deaths.append(game.night_kill_target)
 
     game.phase = GamePhase.NIGHT_GUARD if game.get_player_by_role(Role.GUARD) else GamePhase.NIGHT_SEER
@@ -132,12 +116,7 @@ async def handle_night_guard(game: Game) -> dict:
     guard = game.get_player_by_role(Role.GUARD)
 
     if guard and guard.is_alive:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_guard = (
-            (game.human_seats and guard.seat_id in game.human_seats) or
-            (not game.human_seats and guard.is_human)
-        )
-        if is_human_guard:
+        if game.is_human_player(guard.seat_id):
             # Human guard hasn't made decision yet
             if not game.guard_decided:
                 return {"status": "waiting_for_human", "phase": game.phase}
@@ -151,7 +130,7 @@ async def handle_night_guard(game: Game) -> dict:
             if protect_choices:
                 # TODO: Implement AI guard decision via LLM
                 # For now, random choice or skip
-                target = random.choice(protect_choices + [0])  # 0 = skip
+                target = _rng.choice(protect_choices + [0])  # 0 = skip
                 game.guard_target = target if target != 0 else None
                 if game.guard_target:
                     game.add_action(guard.seat_id, ActionType.PROTECT, game.guard_target)
@@ -167,12 +146,7 @@ async def handle_night_seer(game: Game, llm: "LLMService") -> dict:
     seer = game.get_player_by_role(Role.SEER)
 
     if seer and seer.is_alive:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_seer = (
-            (game.human_seats and seer.seat_id in game.human_seats) or
-            (not game.human_seats and seer.is_human)
-        )
-        if is_human_seer:
+        if game.is_human_player(seer.seat_id):
             # If human has already verified (or cannot verify anyone), move on.
             if game.seer_verified_this_night:
                 game.phase = GamePhase.NIGHT_WITCH
@@ -213,12 +187,7 @@ async def handle_night_witch(game: Game, llm: "LLMService") -> dict:
     witch = game.get_player_by_role(Role.WITCH)
 
     if witch and witch.is_alive:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_witch = (
-            (game.human_seats and witch.seat_id in game.human_seats) or
-            (not game.human_seats and witch.is_human)
-        )
-        if is_human_witch:
+        if game.is_human_player(witch.seat_id):
             used_save_this_night = any(
                 a.day == game.day
                 and a.player_id == witch.seat_id
@@ -345,7 +314,6 @@ def summarize_wolf_plan(game: Game) -> str:
     strategy_points = []
 
     # Analyze messages for strategy keywords
-    import re
     for msg in wolf_messages:
         content = msg.content.lower()
         for strategy, patterns in keywords[lang].items():

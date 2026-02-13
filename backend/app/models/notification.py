@@ -8,7 +8,7 @@ This module defines:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -60,7 +60,7 @@ class Notification(Base):
         server_default="{}",
     )
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     read_at = Column(DateTime, nullable=True, index=True)
 
     # Keep relationship optional (no back_populates requirement on User model)
@@ -116,15 +116,15 @@ class NotificationOutbox(Base):
 
     status = Column(String(16), nullable=False, default="PENDING", index=True)
     attempts = Column(Integer, nullable=False, default=0)
-    available_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    available_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
     locked_at = Column(DateTime, nullable=True, index=True)
     locked_by = Column(String(128), nullable=True)
 
     last_error = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     sent_at = Column(DateTime, nullable=True)
 
     user = relationship("User")

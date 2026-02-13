@@ -1,7 +1,7 @@
 """Room and RoomPlayer models for multi-room support."""
 from sqlalchemy import Column, String, Integer, DateTime, Enum as SQLEnum, Boolean, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 
 from .base import Base
@@ -30,7 +30,7 @@ class Room(Base):
     game_mode = Column(String(20), default="classic_9", nullable=False)  # 游戏模式: classic_9, classic_12
     wolf_king_variant = Column(String(20), nullable=True)  # 狼王类型: wolf_king, white_wolf_king (仅12人局)
     language = Column(String(10), default="zh", nullable=False)  # 游戏语言: zh, en
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     started_at = Column(DateTime, nullable=True)  # 游戏开始时间
     finished_at = Column(DateTime, nullable=True)  # 游戏结束时间
 
@@ -55,7 +55,7 @@ class RoomPlayer(Base):
     seat_id = Column(Integer, nullable=True)  # 游戏中的座位号（1-9）
     is_ready = Column(Boolean, default=False, nullable=False)  # 是否准备
     is_creator = Column(Boolean, default=False, nullable=False)  # 是否为房主
-    joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)  # 加入时间
+    joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)  # 加入时间
 
     # Relationships
     room = relationship("Room", back_populates="players")

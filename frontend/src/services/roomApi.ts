@@ -2,11 +2,9 @@
  * Room API Service - handles all room-related HTTP requests
  */
 
-import { saveToken, getAuthHeader } from '@/utils/token';
-import { ApiError, GameMode, WolfKingVariant } from '@/services/api';
-
-// 榛樿绌哄瓧绗︿覆锛堢浉瀵硅矾寰勶級锛岀敓浜х幆澧冭蛋 nginx 鍙嶄唬锛涘紑鍙戠幆澧冮渶鍦?.env.development 閰嶇疆
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+import { saveToken } from '@/utils/token';
+import { GameMode, WolfKingVariant } from '@/services/api';
+import { fetchApi } from '@/lib/api-client';
 
 // ==================== Types ====================
 
@@ -20,7 +18,7 @@ export interface Room {
   created_at: string;
   game_mode: GameMode;
   wolf_king_variant?: WolfKingVariant;
-  game_id?: string;  // FIX: 褰撴埧闂寸姸鎬佷负 PLAYING 鏃惰繑鍥?game_id锛岀敤浜庨潪鎴夸富鐜╁瀵艰埅
+  game_id?: string;  // FIX: 当房间状态为 PLAYING 时返回 game_id，用于非房主玩家导航
 }
 
 export interface RoomPlayer {
@@ -37,7 +35,7 @@ export interface RoomPlayer {
 export interface RoomDetail {
   room: Room;
   players: RoomPlayer[];
-  has_same_user: boolean;  // P1-SEC-004: 褰撳墠鐧诲綍鐢ㄦ埛鏄惁宸插湪鎴块棿涓?
+  has_same_user: boolean;  // P1-SEC-004: 当前登录用户是否已在房间中
 }
 
 export interface CreateRoomRequest {
@@ -59,21 +57,12 @@ export interface JoinRoomRequest {
  * Requires user authentication (uses HttpOnly cookie)
  */
 export async function createRoom(request: CreateRoomRequest): Promise<{ room: Room; token: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms`, {
+  const data = await fetchApi<{ room: Room; token: string }>('/api/rooms', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',  // 鍙戦€佽璇?cookie
     body: JSON.stringify(request),
+    skipRoomToken: true,
+    skipRetry: true,
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    const apiError = new ApiError(response.status, error.detail || 'Failed to create room');
-    apiError.response = { status: response.status, data: error };
-    throw apiError;
-  }
-
-  const data = await response.json();
   saveToken(data.token);
   return data;
 }
@@ -85,32 +74,16 @@ export async function getRooms(status?: 'waiting' | 'playing' | 'finished'): Pro
   const params = new URLSearchParams();
   if (status) params.append('status', status);
 
-  const response = await fetch(`${API_BASE_URL}/api/rooms?${params}`);
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to fetch rooms' }));
-    throw new ApiError(response.status, error.detail || 'Failed to fetch rooms');
-  }
-
-  return response.json();
+  return fetchApi<Room[]>(`/api/rooms?${params}`, {
+    skipRoomToken: true,
+  });
 }
 
 /**
  * Get room detail including players
  */
 export async function getRoomDetail(roomId: string): Promise<RoomDetail> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}`, {
-    headers: {
-      ...getAuthHeader()
-    }
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to fetch room detail' }));
-    throw new ApiError(response.status, error.detail || 'Failed to fetch room detail');
-  }
-
-  return response.json();
+  return fetchApi<RoomDetail>(`/api/rooms/${roomId}`);
 }
 
 /**
@@ -118,21 +91,12 @@ export async function getRoomDetail(roomId: string): Promise<RoomDetail> {
  * Requires user authentication (uses HttpOnly cookie)
  */
 export async function joinRoom(roomId: string, request: JoinRoomRequest): Promise<{ token: string; player_id: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/join`, {
+  const data = await fetchApi<{ token: string; player_id: string }>(`/api/rooms/${roomId}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',  // 鍙戦€佽璇?cookie
     body: JSON.stringify(request),
+    skipRoomToken: true,
+    skipRetry: true,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to join room' }));
-    const apiError = new ApiError(response.status, error.detail || 'Failed to join room');
-    apiError.response = { status: response.status, data: error };
-    throw apiError;
-  }
-
-  const data = await response.json();
   saveToken(data.token);
   return data;
 }
@@ -141,21 +105,11 @@ export async function joinRoom(roomId: string, request: JoinRoomRequest): Promis
  * Toggle ready status
  */
 export async function toggleReady(roomId: string, playerId: string): Promise<boolean> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/ready`, {
+  const data = await fetchApi<{ is_ready: boolean }>(`/api/rooms/${roomId}/ready`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
     body: JSON.stringify({ player_id: playerId }),
+    skipRetry: true,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to toggle ready' }));
-    throw new ApiError(response.status, error.detail || 'Failed to toggle ready');
-  }
-
-  const data = await response.json();
   return data.is_ready;
 }
 
@@ -163,21 +117,11 @@ export async function toggleReady(roomId: string, playerId: string): Promise<boo
  * Start game (creator only)
  */
 export async function startGame(roomId: string, playerId: string, fillAi: boolean = false): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/start`, {
+  const data = await fetchApi<{ game_id: string }>(`/api/rooms/${roomId}/start`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader()
-    },
     body: JSON.stringify({ player_id: playerId, fill_ai: fillAi }),
+    skipRetry: true,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to start game' }));
-    throw new ApiError(response.status, error.detail || 'Failed to start game');
-  }
-
-  const data = await response.json();
   return data.game_id;
 }
 
@@ -185,32 +129,17 @@ export async function startGame(roomId: string, playerId: string, fillAi: boolea
  * Leave a room (non-creator only)
  */
 export async function leaveRoom(roomId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/leave`, {
+  await fetchApi<void>(`/api/rooms/${roomId}/leave`, {
     method: 'POST',
-    headers: {
-      ...getAuthHeader()
-    }
+    skipRetry: true,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to leave room' }));
-    throw new ApiError(response.status, error.detail || 'Failed to leave room');
-  }
 }
 
 /**
  * Delete a room
  */
 export async function deleteRoom(roomId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}`, {
+  await fetchApi<void>(`/api/rooms/${roomId}`, {
     method: 'DELETE',
-    headers: {
-      ...getAuthHeader()
-    }
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to delete room' }));
-    throw new ApiError(response.status, error.detail || 'Failed to delete room');
-  }
 }

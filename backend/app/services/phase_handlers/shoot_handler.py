@@ -1,6 +1,6 @@
 """Shoot phase handlers - death shoot (hunter/wolf king) and hunter shoot phases."""
 import logging
-import random
+import secrets
 from typing import TYPE_CHECKING
 
 from app.models.game import Game
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.services.llm import LLMService
 
 logger = logging.getLogger(__name__)
+_rng = secrets.SystemRandom()
 
 
 async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
@@ -37,13 +38,7 @@ async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
             game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
         return continue_after_death_shoot(game)
 
-    # Check if shooter is human player (multi-player support)
-    # Priority: human_seats (room mode) > is_human (single-player mode)
-    is_human_shooter = (
-        (game.human_seats and shooter.seat_id in game.human_seats) or
-        (not game.human_seats and shooter.is_human)
-    )
-    if is_human_shooter:
+    if game.is_human_player(shooter.seat_id):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI shooter decides
@@ -90,7 +85,7 @@ def continue_after_death_shoot(game: Game) -> dict:
             # Died at night - continue to day speech phase
             alive_seats = game.get_alive_seats()
             if alive_seats:
-                start_seat = random.choice(alive_seats)
+                start_seat = _rng.choice(alive_seats)
                 start_idx = alive_seats.index(start_seat)
                 game.speech_order = alive_seats[start_idx:] + alive_seats[:start_idx]
                 game.current_speech_index = 0
@@ -120,13 +115,7 @@ async def handle_hunter_shoot(game: Game, llm: "LLMService") -> dict:
         game.add_message(0, t("system_messages.hunter_poisoned", language=game.language, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
         return continue_after_hunter(game)
 
-    # Check if hunter is human player (multi-player support)
-    # Priority: human_seats (room mode) > is_human (single-player mode)
-    is_human_hunter = (
-        (game.human_seats and hunter.seat_id in game.human_seats) or
-        (not game.human_seats and hunter.is_human)
-    )
-    if is_human_hunter:
+    if game.is_human_player(hunter.seat_id):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI hunter decides
@@ -172,7 +161,7 @@ def continue_after_hunter(game: Game) -> dict:
             # Hunter died at night - continue to day speech phase
             alive_seats = game.get_alive_seats()
             if alive_seats:
-                start_seat = random.choice(alive_seats)
+                start_seat = _rng.choice(alive_seats)
                 start_idx = alive_seats.index(start_seat)
                 game.speech_order = alive_seats[start_idx:] + alive_seats[:start_idx]
                 game.current_speech_index = 0

@@ -1,7 +1,7 @@
 """WebSocket endpoints for real-time game updates."""
 import logging
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Optional
 
 from app.services.websocket_manager import websocket_manager
@@ -27,7 +27,6 @@ ALLOW_QUERY_TOKEN = settings.DEBUG
 async def game_websocket(
     websocket: WebSocket,
     game_id: str,
-    token: Optional[str] = Query(None)  # Keep for backward compatibility, but disabled in production
 ):
     """
     WebSocket endpoint for real-time game updates with JWT authentication.
@@ -114,11 +113,9 @@ async def game_websocket(
             data = await websocket.receive_text()
 
             # Handle ping/pong for connection keepalive
+            # Send text "pong" to match frontend check: event.data === 'pong'
             if data == "ping":
-                await websocket.send_json({
-                    "type": "pong",
-                    "data": {}
-                })
+                await websocket.send_text("pong")
 
     except WebSocketDisconnect:
         logger.info(f"Player {effective_player_id} disconnected from game {game_id}")
@@ -182,10 +179,7 @@ async def room_websocket(
             data = await websocket.receive_text()
 
             if data == "ping":
-                await websocket.send_json({
-                    "type": "pong",
-                    "data": {}
-                })
+                await websocket.send_text("pong")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected normally for room {room_id}")

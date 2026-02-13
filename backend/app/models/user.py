@@ -2,9 +2,10 @@
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, UniqueConstraint, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.mutable import MutableDict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .base import Base
+from app.core.encrypted_type import EncryptedString
 
 
 class User(Base):
@@ -20,8 +21,8 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)  # 是否激活
     is_email_verified = Column(Boolean, default=False, nullable=False)  # 邮箱是否验证
     is_admin = Column(Boolean, default=False, nullable=False)  # 是否管理员
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     last_login_at = Column(DateTime, nullable=True)  # 最后登录时间
     preferences = Column(MutableDict.as_mutable(JSON), nullable=False, default=dict, server_default='{}')  # 用户偏好设置
 
@@ -45,10 +46,10 @@ class OAuthAccount(Base):
     provider_user_id = Column(String(255), nullable=False, index=True)  # OAuth提供商的user id
     provider_username = Column(String(255), nullable=True)  # OAuth提供商的username
     provider_email = Column(String(255), nullable=True)  # OAuth提供商的email
-    access_token = Column(String(512), nullable=True)  # 可选：存储access token
-    refresh_token = Column(String(512), nullable=True)  # 可选：存储refresh token
-    linked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    access_token = Column(EncryptedString(512), nullable=True)  # 可选：存储access token (encrypted at rest)
+    refresh_token = Column(EncryptedString(512), nullable=True)  # 可选：存储refresh token (encrypted at rest)
+    linked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="oauth_accounts")
@@ -61,7 +62,7 @@ class RefreshToken(Base):
     id = Column(String(36), primary_key=True)  # UUID (jti)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     token_hash = Column(String(128), nullable=False, index=True)  # SHA-256 hash
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     revoked_at = Column(DateTime, nullable=True, index=True)  # 撤销时间
     replaced_by = Column(String(36), nullable=True)  # token rotation
@@ -81,7 +82,7 @@ class PasswordResetToken(Base):
     token_hash = Column(String(128), nullable=False, index=True)  # SHA-256 hash
     expires_at = Column(DateTime, nullable=False, index=True)
     used_at = Column(DateTime, nullable=True)  # 使用时间
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class OAuthState(Base):
@@ -93,13 +94,13 @@ class OAuthState(Base):
     state_hash = Column(String(128), nullable=False, unique=True, index=True)  # SHA-256 hash
     next_url = Column(String(512), nullable=True)  # 登录成功后跳转URL
     bind_user_id = Column(String(36), nullable=True)  # 绑定模式：目标user_id
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     used_at = Column(DateTime, nullable=True)  # 使用时间
 
     def is_expired(self) -> bool:
         """检查state是否过期"""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     def is_used(self) -> bool:
         """检查state是否已使用"""

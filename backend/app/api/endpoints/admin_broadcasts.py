@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.endpoints.game import verify_admin
-from app.core.database import get_db
+from app.core.database_async import get_async_db, AsyncSessionLocal
 from app.models.notification import Notification, NotificationOutbox
 from app.models.notification_broadcast import NotificationBroadcast
 from app.models.user import User
@@ -41,44 +42,42 @@ logger = logging.getLogger(__name__)
 DEFAULT_BROADCAST_PAGE_SIZE = 500
 
 
-def _cascade_delete_broadcast(
-    db: Session, broadcast_id: str, broadcast: NotificationBroadcast
+async def _cascade_delete_broadcast(
+    db: AsyncSession, broadcast_id: str, broadcast: NotificationBroadcast
 ) -> tuple[int, int]:
     """
     Hard delete a broadcast and all associated notifications/outbox.
 
     Returns (notifications_deleted, outbox_deleted) counts.
     """
-    notifications_deleted = db.query(Notification).filter(
-        Notification.broadcast_id == broadcast_id
-    ).delete(synchronize_session=False)
+    result_n = await db.execute(
+        delete(Notification).where(Notification.broadcast_id == broadcast_id)
+    )
+    notifications_deleted = result_n.rowcount or 0
 
-    outbox_deleted = db.query(NotificationOutbox).filter(
-        NotificationOutbox.broadcast_id == broadcast_id
-    ).delete(synchronize_session=False)
+    result_o = await db.execute(
+        delete(NotificationOutbox).where(NotificationOutbox.broadcast_id == broadcast_id)
+    )
+    outbox_deleted = result_o.rowcount or 0
 
-    db.delete(broadcast)
+    await db.delete(broadcast)
 
     return notifications_deleted, outbox_deleted
 
 
-def _execute_broadcast_background(
+async def _execute_broadcast_background(
     broadcast_id: str,
     actor_id: str,
 ) -> None:
-    """Execute the actual broadcast to users in background task."""
-    import asyncio
-    from app.core.database import get_db
-
-    # Create new DB session for background task
-    db = next(get_db())
-
-    async def _async_broadcast_logic():
-        """Async logic wrapped in single event loop."""
+    """Execute the actual broadcast to users as an async background task."""
+    async with AsyncSessionLocal() as db:
         try:
-            broadcast = db.query(NotificationBroadcast).filter(
-                NotificationBroadcast.id == broadcast_id
-            ).first()
+            result = await db.execute(
+                select(NotificationBroadcast).where(
+                    NotificationBroadcast.id == broadcast_id
+                )
+            )
+            broadcast = result.scalars().first()
 
             if not broadcast:
                 logger.error(f"Broadcast {broadcast_id} not found in background task")
@@ -86,11 +85,13 @@ def _execute_broadcast_background(
 
             # Update status to SENDING
             broadcast.status = BroadcastStatus.SENDING.value
-            db.commit()
+            await db.commit()
 
             # Query active users with pagination
-            base_query = db.query(User.id).filter(User.is_active.is_(True))
-            total_targets = int(base_query.count() or 0)
+            count_result = await db.execute(
+                select(func.count(User.id)).where(User.is_active.is_(True))
+            )
+            total_targets = int(count_result.scalar() or 0)
             broadcast.total_targets = total_targets
 
             processed = 0
@@ -100,18 +101,18 @@ def _execute_broadcast_background(
 
             try:
                 while True:
-                    user_ids = [
-                        row[0]
-                        for row in base_query.order_by(User.id)
+                    page_result = await db.execute(
+                        select(User.id)
+                        .where(User.is_active.is_(True))
+                        .order_by(User.id)
                         .offset(offset)
                         .limit(DEFAULT_BROADCAST_PAGE_SIZE)
-                        .all()
-                    ]
+                    )
+                    user_ids = [row[0] for row in page_result.all()]
                     if not user_ids:
                         break
 
                     try:
-                        # All async operations in same event loop
                         await emit_to_users_strict(
                             db,
                             user_ids=user_ids,
@@ -136,7 +137,7 @@ def _execute_broadcast_background(
                     broadcast.processed = processed
                     broadcast.sent_count = sent_count
                     broadcast.failed_count = failed_count
-                    db.commit()
+                    await db.commit()
 
                 # Determine final status
                 if failed_count == 0:
@@ -146,25 +147,23 @@ def _execute_broadcast_background(
                 else:
                     broadcast.status = BroadcastStatus.PARTIAL_FAILED.value
 
-                broadcast.sent_at = datetime.utcnow()
-                db.commit()
+                broadcast.sent_at = datetime.now(timezone.utc)
+                await db.commit()
 
             except Exception as e:
                 logger.error(f"Broadcast execution failed: {e}")
                 broadcast.status = BroadcastStatus.FAILED.value
                 broadcast.last_error = str(e)[:500]
-                db.commit()
-        finally:
-            db.close()
+                await db.commit()
 
-    # Run entire broadcast logic in single event loop
-    asyncio.run(_async_broadcast_logic())
+        except Exception as e:
+            logger.error(f"Broadcast background task error: {e}")
 
 
 @router.get("", response_model=BroadcastListResponse)
-def list_broadcasts(
+async def list_broadcasts(
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     status: Optional[BroadcastStatus] = Query(None),
     category: Optional[NotificationCategory] = Query(None),
     date_from: Optional[datetime] = Query(None),
@@ -177,22 +176,20 @@ def list_broadcasts(
     List broadcast history with filtering and pagination.
     GET /api/admin/notifications/broadcasts
     """
-    query = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.deleted_at.is_(None)
-    )
+    conditions = [NotificationBroadcast.deleted_at.is_(None)]
 
     # Apply filters
     if status:
-        query = query.filter(NotificationBroadcast.status == status.value)
+        conditions.append(NotificationBroadcast.status == status.value)
     if category:
-        query = query.filter(NotificationBroadcast.category == category.value)
+        conditions.append(NotificationBroadcast.category == category.value)
     if date_from:
-        query = query.filter(NotificationBroadcast.created_at >= date_from)
+        conditions.append(NotificationBroadcast.created_at >= date_from)
     if date_to:
-        query = query.filter(NotificationBroadcast.created_at <= date_to)
+        conditions.append(NotificationBroadcast.created_at <= date_to)
     if q:
         search_pattern = f"%{q}%"
-        query = query.filter(
+        conditions.append(
             or_(
                 NotificationBroadcast.title.ilike(search_pattern),
                 NotificationBroadcast.body.ilike(search_pattern),
@@ -200,15 +197,20 @@ def list_broadcasts(
         )
 
     # Get total count
-    total = query.count()
+    count_result = await db.execute(
+        select(func.count(NotificationBroadcast.id)).where(*conditions)
+    )
+    total = int(count_result.scalar() or 0)
 
     # Apply pagination
-    items = (
-        query.order_by(NotificationBroadcast.created_at.desc())
+    result = await db.execute(
+        select(NotificationBroadcast)
+        .where(*conditions)
+        .order_by(NotificationBroadcast.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
-        .all()
     )
+    items = result.scalars().all()
 
     return BroadcastListResponse(
         items=[BroadcastListItem.model_validate(item) for item in items],
@@ -219,18 +221,19 @@ def list_broadcasts(
 
 
 @router.get("/{broadcast_id}", response_model=BroadcastDetail)
-def get_broadcast(
+async def get_broadcast(
     broadcast_id: str,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get broadcast detail.
     GET /api/admin/notifications/broadcasts/{broadcast_id}
     """
-    broadcast = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.id == broadcast_id
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(NotificationBroadcast.id == broadcast_id)
+    )
+    broadcast = result.scalars().first()
 
     if not broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -239,12 +242,11 @@ def get_broadcast(
 
 
 @router.post("", response_model=BroadcastCreateResponse, status_code=202)
-def create_broadcast(
+async def create_broadcast(
     request: Request,
     body: BroadcastCreateRequest,
-    background_tasks: BackgroundTasks,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Create and optionally send a broadcast.
@@ -271,9 +273,12 @@ def create_broadcast(
     )
 
     # Check idempotency
-    existing = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.idempotency_key == body.idempotency_key
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(
+            NotificationBroadcast.idempotency_key == body.idempotency_key
+        )
+    )
+    existing = result.scalars().first()
     if existing:
         return BroadcastCreateResponse(
             id=existing.id,
@@ -295,11 +300,11 @@ def create_broadcast(
         created_by=user_id,  # None for admin password login, real user_id for OAuth users
     )
     db.add(broadcast)
-    db.commit()
-    db.refresh(broadcast)
+    await db.commit()
+    await db.refresh(broadcast)
 
     if body.send_now:
-        background_tasks.add_task(_execute_broadcast_background, broadcast.id, actor_id)
+        asyncio.create_task(_execute_broadcast_background(broadcast.id, actor_id))
 
     logger.warning(
         "BROADCAST_CREATED actor=%s id=%s status=%s",
@@ -317,20 +322,21 @@ def create_broadcast(
 
 
 @router.patch("/{broadcast_id}", response_model=BroadcastDetail)
-def update_broadcast(
+async def update_broadcast(
     broadcast_id: str,
     body: BroadcastUpdateRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update a draft broadcast.
     PATCH /api/admin/notifications/broadcasts/{broadcast_id}
     Only DRAFT status allows editing.
     """
-    broadcast = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.id == broadcast_id
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(NotificationBroadcast.id == broadcast_id)
+    )
+    broadcast = result.scalars().first()
 
     if not broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -353,27 +359,27 @@ def update_broadcast(
     if body.persist_policy is not None:
         broadcast.persist_policy = body.persist_policy.value
 
-    broadcast.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(broadcast)
+    broadcast.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(broadcast)
 
     return BroadcastDetail.model_validate(broadcast)
 
 
 @router.post("/{broadcast_id}/send", response_model=BroadcastCreateResponse, status_code=202)
-def send_draft_broadcast(
+async def send_draft_broadcast(
     broadcast_id: str,
-    background_tasks: BackgroundTasks,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Send a draft broadcast.
     POST /api/admin/notifications/broadcasts/{broadcast_id}/send
     """
-    broadcast = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.id == broadcast_id
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(NotificationBroadcast.id == broadcast_id)
+    )
+    broadcast = result.scalars().first()
 
     if not broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -388,10 +394,10 @@ def send_draft_broadcast(
 
     # Update status to SENDING before scheduling background task
     broadcast.status = BroadcastStatus.SENDING.value
-    db.commit()
+    await db.commit()
 
-    background_tasks.add_task(_execute_broadcast_background, broadcast.id, actor_id)
-    db.refresh(broadcast)
+    asyncio.create_task(_execute_broadcast_background(broadcast.id, actor_id))
+    await db.refresh(broadcast)
 
     return BroadcastCreateResponse(
         id=broadcast.id,
@@ -402,20 +408,20 @@ def send_draft_broadcast(
 
 
 @router.post("/{broadcast_id}/resend", response_model=BroadcastCreateResponse, status_code=202)
-def resend_broadcast(
+async def resend_broadcast(
     broadcast_id: str,
     body: BroadcastResendRequest,
-    background_tasks: BackgroundTasks,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Resend a broadcast (creates a new broadcast linked to original).
     POST /api/admin/notifications/broadcasts/{broadcast_id}/resend
     """
-    original = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.id == broadcast_id
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(NotificationBroadcast.id == broadcast_id)
+    )
+    original = result.scalars().first()
 
     if not original:
         raise HTTPException(status_code=404, detail="Original broadcast not found")
@@ -436,9 +442,12 @@ def resend_broadcast(
     user_id = actor.get("user_id") if actor.get("user_id") else None
 
     # Check idempotency key collision
-    existing = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.idempotency_key == body.idempotency_key
-    ).first()
+    idem_result = await db.execute(
+        select(NotificationBroadcast).where(
+            NotificationBroadcast.idempotency_key == body.idempotency_key
+        )
+    )
+    existing = idem_result.scalars().first()
     if existing:
         # Return existing broadcast if idempotency key already used
         return BroadcastCreateResponse(
@@ -462,10 +471,10 @@ def resend_broadcast(
         resend_of_id=original.id,
     )
     db.add(new_broadcast)
-    db.commit()
-    db.refresh(new_broadcast)
+    await db.commit()
+    await db.refresh(new_broadcast)
 
-    background_tasks.add_task(_execute_broadcast_background, new_broadcast.id, actor_id)
+    asyncio.create_task(_execute_broadcast_background(new_broadcast.id, actor_id))
 
     return BroadcastCreateResponse(
         id=new_broadcast.id,
@@ -476,11 +485,11 @@ def resend_broadcast(
 
 
 @router.delete("/{broadcast_id}", status_code=204)
-def delete_broadcast(
+async def delete_broadcast(
     broadcast_id: str,
     mode: DeleteMode = Query(default=DeleteMode.HISTORY),
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Delete a broadcast.
@@ -491,9 +500,10 @@ def delete_broadcast(
     """
     actor_id = actor.get("player_id", "unknown")
 
-    broadcast = db.query(NotificationBroadcast).filter(
-        NotificationBroadcast.id == broadcast_id
-    ).first()
+    result = await db.execute(
+        select(NotificationBroadcast).where(NotificationBroadcast.id == broadcast_id)
+    )
+    broadcast = result.scalars().first()
 
     if not broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -508,15 +518,15 @@ def delete_broadcast(
     outbox_deleted = 0
 
     if mode == DeleteMode.CASCADE:
-        notifications_deleted, outbox_deleted = _cascade_delete_broadcast(
+        notifications_deleted, outbox_deleted = await _cascade_delete_broadcast(
             db, broadcast_id, broadcast
         )
     else:
         # Soft delete: keep history, hide from list
         broadcast.status = BroadcastStatus.DELETED.value
-        broadcast.deleted_at = datetime.utcnow()
+        broadcast.deleted_at = datetime.now(timezone.utc)
 
-    db.commit()
+    await db.commit()
 
     logger.warning(
         "BROADCAST_DELETE actor=%s id=%s mode=%s notifications_deleted=%s outbox_deleted=%s",
@@ -531,10 +541,10 @@ def delete_broadcast(
 
 
 @router.post("/batch", response_model=BroadcastBatchResponse)
-def batch_operation(
+async def batch_operation(
     body: BroadcastBatchRequest,
     actor: Dict = Depends(verify_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Batch operations on broadcasts.
@@ -551,9 +561,12 @@ def batch_operation(
 
     for broadcast_id in body.ids:
         try:
-            broadcast = db.query(NotificationBroadcast).filter(
-                NotificationBroadcast.id == broadcast_id
-            ).first()
+            result = await db.execute(
+                select(NotificationBroadcast).where(
+                    NotificationBroadcast.id == broadcast_id
+                )
+            )
+            broadcast = result.scalars().first()
 
             if not broadcast:
                 failed.append(broadcast_id)
@@ -568,7 +581,7 @@ def batch_operation(
                 outbox_deleted = 0
 
                 if body.mode == DeleteMode.CASCADE:
-                    notifications_deleted, outbox_deleted = _cascade_delete_broadcast(
+                    notifications_deleted, outbox_deleted = await _cascade_delete_broadcast(
                         db, broadcast_id, broadcast
                     )
                     total_notifications_deleted += notifications_deleted
@@ -576,16 +589,16 @@ def batch_operation(
                 else:
                     # Soft delete
                     broadcast.status = BroadcastStatus.DELETED.value
-                    broadcast.deleted_at = datetime.utcnow()
+                    broadcast.deleted_at = datetime.now(timezone.utc)
 
                 updated += 1
 
         except Exception as e:
             logger.error(f"Batch operation failed for {broadcast_id}: {e}")
-            db.rollback()
+            await db.rollback()
             failed.append(broadcast_id)
 
-    db.commit()
+    await db.commit()
 
     logger.warning(
         "BROADCAST_BATCH_DELETE actor=%s action=%s mode=%s accepted=%s updated=%s failed=%s "

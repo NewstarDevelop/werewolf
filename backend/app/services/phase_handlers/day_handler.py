@@ -1,6 +1,6 @@
 """Day phase handlers - announcement, speech, vote, vote result phases."""
 import logging
-import random
+import secrets
 from typing import TYPE_CHECKING
 
 from app.models.game import Game
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.services.llm import LLMService
 
 logger = logging.getLogger(__name__)
+_rng = secrets.SystemRandom()
 
 
 async def handle_day_announcement(game: Game) -> dict:
@@ -53,7 +54,7 @@ async def handle_day_announcement(game: Game) -> dict:
     # Rule: Each day, randomly select a starting seat from alive players
     # This ensures fairness and prevents position-based advantages
     alive_seats = game.get_alive_seats()
-    start_seat = random.choice(alive_seats)
+    start_seat = _rng.choice(alive_seats)
     start_idx = alive_seats.index(start_seat)
     game.speech_order = alive_seats[start_idx:] + alive_seats[:start_idx]
     game.current_speech_index = 0
@@ -94,12 +95,7 @@ async def handle_day_speech(game: Game, llm: "LLMService") -> dict:
         game.current_speech_index += 1
         return await handle_day_speech(game, llm)  # Recursive call
 
-    # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-    is_human_player = (
-        (game.human_seats and player.seat_id in game.human_seats) or
-        (not game.human_seats and player.is_human)
-    )
-    if is_human_player:
+    if game.is_human_player(player.seat_id):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI speech
@@ -121,23 +117,13 @@ async def handle_day_vote(game: Game, llm: "LLMService") -> dict:
     """Handle day vote phase."""
     alive_players = game.get_alive_players()
 
-    # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-    human_alive_players = [
-        p for p in alive_players
-        if (game.human_seats and p.seat_id in game.human_seats) or
-           (not game.human_seats and p.is_human)
-    ]
+    human_alive_players = [p for p in alive_players if game.is_human_player(p.seat_id)]
     if any(p.seat_id not in game.day_votes for p in human_alive_players):
         return {"status": "waiting_for_human", "phase": game.phase}
 
     # AI players vote
     for player in alive_players:
-        # P0-HIGH-002: 统一fallback逻辑 - human_seats (多人) > is_human (单人)
-        is_human_player = (
-            (game.human_seats and player.seat_id in game.human_seats) or
-            (not game.human_seats and player.is_human)
-        )
-        if not is_human_player and player.seat_id not in game.day_votes:
+        if not game.is_human_player(player.seat_id) and player.seat_id not in game.day_votes:
             targets = [p.seat_id for p in alive_players if p.seat_id != player.seat_id]
             # 获取完整的 LLM 响应（包含投票思考）
             response = await llm.generate_response(player, game, "vote", targets + [0])
@@ -179,7 +165,7 @@ async def handle_day_vote_result(game: Game) -> dict:
         game.add_message(0, t("system_messages.vote_all_abstain", language=game.language), MessageType.SYSTEM)
     else:
         max_votes = max(vote_counts.values())
-        top_targets = [t for t, v in vote_counts.items() if v == max_votes]
+        top_targets = [tid for tid, v in vote_counts.items() if v == max_votes]
 
         if len(top_targets) > 1:
             # Tie - no one dies (simplified rule)

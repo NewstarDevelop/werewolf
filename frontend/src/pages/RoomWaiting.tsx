@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { getRoomDetail, toggleReady, startGame, deleteRoom, leaveRoom } from '@/services/roomApi';
 import { getPlayerId } from '@/utils/player';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { buildWebSocketUrl } from '@/utils/websocket';
 
 export default function RoomWaiting() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -36,11 +37,7 @@ export default function RoomWaiting() {
   useEffect(() => {
     if (!roomId || hasNavigatedRef.current) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = import.meta.env.VITE_API_URL
-      ? new URL(import.meta.env.VITE_API_URL).host
-      : window.location.host;
-    const wsUrl = `${protocol}//${host}/api/ws/room/${roomId}`;
+    const wsUrl = buildWebSocketUrl(`/ws/room/${roomId}`);
 
     console.log('[RoomWaiting] Connecting to room WebSocket:', wsUrl);
     const ws = new WebSocket(wsUrl);
@@ -151,7 +148,7 @@ export default function RoomWaiting() {
   const myPlayer = roomDetail?.players.find(p => p.is_me);
   const isCreator = myPlayer?.is_creator || false;
   const allReady = roomDetail?.players.every(p => p.is_ready) || false;
-  const hasEnoughPlayers = (roomDetail?.players.length || 0) >= 9;
+  const hasEnoughPlayers = (roomDetail?.players.length || 0) >= (roomDetail?.room.max_players || 9);
 
   const handleReady = () => {
     readyMutation.mutate();

@@ -1,11 +1,15 @@
-"""OAuth2 service for linux.do authentication."""
+"""OAuth2 service for linux.do authentication.
+
+Migrated to async database access using SQLAlchemy 2.0 async API.
+"""
 import httpx
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from typing import Dict, Optional, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import generate_random_token, hash_token
@@ -19,8 +23,8 @@ class LinuxdoOAuthService:
     """Service for linux.do OAuth2 authentication."""
 
     @staticmethod
-    def generate_authorization_url(
-        db: Session,
+    async def generate_authorization_url(
+        db: AsyncSession,
         next_url: str = "/lobby",
         bind_user_id: Optional[str] = None
     ) -> Tuple[str, str]:
@@ -46,11 +50,11 @@ class LinuxdoOAuthService:
             state_hash=state_hash,
             next_url=next_url,
             bind_user_id=bind_user_id,
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         )
         db.add(oauth_state)
-        db.commit()
+        await db.commit()
 
         # Build authorization URL
         params = {
@@ -138,7 +142,7 @@ class LinuxdoOAuthService:
                 raise
 
     @staticmethod
-    def verify_state(db: Session, state: str) -> OAuthState:
+    async def verify_state(db: AsyncSession, state: str) -> OAuthState:
         """
         Verify OAuth state parameter.
 
@@ -153,10 +157,13 @@ class LinuxdoOAuthService:
             ValueError: If state is invalid, expired, or already used
         """
         state_hash = hash_token(state)
-        oauth_state = db.query(OAuthState).filter_by(
-            provider="linuxdo",
-            state_hash=state_hash
-        ).first()
+        result = await db.execute(
+            select(OAuthState).where(
+                OAuthState.provider == "linuxdo",
+                OAuthState.state_hash == state_hash,
+            )
+        )
+        oauth_state = result.scalars().first()
 
         if not oauth_state:
             raise ValueError("Invalid state parameter")
@@ -168,14 +175,14 @@ class LinuxdoOAuthService:
             raise ValueError("State has already been used")
 
         # Mark as used
-        oauth_state.used_at = datetime.utcnow()
-        db.commit()
+        oauth_state.used_at = datetime.now(timezone.utc)
+        await db.commit()
 
         return oauth_state
 
     @staticmethod
-    def find_or_create_user(
-        db: Session,
+    async def find_or_create_user(
+        db: AsyncSession,
         provider_user_id: str,
         provider_email: Optional[str],
         provider_username: Optional[str],
@@ -197,18 +204,21 @@ class LinuxdoOAuthService:
             User object
         """
         # Check if OAuth account already exists
-        oauth_account = db.query(OAuthAccount).filter_by(
-            provider="linuxdo",
-            provider_user_id=provider_user_id
-        ).first()
+        result = await db.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.provider == "linuxdo",
+                OAuthAccount.provider_user_id == provider_user_id,
+            )
+        )
+        oauth_account = result.scalars().first()
 
         if oauth_account:
             # User already linked
-            return db.query(User).get(oauth_account.user_id)
+            return await db.get(User, oauth_account.user_id)
 
         # Binding mode: link to existing user
         if bind_user_id:
-            user = db.query(User).get(bind_user_id)
+            user = await db.get(User, bind_user_id)
             if not user:
                 raise ValueError("Bind target user not found")
 
@@ -219,10 +229,10 @@ class LinuxdoOAuthService:
                 provider_user_id=provider_user_id,
                 provider_username=provider_username,
                 provider_email=provider_email,
-                linked_at=datetime.utcnow(),
+                linked_at=datetime.now(timezone.utc),
             )
             db.add(new_oauth)
-            db.commit()
+            await db.commit()
             return user
 
         # Create new user with unique nickname handling
@@ -231,7 +241,12 @@ class LinuxdoOAuthService:
 
         # Check for nickname conflicts and generate unique one
         suffix = 1
-        while db.query(User).filter(User.nickname == nickname).first():
+        while True:
+            result = await db.execute(
+                select(User).where(User.nickname == nickname)
+            )
+            if not result.scalars().first():
+                break
             nickname = f"{base_nickname}_{suffix}"
             suffix += 1
             if suffix > 100:  # Safety limit
@@ -245,11 +260,11 @@ class LinuxdoOAuthService:
             avatar_url=avatar_url,
             is_active=True,
             is_email_verified=bool(provider_email),
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         db.add(user)
-        db.flush()
+        await db.flush()
 
         # Create OAuth link
         oauth_link = OAuthAccount(
@@ -258,10 +273,10 @@ class LinuxdoOAuthService:
             provider_user_id=provider_user_id,
             provider_username=provider_username,
             provider_email=provider_email,
-            linked_at=datetime.utcnow(),
+            linked_at=datetime.now(timezone.utc),
         )
         db.add(oauth_link)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
 
         return user

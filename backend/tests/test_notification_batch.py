@@ -18,13 +18,13 @@ class TestNotificationBatch:
 
     @pytest.fixture
     def mock_db(self):
-        """Create mock database session."""
+        """Create mock database session (async-compatible)."""
         db = MagicMock()
         db.add = MagicMock()
-        db.flush = MagicMock()
-        db.commit = MagicMock()
-        db.refresh = MagicMock()
-        db.rollback = MagicMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        db.rollback = AsyncMock()
         return db
 
     @pytest.fixture
@@ -67,9 +67,9 @@ class TestNotificationBatch:
                 body="Test body",
             )
 
-            # Should have only ONE commit call for all 5 users
-            assert mock_db.commit.call_count == 1, \
-                f"Expected 1 commit, got {mock_db.commit.call_count}"
+            # 1 batch commit + 5 best-effort publish commits = 6 total
+            assert mock_db.commit.call_count == 6, \
+                f"Expected 6 commits (1 batch + 5 best-effort), got {mock_db.commit.call_count}"
 
             # Should have ONE flush call
             assert mock_db.flush.call_count == 1, \

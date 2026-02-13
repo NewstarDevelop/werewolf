@@ -2,7 +2,7 @@
 
 Async endpoints using SQLAlchemy 2.0 async API.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +33,7 @@ async def get_current_user_profile(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -69,7 +69,7 @@ async def update_user_profile(
     if body.avatar_url is not None:
         user.avatar_url = body.avatar_url
 
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     try:
         await db.commit()
@@ -78,7 +78,7 @@ async def update_user_profile(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Nickname already taken")
 
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.get("/me/stats", response_model=UserStatsResponse)
@@ -177,13 +177,13 @@ async def update_user_preferences(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Normalize volume to 2 decimal places to reduce write churn
-    prefs_dict = body.dict()
+    prefs_dict = body.model_dump()
     if 'sound_effects' in prefs_dict and 'volume' in prefs_dict['sound_effects']:
         prefs_dict['sound_effects']['volume'] = round(prefs_dict['sound_effects']['volume'], 2)
 
     # Update preferences (MutableDict will track changes)
     user.preferences = prefs_dict
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(user)

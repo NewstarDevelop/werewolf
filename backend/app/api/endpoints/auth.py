@@ -1,16 +1,20 @@
-"""Authentication API endpoints."""
+"""Authentication API endpoints.
+
+Migrated to async database access using SQLAlchemy 2.0 async API.
+"""
 import logging
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, Cookie, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database_async import get_async_db
 from app.core.auth import create_user_token, create_admin_token
 from app.core.security import hash_password, verify_password
 from app.core.config import settings
@@ -65,7 +69,7 @@ def sanitize_next_url(next_url: str) -> str:
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(body: RegisterRequest, db: Session = Depends(get_db)):
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_async_db)):
     """
     Register a new user with email and password.
 
@@ -73,19 +77,17 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     for backward compatibility.
     """
     # Check if email already exists
-    existing_user = db.query(User).filter(
-        User.email == body.email.lower()
-    ).first()
-
-    if existing_user:
+    result = await db.execute(
+        select(User).where(User.email == body.email.lower())
+    )
+    if result.scalars().first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
     # Check if nickname already exists
-    existing_nickname = db.query(User).filter(
-        User.nickname == body.nickname
-    ).first()
-
-    if existing_nickname:
+    result = await db.execute(
+        select(User).where(User.nickname == body.nickname)
+    )
+    if result.scalars().first():
         raise HTTPException(status_code=409, detail="Nickname already taken")
 
     # Create new user
@@ -98,16 +100,16 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
             nickname=body.nickname,
             is_active=True,
             is_email_verified=False,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            last_login_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            last_login_at=datetime.now(timezone.utc),
         )
 
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
     except IntegrityError as e:
-        db.rollback()
+        await db.rollback()
         # Handle unique constraint violation at DB level
         error_str = str(e.orig).lower() if e.orig else str(e).lower()
         if "nickname" in error_str:
@@ -143,29 +145,47 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_async_db)):
     """
     Login with email and password.
 
     Security: Sets HttpOnly cookie in addition to returning token in response
     for backward compatibility.
+    Security: Rate limited to prevent brute-force attacks.
     """
+    # Rate limiting to prevent brute-force attacks
+    client_ip = get_client_ip(request)
+    is_allowed, retry_after = user_login_limiter.check_rate_limit(client_ip)
+    if not is_allowed:
+        logger.warning(f"User login rate limited for IP {get_client_ip_for_logging(request)}")
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many login attempts. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)}
+        )
+
     # Find user by email
-    user = db.query(User).filter(
-        User.email == body.email.lower()
-    ).first()
+    result = await db.execute(
+        select(User).where(User.email == body.email.lower())
+    )
+    user = result.scalars().first()
 
     # Verify password
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        # Record failed attempt
+        user_login_limiter.record_attempt(client_ip, success=False)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Check if user is active
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
+    # Record successful attempt
+    user_login_limiter.record_attempt(client_ip, success=True)
+
     # Update last login
-    user.last_login_at = datetime.utcnow()
-    db.commit()
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
 
     # Generate token (include is_admin flag from user model)
     access_token = create_user_token(user_id=user.id, is_admin=user.is_admin)
@@ -193,7 +213,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-def logout(current_user: dict = Depends(get_current_user)):
+async def logout(current_user: dict = Depends(get_current_user)):
     """
     Logout current user and clear HttpOnly cookie.
 
@@ -218,7 +238,7 @@ async def oauth_linuxdo(
     next: str = Query("/lobby", description="Redirect URL after login"),
     bind: bool = Query(False, description="Bind mode (requires existing login)"),
     current_user: dict = Depends(get_optional_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Initiate linux.do OAuth2 authorization flow.
@@ -233,7 +253,7 @@ async def oauth_linuxdo(
 
     bind_user_id = current_user.get("user_id") if bind and current_user else None
 
-    authorize_url, state = LinuxdoOAuthService.generate_authorization_url(
+    authorize_url, state = await LinuxdoOAuthService.generate_authorization_url(
         db=db,
         next_url=validated_next,
         bind_user_id=bind_user_id
@@ -246,7 +266,7 @@ async def oauth_linuxdo(
 async def oauth_callback(
     code: str = Query(..., description="Authorization code"),
     state: str = Query(..., description="State parameter"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Handle linux.do OAuth2 callback.
@@ -256,7 +276,7 @@ async def oauth_callback(
     """
     try:
         # Verify state
-        oauth_state = LinuxdoOAuthService.verify_state(db, state)
+        oauth_state = await LinuxdoOAuthService.verify_state(db, state)
 
         # Exchange code for token
         token_response = await LinuxdoOAuthService.exchange_code_for_token(code)
@@ -278,7 +298,7 @@ async def oauth_callback(
             raise HTTPException(status_code=400, detail="Failed to get user ID from OAuth provider")
 
         # Find or create user
-        user = LinuxdoOAuthService.find_or_create_user(
+        user = await LinuxdoOAuthService.find_or_create_user(
             db=db,
             provider_user_id=provider_user_id,
             provider_email=provider_email,
@@ -288,8 +308,8 @@ async def oauth_callback(
         )
 
         # Update last login
-        user.last_login_at = datetime.utcnow()
-        db.commit()
+        user.last_login_at = datetime.now(timezone.utc)
+        await db.commit()
 
         # Generate JWT token (include is_admin flag from user model)
         jwt_token = create_user_token(user_id=user.id, is_admin=user.is_admin)
@@ -321,7 +341,7 @@ async def oauth_callback(
 
 
 @router.post("/reset-password")
-def reset_password(body: PasswordResetRequest, db: Session = Depends(get_db)):
+async def reset_password(body: PasswordResetRequest):
     """
     Request password reset (always returns 202 to prevent email enumeration).
     """
@@ -343,7 +363,7 @@ class AdminLoginResponse(BaseModel):
 
 
 @router.post("/admin-login", response_model=AdminLoginResponse)
-def admin_login(body: AdminLoginRequest, request: Request):
+async def admin_login(body: AdminLoginRequest, request: Request):
     """
     Login to admin panel with password.
 
@@ -403,7 +423,7 @@ class AdminVerifyResponse(BaseModel):
 
 
 @router.get("/admin-verify", response_model=AdminVerifyResponse)
-def verify_admin_token(
+async def verify_admin_token(
     authorization: Optional[str] = Header(None),
     user_access_token: Optional[str] = Cookie(None)
 ):

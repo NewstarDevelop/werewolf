@@ -55,6 +55,10 @@ class LoginRateLimiter:
         # Only create records when actually recording attempts, not on checks
         self._records: Dict[str, AttemptRecord] = {}
         self._lockout_counts: Dict[str, int] = {}
+        # NOTE: threading.Lock is intentionally used here instead of asyncio.Lock.
+        # All operations inside the lock are pure in-memory dict lookups (microseconds),
+        # with no await points, so the event loop is never meaningfully blocked.
+        # threading.Lock also provides safety if called from non-async contexts (e.g., tests).
         self._lock = Lock()
 
     def check_rate_limit(self, identifier: str) -> Tuple[bool, Optional[int]]:

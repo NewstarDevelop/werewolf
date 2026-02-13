@@ -1,7 +1,7 @@
 """Game history models for user statistics."""
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Index, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .base import Base
 
@@ -15,7 +15,7 @@ class GameSession(Base):
     winner = Column(String(32), nullable=True, index=True)  # "werewolf" / "villager" / "draw" / null
     started_at = Column(DateTime, nullable=True, index=True)
     finished_at = Column(DateTime, nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     participants = relationship("GameParticipant", back_populates="game_session", cascade="all, delete-orphan")
@@ -40,7 +40,7 @@ class GameParticipant(Base):
     is_ai = Column(Boolean, default=False, nullable=False, index=True)  # 是否AI玩家
     role = Column(String(32), nullable=True)  # 角色（可选：游戏结束后写入）
     is_winner = Column(Boolean, default=False, nullable=False, index=True)  # 是否胜利
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     game_session = relationship("GameSession", back_populates="participants")
@@ -66,7 +66,7 @@ class GameMessage(Base):
     seat_id = Column(Integer, nullable=False)  # 0 表示系统
     content = Column(Text, nullable=False)
     msg_type = Column(String(32), nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     game_session = relationship("GameSession", back_populates="messages")
