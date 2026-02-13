@@ -92,8 +92,8 @@ def continue_after_death_shoot(game: Game) -> dict:
                 game.current_actor_seat = game.speech_order[0]
                 game.phase = GamePhase.DAY_SPEECH
                 game._spoken_seats_this_round.clear()
-                seat_suffix = t("vote_format.seat_suffix", language=lang)
-                game.add_message(0, t("system_messages.speech_start", language=lang, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
+                seat_suffix = t("vote_format.seat_suffix", language=game.language)
+                game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
         else:
             # Died during day vote - go to next night
             game.day += 1

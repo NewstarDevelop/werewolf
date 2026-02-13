@@ -150,7 +150,7 @@ export async function fetchApi<T>(
       // Handle empty responses
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        return undefined as T;
+        return null as unknown as T;
       }
 
       return response.json();

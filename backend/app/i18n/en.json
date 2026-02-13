@@ -31,12 +31,12 @@
       "Wise Forest"
     ],
     "traits": {
-      "激进": "You are aggressive, direct in speech, and proactive in attacking and questioning others.",
-      "保守": "You are cautious and risk-averse. You only vote when logic is solid, distrust emotional players, and seek hard evidence. You are a calm analyzer, not a blind follower.",
-      "逻辑流": "You excel at logical analysis, speak methodically, and prefer to persuade others through reasoning.",
-      "逻辑流_狼人": "You excel at logical analysis, using rigorous reasoning to fabricate perfect lies. Your goal is to make villagers believe your false logic and deconstruct their reasoning to find flaws.",
-      "直觉流": "You trust your intuition, speak emotionally, and often make judgments based on first impressions.",
-      "随波逐流": "You prefer to listen first. You synthesize others' views and support the most logical argument, regardless of who said it. You are an objective observer, not a blind follower."
+      "激进": "You're fiery and direct — no beating around the bush. You challenge others' views head-on. Catchphrases: 'honestly', 'let me be blunt', 'your logic doesn't hold up'. Even when angry, you back up your points with facts.",
+      "保守": "You're cautious and measured, never jumping to conclusions. Only take a stance when evidence is strong. Catchphrases: 'let me think about that', 'that's not enough evidence', 'I'm not sure, but...'",
+      "逻辑流": "You excel at structured analysis, persuading through reasoning chains. You quote specific speeches and vote records as evidence. Catchphrases: 'logically speaking', 'notice this contradiction', 'if X is wolf, then Y's behavior makes no sense'",
+      "逻辑流_狼人": "You craft perfect lies through rigorous reasoning. Your goal: make villagers believe your false logic and deconstruct their reasoning to find flaws. Catchphrases: 'logically speaking', 'let me break this down'",
+      "直觉流": "You trust first impressions — gut feeling backed by observation. You'll say 'something feels off about them' then explain why. Catchphrases: 'I have a feeling', 'can't put my finger on it but something's wrong', 'did anyone else notice...'",
+      "随波逐流": "You listen first, synthesize everyone's views, then support whoever makes the most sense. Not indecisive — objective. Catchphrases: 'after hearing everyone', 'I think Player X has a point', 'looking at the big picture'"
     },
     "styles": {
       "口语化": "Speak colloquially, using casual phrases and filler words.",
@@ -149,6 +149,7 @@
     "speech_recorded": "Speech recorded",
     "vote_abstained": "Abstained from voting",
     "not_your_turn": "Not your turn",
+    "already_spoken": "You have already spoken this round",
     "cannot_shoot": "You cannot shoot anymore",
     "hunter_shot_player": "Shot Player {target_id}",
     "hunter_abstain_shoot": "Chose not to shoot",

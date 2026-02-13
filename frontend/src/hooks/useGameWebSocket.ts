@@ -30,6 +30,9 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const pingIntervalRef = useRef<NodeJS.Timeout>();
   const shouldReconnectRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const MAX_RECONNECT_DELAY = 30000; // 30s max
+  const BASE_RECONNECT_DELAY = 3000; // 3s base
   const onErrorRef = useRef(onError);
   const onFirstUpdateRef = useRef(onFirstUpdate);
   const [isConnected, setIsConnected] = useState(false);
@@ -131,6 +134,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         console.log('[WebSocket] Connected to game', gameId);
         setIsConnected(true);
         setConnectionError(null);
+        reconnectAttemptRef.current = 0; // Reset backoff on successful connection
 
         // Start ping interval to keep connection alive
         pingIntervalRef.current = setInterval(sendPing, 30000); // Ping every 30s
@@ -169,10 +173,12 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         console.log('[WebSocket] Disconnected:', event.code, event.reason);
         setIsConnected(false);
 
-        // Attempt to reconnect after delay (unless intentionally closed)
+        // Attempt to reconnect with exponential backoff (unless intentionally closed)
         if (event.code !== 1000 && enabled && shouldReconnectRef.current) {
-          console.log('[WebSocket] Reconnecting in 3 seconds...');
-          reconnectTimeoutRef.current = setTimeout(connect, 3000);
+          const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current), MAX_RECONNECT_DELAY);
+          reconnectAttemptRef.current += 1;
+          console.log(`[WebSocket] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttemptRef.current})...`);
+          reconnectTimeoutRef.current = setTimeout(connect, delay);
         }
       };
     } catch (error) {
@@ -182,9 +188,11 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         onErrorRef.current(error as Error);
       }
 
-      // Retry connection after delay
+      // Retry connection with exponential backoff
       if (enabled && shouldReconnectRef.current) {
-        reconnectTimeoutRef.current = setTimeout(connect, 5000);
+        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current), MAX_RECONNECT_DELAY);
+        reconnectAttemptRef.current += 1;
+        reconnectTimeoutRef.current = setTimeout(connect, delay);
       }
     }
   }, [gameId, enabled, cleanup, sendPing, applyIncomingState]); // Removed onError, onFirstUpdate from deps to avoid infinite reconnects

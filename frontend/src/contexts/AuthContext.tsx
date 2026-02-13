@@ -2,7 +2,7 @@
 /**
  * Authentication context for global user state management.
  */
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback, useMemo } from 'react';
 import { authService, User, AuthError } from '@/services/authService';
 import { clearUserToken } from '@/utils/token';
 import { clearPlayerData } from '@/utils/player';
@@ -26,7 +26,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const { t } = useTranslation();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   useEffect(() => {
     const initAuth = async () => {
@@ -44,10 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (status >= 500) {
           // 服务器错误：提示用户
           console.error('Server error during auth:', error);
-          toast({
+          toastRef.current({
             variant: "destructive",
-            title: t("auth.server_error"),
-            description: t("auth.server_error_desc"),
+            title: tRef.current("auth.server_error"),
+            description: tRef.current("auth.server_error_desc"),
           });
           setUser(null);
         } else {
@@ -60,7 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initAuth();
-  }, [toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await authService.login(email, password);

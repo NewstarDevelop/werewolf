@@ -21,11 +21,13 @@ def handle_speech_action(
     # P0 Security Fix: WL-004 - Validate speech turn
     if game.current_actor_seat != player.seat_id:
         return ActionResult.fail(
-            f"Not your turn to speak. Current speaker is seat {game.current_actor_seat}"
+            t("api_responses.not_your_turn", language=game.language)
         ).to_dict()
 
     if player.seat_id in game._spoken_seats_this_round:
-        return ActionResult.fail("You have already spoken in this round").to_dict()
+        return ActionResult.fail(
+            t("api_responses.already_spoken", language=game.language)
+        ).to_dict()
 
     # Mark as spoken
     game._spoken_seats_this_round.add(player.seat_id)

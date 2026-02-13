@@ -121,7 +121,8 @@
     "select_target": "Select Target",
     "wolf_teammate": "Teammate",
     "good": "Good",
-    "werewolf": "Werewolf"
+    "werewolf": "Werewolf",
+    "guard_blocked": "#{{seat}} (protected last night, cannot repeat)"
   },
   "language": {
     "switch_hint": "Switch Language"

@@ -121,7 +121,8 @@
     "select_target": "选择目标",
     "wolf_teammate": "狼队友",
     "good": "好人",
-    "werewolf": "狼人"
+    "werewolf": "狼人",
+    "guard_blocked": "{{seat}}号（昨晚已守护，不可连续）"
   },
   "language": {
     "switch_hint": "切换语言"

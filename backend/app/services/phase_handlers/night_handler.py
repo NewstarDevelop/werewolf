@@ -111,7 +111,7 @@ async def handle_night_werewolf(game: Game, llm: "LLMService") -> dict:
     return {"status": "updated", "new_phase": game.phase}
 
 
-async def handle_night_guard(game: Game) -> dict:
+async def handle_night_guard(game: Game, llm: "LLMService" = None) -> dict:
     """Handle guard protection phase."""
     guard = game.get_player_by_role(Role.GUARD)
 
@@ -128,10 +128,13 @@ async def handle_night_guard(game: Game) -> dict:
                 protect_choices.remove(game.guard_last_target)
 
             if protect_choices:
-                # TODO: Implement AI guard decision via LLM
-                # For now, random choice or skip
-                target = _rng.choice(protect_choices + [0])  # 0 = skip
-                game.guard_target = target if target != 0 else None
+                if llm:
+                    target = await llm.decide_guard_target(guard, game, protect_choices)
+                else:
+                    # Fallback to random if no LLM available
+                    choice = _rng.choice(protect_choices + [0])
+                    target = choice if choice != 0 else None
+                game.guard_target = target
                 if game.guard_target:
                     game.add_action(guard.seat_id, ActionType.PROTECT, game.guard_target)
             game.guard_decided = True

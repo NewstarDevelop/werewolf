@@ -132,7 +132,7 @@ const GamePage = () => {
       });
   }, [gameState, isGameOver, t]);
 
-  // 棰勬瀯寤?seat_id -> player Map锛岄伩鍏?O(n) 绾挎€ф煡鎵?
+  // 预构建 seat_id -> player Map，避免 O(n) 线性查找
   const playerMap = useMemo(() => {
     if (!gameState) return new Map<number, Player>();
     return new Map(gameState.players.map(p => [p.seat_id, p]));
@@ -142,7 +142,7 @@ const GamePage = () => {
   const messages = useMemo(() => {
     if (!gameState) return [];
     return gameState.message_log.map((m, idx) => {
-      const player = playerMap.get(m.seat_id); // O(1) 鏌ユ壘鏇夸唬 find()
+      const player = playerMap.get(m.seat_id); // O(1) 查找替代 find()
       const isSystem = m.type === "system" || m.seat_id === 0;
       const isUser = m.seat_id === gameState.my_seat;
 
@@ -383,7 +383,7 @@ const GamePage = () => {
       {/* Main Content */}
       <div className="relative z-10 flex flex-1 overflow-hidden flex-col md:flex-row p-3 gap-3 md:p-6 md:gap-6 max-w-[1920px] mx-auto w-full">
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0 shadow-2xl rounded-2xl overflow-hidden glass-panel border border-border/20 ring-1 ring-border/10">
+        <div className="flex-1 flex flex-col min-w-0 shadow-2xl rounded-2xl overflow-hidden">
           <ChatLog messages={messages} isLoading={isLoading} />
         </div>
 
@@ -400,6 +400,7 @@ const GamePage = () => {
             wolfVotesVisible={gameState?.wolf_votes_visible}
             myRole={gameState?.my_role}
             nightKillTarget={gameState?.night_kill_target}
+            guardLastTarget={gameState?.guard_last_target}
           />
         </div>
       </div>

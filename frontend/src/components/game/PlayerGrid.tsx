@@ -24,6 +24,7 @@ interface PlayerGridProps {
   wolfVotesVisible?: Record<number, number>; // teammate_seat -> target_seat
   myRole?: Role;
   nightKillTarget?: number | null; // For witch save phase - highlight the kill target
+  guardLastTarget?: number | null; // For guard - last night's protection target (cannot protect consecutively)
 }
 
 const PlayerGrid = ({
@@ -37,6 +38,7 @@ const PlayerGrid = ({
   wolfVotesVisible = {},
   myRole,
   nightKillTarget,
+  guardLastTarget,
 }: PlayerGridProps) => {
   const { t } = useTranslation('common');
 
@@ -85,9 +87,12 @@ const PlayerGrid = ({
           const wolfVote = wolfVotesVisible[player.seatId];
 
           // Check if player is selectable
+          // Guard cannot protect the same target consecutively
+          const isGuardBlocked = myRole === "guard" && pendingAction?.type === "protect" && guardLastTarget === player.seatId;
           const isSelectable =
-            selectableIds.length === 0 ||
-            selectableIds.includes(player.seatId);
+            !isGuardBlocked &&
+            (selectableIds.length === 0 ||
+            selectableIds.includes(player.seatId));
 
           return (
             <div
@@ -140,6 +145,12 @@ const PlayerGrid = ({
                   <span>{t('player_grid.werewolf')}</span>
                 </div>
               </>
+            )}
+            {myRole === "guard" && guardLastTarget && (
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-muted-foreground/50" />
+                <span>{t('player_grid.guard_blocked', { seat: guardLastTarget })}</span>
+              </div>
             )}
           </div>
         </div>

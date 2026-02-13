@@ -25,7 +25,7 @@ const translationPatterns: TranslationPattern[] = [
 
   // Night phases
   {
-    pattern: /第(\d+)天?夜晚降临[，,]?请闭眼[。.]?/,
+    pattern: /第(\d+)天?夜晚降临[，,]?(?:请闭眼|请沉睡)[。.]?/,
     translate: (match, t) => t('game:system_messages.night_falls', { day: match[1] })
   },
   {
@@ -33,7 +33,7 @@ const translationPatterns: TranslationPattern[] = [
     translate: (_, t) => t('game:system_messages.werewolf_discussion_start')
   },
   {
-    pattern: /狼人讨论结束[，,]?请选择击杀目标[。.]?/,
+    pattern: /狼人(?:队内)?讨论结束[，,]?请选择击杀目标[。.]?/,
     translate: (_, t) => t('game:system_messages.werewolf_select_target')
   },
   {
@@ -55,12 +55,20 @@ const translationPatterns: TranslationPattern[] = [
     translate: (_, t) => t('game:system_messages.day_peaceful')
   },
   {
-    pattern: /天亮了[，,]?昨晚.*?(\d+)号.*?死了[。.]?/,
+    pattern: /天亮了[，,]?昨晚.*?(\d+)号.*?(?:死了|死亡)[。.]?/,
     translate: (match, t) => t('game:system_messages.day_death', { id: match[1] })
+  },
+  {
+    pattern: /天亮了[，,]?昨晚(.+?)死亡[。.]?/,
+    translate: (match, t) => t('game:system_messages.day_death_generic', { deaths: match[1] })
   },
   {
     pattern: /天亮了[。.]?/,
     translate: (_, t) => t('game:system_messages.day_breaks')
+  },
+  {
+    pattern: /发言结束[，,]?请投票[。.]?/,
+    translate: (_, t) => t('game:system_messages.speech_end')
   },
   {
     pattern: /请从(\d+)号开始发言[。.]?/,
@@ -93,6 +101,12 @@ const translationPatterns: TranslationPattern[] = [
     translate: (_, t) => t('game:system_messages.vote_tie')
   },
 
+  // Guard
+  {
+    pattern: /守卫请选择守护目标[。.]?/,
+    translate: (_, t) => t('game:system_messages.guard_select_target')
+  },
+
   // Hunter
   {
     pattern: /(\d+)号是猎人[，,]?请选择开枪目标[。.]?/,
@@ -101,6 +115,10 @@ const translationPatterns: TranslationPattern[] = [
   {
     pattern: /猎人请选择开枪目标[。.]?/,
     translate: (_, t) => t('game:system_messages.hunter_select_target')
+  },
+  {
+    pattern: /(\d+)号猎人选择不开枪[。.]?/,
+    translate: (match, t) => t('game:system_messages.hunter_no_shoot', { id: match[1] })
   },
 
   // Game over

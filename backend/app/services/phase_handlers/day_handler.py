@@ -68,11 +68,52 @@ async def handle_day_announcement(game: Game) -> dict:
     return {"status": "updated", "new_phase": game.phase}
 
 
-async def handle_day_last_words(game: Game) -> dict:
-    """Handle last words for dead player."""
-    # For simplicity, skip last words in MVP
-    game.phase = GamePhase.DAY_SPEECH
-    game._spoken_seats_this_round.clear()  # P0 Fix: Reset speech tracker
+async def handle_day_last_words(game: Game, llm: "LLMService" = None) -> dict:
+    """Handle last words for eliminated player.
+
+    The eliminated player (tracked by current_actor_seat) gets a chance to
+    speak their last words before the game proceeds to hunter shoot or next night.
+    """
+    eliminated_seat = game.current_actor_seat
+    if eliminated_seat is None:
+        # No one to give last words, proceed
+        return _after_last_words(game)
+
+    player = game.get_player(eliminated_seat)
+    if not player:
+        return _after_last_words(game)
+
+    if game.is_human_player(eliminated_seat):
+        # Wait for human player's last words
+        return {"status": "waiting_for_human", "phase": game.phase}
+
+    # AI player generates last words
+    if llm:
+        speech = await llm.generate_speech(player, game)
+        game.add_message(player.seat_id, speech, MessageType.LAST_WORDS)
+
+    return _after_last_words(game)
+
+
+def _after_last_words(game: Game) -> dict:
+    """Proceed after last words: check for hunter/wolf king shoot or go to next night."""
+    eliminated_seat = game.current_actor_seat
+    player = game.get_player(eliminated_seat) if eliminated_seat else None
+
+    if player:
+        # Check for hunter or wolf king death shoot
+        if player.role == Role.HUNTER and player.can_shoot:
+            game.phase = GamePhase.DEATH_SHOOT
+            game.increment_version()
+            return {"status": "updated", "new_phase": game.phase}
+        elif player.role == Role.WOLF_KING:
+            game.phase = GamePhase.DEATH_SHOOT
+            game.increment_version()
+            return {"status": "updated", "new_phase": game.phase}
+
+    # No shoot — go to next night
+    game.day += 1
+    game.phase = GamePhase.NIGHT_START
     game.increment_version()
     return {"status": "updated", "new_phase": game.phase}
 
@@ -87,13 +128,22 @@ async def handle_day_speech(game: Game, llm: "LLMService") -> dict:
         game.increment_version()
         return {"status": "updated", "new_phase": game.phase}
 
-    current_seat = game.speech_order[game.current_speech_index]
-    game.current_actor_seat = current_seat
-    player = game.get_player(current_seat)
-
-    if not player:
+    # Skip invalid seats iteratively to avoid stack overflow from recursive calls
+    while game.current_speech_index < len(game.speech_order):
+        current_seat = game.speech_order[game.current_speech_index]
+        player = game.get_player(current_seat)
+        if player:
+            break
         game.current_speech_index += 1
-        return await handle_day_speech(game, llm)  # Recursive call
+    else:
+        # All remaining seats invalid, move to vote
+        game.phase = GamePhase.DAY_VOTE
+        game.day_votes = {}
+        game.add_message(0, t("system_messages.speech_end", language=game.language), MessageType.SYSTEM)
+        game.increment_version()
+        return {"status": "updated", "new_phase": game.phase}
+
+    game.current_actor_seat = current_seat
 
     if game.is_human_player(player.seat_id):
         return {"status": "waiting_for_human", "phase": game.phase}
@@ -176,7 +226,7 @@ async def handle_day_vote_result(game: Game) -> dict:
             game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM)
             game.kill_player(eliminated)
 
-            # Check win condition immediately after death (before hunter/wolf king shoot)
+            # Check win condition immediately after death
             winner = game.check_winner()
             if winner:
                 game.winner = winner
@@ -184,19 +234,11 @@ async def handle_day_vote_result(game: Game) -> dict:
                 game.phase = GamePhase.GAME_OVER
                 return {"status": "game_over", "winner": winner}
 
-            # Check for hunter or wolf king death shoot
-            player = game.get_player(eliminated)
-            if player:
-                # Hunter can shoot if not poisoned
-                if player.role == Role.HUNTER and player.can_shoot:
-                    game.current_actor_seat = eliminated
-                    game.phase = GamePhase.DEATH_SHOOT
-                    return {"status": "updated", "new_phase": game.phase}
-                # Wolf king can shoot when voted out (only during day, not when poisoned)
-                elif player.role == Role.WOLF_KING:
-                    game.current_actor_seat = eliminated
-                    game.phase = GamePhase.DEATH_SHOOT
-                    return {"status": "updated", "new_phase": game.phase}
+            # Route to last words phase — hunter/wolf king shoot check happens after last words
+            game.current_actor_seat = eliminated
+            game.phase = GamePhase.DAY_LAST_WORDS
+            game.increment_version()
+            return {"status": "updated", "new_phase": game.phase}
 
     # Check win condition (for cases where no one was eliminated)
     winner = game.check_winner()

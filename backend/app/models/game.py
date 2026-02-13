@@ -564,6 +564,7 @@ class Game:
         # Base state (always safe to share)
         state = {
             "game_id": self.id,
+            "room_id": self.id,  # Game ID doubles as room ID for redirect on reset
             "status": self.status.value,
             "state_version": self.state_version,
             "day": self.day,
@@ -638,6 +639,10 @@ class Game:
                 if self.phase == GamePhase.NIGHT_WITCH and not self.witch_poison_decided:
                     state["night_kill_target"] = self.night_kill_target
 
+            # Guard-specific info
+            if player.role == Role.GUARD:
+                state["guard_last_target"] = self.guard_last_target
+
             # Seer-specific info
             if player.role == Role.SEER:
                 state["verified_results"] = player.verified_players
@@ -705,14 +710,23 @@ class GameStore:
         """Invoke registered cleanup hooks for a removed game.
 
         Hooks are best-effort: failures are logged but do not propagate.
-        Supports both sync and async callables (async ones are scheduled).
+        Supports both sync and async callables.
         """
+        import inspect
         for hook in self._cleanup_hooks:
             try:
-                result = hook(game_id)
-                # If the hook returns a coroutine, schedule it
-                if asyncio.iscoroutine(result):
-                    asyncio.ensure_future(result)
+                if inspect.iscoroutinefunction(hook):
+                    # Schedule async hook on the running event loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(hook(game_id))
+                    except RuntimeError:
+                        # No running loop — skip async hook
+                        logging.getLogger(__name__).warning(
+                            f"Cannot run async cleanup hook for game {game_id}: no event loop"
+                        )
+                else:
+                    hook(game_id)
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(

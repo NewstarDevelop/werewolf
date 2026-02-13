@@ -602,6 +602,19 @@ class LLMService:
         response = await self.generate_response(player, game, "speech")
         return response.speak
 
+    async def decide_guard_target(
+        self, player: "Player", game: "Game", targets: list[int]
+    ) -> Optional[int]:
+        """Decide who to protect as guard (async).
+
+        Returns:
+            Target seat ID to protect, or None to skip protection.
+        """
+        response = await self.generate_response(player, game, "protect", targets + [0])
+        if response.action_target and response.action_target != 0:
+            return response.action_target
+        return None
+
     async def decide_kill_target(
         self, player: "Player", game: "Game", targets: list[int]
     ) -> int:
@@ -654,30 +667,58 @@ class LLMService:
         return result
 
     def _calculate_save_value(self, game: "Game", target_id: int) -> int:
-        """Calculate the value of saving a target (0-100)."""
+        """Calculate the value of saving a target (0-100).
+
+        Uses role-based heuristics and speech pattern analysis to determine
+        whether the witch should save the target.
+        """
         target = game.players.get(target_id)
         if not target:
             return 0
 
-        # Revealed seer is highest priority
+        # Revealed seer is highest priority — check via multiple signal sources
         if target.role.value == "seer":
-            # Check if seer has revealed (claimed in messages)
+            # Signal 1: Seer has verified players (means they've been active as seer)
+            if target.verified_players:
+                return 100  # Active seer with verification history
+
+            # Signal 2: Check speech content for seer claims (bilingual patterns)
+            seer_claim_patterns_zh = [
+                "我是预言家", "本预言家", "作为预言家",
+                "我验了", "我查验", "我昨晚验", "我昨晚查",
+                "给了金水", "给了查杀", "验到", "查到"
+            ]
+            seer_claim_patterns_en = [
+                "i am the seer", "i'm the seer", "as the seer",
+                "i checked", "i verified", "last night i checked",
+                "found werewolf", "found good", "gave gold"
+            ]
+            seer_patterns = seer_claim_patterns_zh + seer_claim_patterns_en
+            negative_patterns = [
+                "不是预言家", "假预言家", "not the seer", "fake seer"
+            ]
+
             for msg in game.messages:
                 if msg.seat_id == target_id:
                     content = msg.content.lower()
-                    seer_patterns = ["我是预言家", "i am the seer", "i'm the seer", "本预言家"]
-                    if any(pattern in content for pattern in seer_patterns):
-                        return 100  # Must save revealed seer
+                    if any(p in content for p in seer_patterns):
+                        if not any(neg in content for neg in negative_patterns):
+                            return 100  # Must save revealed seer
+
+        # Power roles (non-seer) have medium-high value
+        from app.schemas.enums import Role as RoleEnum
+        high_value_roles = {RoleEnum.HUNTER, RoleEnum.GUARD}
+        if target.role in high_value_roles:
+            return 65
 
         # Check if target is suspected wolf (don't save)
-        # This is a simplified check - could be enhanced with voting pattern analysis
         wolf_suspicion = 0
         for action in game.actions:
             if action.action_type.value == "vote" and action.target_id == target_id:
                 wolf_suspicion += 1
 
         if wolf_suspicion >= 3:  # Many people voted for them
-            return 0  # Likely wolf, don't save
+            return 10  # Likely wolf, low save value
 
         # Default value for unknown players
         return 50

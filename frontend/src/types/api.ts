@@ -52,6 +52,7 @@ export interface PendingAction {
 
 export interface GameState {
   game_id: string;
+  room_id?: string;  // Room ID for redirect on game reset
   status: GameStatus;
   state_version: number;  // State version for race condition prevention
   day: number;
@@ -67,6 +68,9 @@ export interface GameState {
   wolf_teammates: number[];
   verified_results: Record<number, boolean>;
   wolf_votes_visible?: Record<number, number>; // teammate_seat -> target_seat
+  has_save_potion?: boolean;  // Witch-specific: whether save potion is available
+  has_poison_potion?: boolean;  // Witch-specific: whether poison potion is available
+  guard_last_target?: number | null;  // Guard-specific: last night's protection target
 }
 
 export interface GameStartRequest {
