@@ -84,115 +84,142 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">{t('auth.register_title')}</CardTitle>
-          <CardDescription className="text-center">
-            {t('auth.register_subtitle')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('auth.email')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="your@email.com"
-                        {...field}
-                        disabled={isLoading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      {/* Atmospheric Background */}
+      <div className="absolute inset-0 atmosphere-night z-0" />
+      <div className="absolute inset-0 atmosphere-moonlight z-0 opacity-60" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-red-950/20 via-transparent to-transparent z-0" />
+      <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-moonlight/5 blur-3xl animate-pulse-slow z-0" />
+      <div className="absolute bottom-1/3 right-1/4 w-48 h-48 rounded-full bg-werewolf/5 blur-3xl animate-pulse-slow z-0" style={{ animationDelay: '1.5s' }} />
 
-              <FormField
-                control={form.control}
-                name="nickname"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('auth.nickname')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder={t('auth.nickname_placeholder')}
-                        {...field}
-                        disabled={isLoading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('auth.password')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={t('auth.password_placeholder')}
-                        {...field}
-                        disabled={isLoading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('auth.confirm_password')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={t('auth.confirm_password_placeholder')}
-                        {...field}
-                        disabled={isLoading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('auth.registering')}
-                  </>
-                ) : (
-                  t('auth.register_button')
-                )}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
-          <div className="text-sm text-center text-muted-foreground">
-            {t('auth.have_account')}{' '}
-            <Link to="/auth/login" className="text-primary hover:underline">
-              {t('auth.login_now')}
-            </Link>
+      <div className="relative z-10 w-full max-w-md animate-fade-in-up">
+        {/* Branding */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-3 shadow-glow-red">
+            <svg viewBox="0 0 24 24" className="w-7 h-7 text-primary" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3c-1.5 2-3 3.5-3 6a3 3 0 0 0 6 0c0-2.5-1.5-4-3-6Z" />
+              <path d="M6.5 12c-1.5 0-3 .5-4 2 1.5 1 3 1.5 4.5 1.5" />
+              <path d="M17.5 12c1.5 0 3 .5 4 2-1.5 1-3 1.5-4.5 1.5" />
+              <path d="M12 9c-2 3-4 5.5-4 8a4 4 0 0 0 8 0c0-2.5-2-5-4-8Z" />
+            </svg>
           </div>
-        </CardFooter>
-      </Card>
+          <h1 className="text-2xl font-bold font-display text-glow-red tracking-tight">Werewolf</h1>
+        </div>
+
+        {/* Register Card */}
+        <Card className="glass-panel-dark border-border/30 shadow-2xl backdrop-blur-xl">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-xl font-bold text-center">{t('auth.register_title')}</CardTitle>
+            <CardDescription className="text-center">
+              {t('auth.register_subtitle')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-foreground/80">{t('auth.email')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="your@email.com"
+                          className="h-11 bg-muted/30 border-border/40 focus:border-accent/60 transition-colors"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nickname"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-foreground/80">{t('auth.nickname')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          placeholder={t('auth.nickname_placeholder')}
+                          className="h-11 bg-muted/30 border-border/40 focus:border-accent/60 transition-colors"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-foreground/80">{t('auth.password')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder={t('auth.password_placeholder')}
+                          className="h-11 bg-muted/30 border-border/40 focus:border-accent/60 transition-colors"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-foreground/80">{t('auth.confirm_password')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder={t('auth.confirm_password_placeholder')}
+                          className="h-11 bg-muted/30 border-border/40 focus:border-accent/60 transition-colors"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button type="submit" className="w-full h-11 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t('auth.registering')}
+                    </>
+                  ) : (
+                    t('auth.register_button')
+                  )}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+          <CardFooter className="flex flex-col space-y-2 pt-2">
+            <div className="text-sm text-center text-muted-foreground">
+              {t('auth.have_account')}{' '}
+              <Link to="/auth/login" className="text-accent hover:text-accent/80 font-medium transition-colors">
+                {t('auth.login_now')}
+              </Link>
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

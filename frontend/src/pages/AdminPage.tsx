@@ -37,20 +37,24 @@ export default function AdminPage() {
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col space-y-6 p-6 md:p-8 animate-fade-in">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <ShieldAlert className="h-6 w-6" />
-          {t('admin.page_title', 'Admin Panel')}
-        </h2>
-        <p className="text-muted-foreground">
-          {t('admin.page_description', 'Manage system settings and broadcast notifications.')}
-        </p>
-      </div>
+    <div className="min-h-full relative">
+      <div className="fixed inset-0 atmosphere-night z-0 pointer-events-none" />
+      <div className="fixed inset-0 atmosphere-moonlight z-0 opacity-40 pointer-events-none" />
 
-      <Separator className="bg-border" />
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-6 md:py-10 animate-fade-in space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2 font-display">
+            <ShieldAlert className="h-6 w-6 text-primary" />
+            {t('admin.page_title', 'Admin Panel')}
+          </h2>
+          <p className="text-muted-foreground">
+            {t('admin.page_description', 'Manage system settings and broadcast notifications.')}
+          </p>
+        </div>
 
-      <AdminAuthGuard>
+        <Separator className="bg-border/40" />
+
+        <AdminAuthGuard>
         {(adminToken) => (
           <Tabs defaultValue="users" className="space-y-6">
             <TabsList className="grid w-full grid-cols-3 max-w-lg">
@@ -93,6 +97,7 @@ export default function AdminPage() {
           </Tabs>
         )}
       </AdminAuthGuard>
+      </div>
     </div>
   );
 }

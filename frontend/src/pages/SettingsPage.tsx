@@ -14,19 +14,23 @@ export default function SettingsPage() {
   const { t } = useTranslation('common');
 
   return (
-    <div className="flex flex-1 flex-col space-y-6 p-6 md:p-8 animate-fade-in">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-bold tracking-tight">
-          {t('settings.title', 'Settings')}
-        </h2>
-        <p className="text-muted-foreground">
-          {t('settings.description', 'Manage your game preferences and account settings.')}
-        </p>
-      </div>
+    <div className="min-h-full relative">
+      <div className="fixed inset-0 atmosphere-night z-0 pointer-events-none" />
+      <div className="fixed inset-0 atmosphere-moonlight z-0 opacity-40 pointer-events-none" />
 
-      <Separator className="bg-border" />
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-6 md:py-10 animate-fade-in space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold tracking-tight font-display">
+            {t('settings.title', 'Settings')}
+          </h2>
+          <p className="text-muted-foreground">
+            {t('settings.description', 'Manage your game preferences and account settings.')}
+          </p>
+        </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+        <Separator className="bg-border/40" />
+
+        <div className="grid gap-6 md:grid-cols-2">
         {/* Appearance Settings */}
         <Card className="glass-panel">
           <CardHeader>
@@ -84,6 +88,7 @@ export default function SettingsPage() {
 
         {/* Notification Settings */}
         <NotificationSettings />
+        </div>
       </div>
     </div>
   );

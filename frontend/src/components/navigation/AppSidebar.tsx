@@ -139,11 +139,16 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Gamepad2 className="size-4" />
+        <div className="flex items-center gap-2.5 px-2 py-1.5">
+          <div className="flex aspect-square size-9 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 shadow-sm">
+            <svg viewBox="0 0 24 24" className="size-5 text-primary" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3c-1.5 2-3 3.5-3 6a3 3 0 0 0 6 0c0-2.5-1.5-4-3-6Z" />
+              <path d="M6.5 12c-1.5 0-3 .5-4 2 1.5 1 3 1.5 4.5 1.5" />
+              <path d="M17.5 12c1.5 0 3 .5 4 2-1.5 1-3 1.5-4.5 1.5" />
+              <path d="M12 9c-2 3-4 5.5-4 8a4 4 0 0 0 8 0c0-2.5-2-5-4-8Z" />
+            </svg>
           </div>
-          <span className="truncate font-semibold tracking-tight text-sidebar-foreground">
+          <span className="truncate font-bold tracking-tight text-sidebar-foreground font-display">
             Werewolf
           </span>
         </div>

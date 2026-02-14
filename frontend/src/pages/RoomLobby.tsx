@@ -8,12 +8,11 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { createRoom, getRooms, joinRoom } from '@/services/roomApi';
 import { getPlayerId } from '@/utils/player';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { useAuth } from '@/contexts/AuthContext';
 import { z } from 'zod';
 import { GameMode, WolfKingVariant, ApiError } from '@/services/api';
@@ -25,7 +24,7 @@ const roomNameSchema = z.string()
 export default function RoomLobby() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation('common');
-  const { user, isAuthenticated, isLoading, logout: authLogout } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const playerId = getPlayerId();
 
   const [roomName, setRoomName] = useState('');
@@ -130,209 +129,206 @@ export default function RoomLobby() {
     joinRoomMutation.mutate({ roomId, nickname: user.nickname });
   };
 
-  const handleLogout = async () => {
-    try {
-      await authLogout();
-      toast.success(t('auth.logout_success', { defaultValue: 'Logged out' }));
-      navigate('/');
-    } catch (error) {
-      toast.error(t('auth.logout_failed', { defaultValue: 'Logout failed' }));
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className="min-h-full relative">
       {/* Ambient background effect */}
-      <div className="absolute inset-0 atmosphere-night z-0" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-200/30 dark:from-indigo-900/20 via-transparent to-transparent z-0" />
-      <div className="absolute inset-0 atmosphere-moonlight z-0 opacity-50" />
+      <div className="fixed inset-0 atmosphere-night z-0 pointer-events-none" />
+      <div className="fixed inset-0 atmosphere-moonlight z-0 opacity-40 pointer-events-none" />
 
-      <div className="container relative z-10 mx-auto px-4 py-8 animate-fade-in">
-        {/* Header */}
-        <div className="text-center mb-8 relative">
-          <div className="absolute right-0 top-0 flex items-center gap-2">
-            {isAuthenticated && user && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
-                <span>{user.nickname}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/history')}
-                  className="h-8"
-                >
-                  {t('history.title')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="h-8"
-                >
-                  {t('auth.logout', { defaultValue: 'Logout' })}
-                </Button>
-              </div>
-            )}
-            <LanguageSwitcher />
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 font-display tracking-tight">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-6 md:py-10 animate-fade-in">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-foreground font-display tracking-tight">
             {t('room.title')}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             {t('room.subtitle')}
           </p>
         </div>
 
-        {/* Player Info and Create Room Section */}
-        <Card className="mb-8 glass-panel animate-slide-up">
-          <CardHeader>
-            <CardTitle>{t('room.player_info')}</CardTitle>
-            <CardDescription>
-              {t('room.player_info_desc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Display Current Username */}
-            {isAuthenticated && user && (
-              <div className="p-4 bg-accent/10 rounded-lg border border-accent/20">
-                <Label className="text-sm text-muted-foreground">{t('room.current_user', { defaultValue: '褰撳墠鐢ㄦ埛' })}</Label>
-                <p className="mt-1 text-lg font-semibold">{user.nickname}</p>
-              </div>
-            )}
-
-            {/* Room Name Input */}
-            <div>
-              <Label htmlFor="roomName">{t('room.room_name')}</Label>
-              <Input
-                id="roomName"
-                placeholder={t('room.room_name_placeholder')}
-                value={roomName}
-                onChange={(e) => setRoomName(e.target.value)}
-                className="mt-2"
-              />
-            </div>
-
-            {/* Game Mode Selection */}
-            <div className="space-y-3 pt-2">
-              <Label>{t('room.game_mode')}</Label>
-              <RadioGroup
-                value={gameMode}
-                onValueChange={(v) => setGameMode(v as GameMode)}
-                className="flex flex-col gap-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="classic_9" id="mode_9" />
-                  <Label htmlFor="mode_9">{t('room.mode_classic_9')}</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="classic_12" id="mode_12" />
-                  <Label htmlFor="mode_12">{t('room.mode_classic_12')}</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            {/* Wolf King Variant Selection (Only for 12 players) */}
-            {gameMode === 'classic_12' && (
-              <div className="space-y-3 pt-2 pl-4 border-l-2 border-accent/20">
-                <Label>{t('room.wolf_king_variant')}</Label>
-                <RadioGroup
-                  value={wolfKingVariant}
-                  onValueChange={(v) => setWolfKingVariant(v as WolfKingVariant)}
-                  className="flex flex-col gap-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="wolf_king" id="wk_normal" />
-                    <Label htmlFor="wk_normal">{t('room.variant_wolf_king')}</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="white_wolf_king" id="wk_white" />
-                    <Label htmlFor="wk_white">{t('room.variant_white_wolf_king')}</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-            )}
-
-            {/* Create Button */}
-            <Button
-              onClick={handleCreateRoom}
-              disabled={!user || createRoomMutation.isPending}
-              className="w-full"
-            >
-              {createRoomMutation.isPending ? t('room.creating') : t('room.create_room')}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Room List */}
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-foreground">
-            {t('room.waiting_rooms')} ({rooms?.length || 0})
-          </h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-          >
-            {t('room.refresh')}
-          </Button>
-        </div>
-
-        {/* Room Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rooms?.length === 0 && (
-            <div className="col-span-full text-center py-12 animate-fade-in">
-              <p className="text-muted-foreground text-lg">{t('room.no_rooms')}</p>
-              <p className="text-muted-foreground/60 mt-2">{t('room.create_hint')}</p>
-            </div>
-          )}
-
-          {rooms?.map((room, index) => (
-            <Card
-              key={room.id}
-              className="glass-panel glass-card-hover animate-fade-in-up"
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <CardHeader>
-                <CardTitle className="text-lg">{room.name}</CardTitle>
-                <CardDescription>
-                  {t('room.creator')}: {room.creator_nickname}
-                </CardDescription>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Create Room Panel - Sidebar */}
+          <div className="lg:col-span-1">
+            <Card className="glass-panel border-border/30 animate-slide-up sticky top-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  {t('room.create_room')}
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t('room.player_count')}</span>
-                    <span className="text-foreground font-semibold">
-                      {room.current_players}/{room.max_players}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t('room.status')}</span>
-                    <span className="text-green-500 font-semibold">
-                      {t('room.waiting')}
-                    </span>
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    variant={room.current_players >= room.max_players ? "secondary" : "default"}
-                    onClick={() => handleJoinRoom(room.id)}
-                    disabled={
-                      !user ||
-                      room.current_players >= room.max_players ||
-                      joinRoomMutation.isPending
-                    }
-                  >
-                    {room.current_players >= room.max_players
-                      ? t('room.room_full')
-                      : joinRoomMutation.isPending
-                      ? t('room.joining')
-                      : t('room.join_room')}
-                  </Button>
+              <CardContent className="space-y-4">
+                {/* Room Name Input */}
+                <div>
+                  <Label htmlFor="roomName" className="text-sm text-muted-foreground">{t('room.room_name')}</Label>
+                  <Input
+                    id="roomName"
+                    placeholder={t('room.room_name_placeholder')}
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    className="mt-1.5 h-10 bg-muted/30 border-border/40 focus:border-accent/60"
+                  />
                 </div>
+
+                {/* Game Mode Selection */}
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">{t('room.game_mode')}</Label>
+                  <RadioGroup
+                    value={gameMode}
+                    onValueChange={(v) => setGameMode(v as GameMode)}
+                    className="grid grid-cols-2 gap-2"
+                  >
+                    <Label
+                      htmlFor="mode_9"
+                      className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-all duration-200 ${
+                        gameMode === 'classic_9'
+                          ? 'border-accent bg-accent/10 shadow-sm'
+                          : 'border-border/40 hover:border-border'
+                      }`}
+                    >
+                      <RadioGroupItem value="classic_9" id="mode_9" />
+                      <span className="text-sm font-medium">{t('room.mode_classic_9')}</span>
+                    </Label>
+                    <Label
+                      htmlFor="mode_12"
+                      className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-all duration-200 ${
+                        gameMode === 'classic_12'
+                          ? 'border-accent bg-accent/10 shadow-sm'
+                          : 'border-border/40 hover:border-border'
+                      }`}
+                    >
+                      <RadioGroupItem value="classic_12" id="mode_12" />
+                      <span className="text-sm font-medium">{t('room.mode_classic_12')}</span>
+                    </Label>
+                  </RadioGroup>
+                </div>
+
+                {/* Wolf King Variant Selection (Only for 12 players) */}
+                {gameMode === 'classic_12' && (
+                  <div className="space-y-2 pl-3 border-l-2 border-accent/30 animate-fade-in">
+                    <Label className="text-sm text-muted-foreground">{t('room.wolf_king_variant')}</Label>
+                    <RadioGroup
+                      value={wolfKingVariant}
+                      onValueChange={(v) => setWolfKingVariant(v as WolfKingVariant)}
+                      className="flex flex-col gap-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="wolf_king" id="wk_normal" />
+                        <Label htmlFor="wk_normal" className="text-sm cursor-pointer">{t('room.variant_wolf_king')}</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="white_wolf_king" id="wk_white" />
+                        <Label htmlFor="wk_white" className="text-sm cursor-pointer">{t('room.variant_white_wolf_king')}</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                )}
+
+                {/* Create Button */}
+                <Button
+                  onClick={handleCreateRoom}
+                  disabled={!user || createRoomMutation.isPending}
+                  className="w-full h-11 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  {createRoomMutation.isPending ? t('room.creating') : t('room.create_room')}
+                </Button>
               </CardContent>
             </Card>
-          ))}
+          </div>
+
+          {/* Room List - Main Content */}
+          <div className="lg:col-span-2">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                {t('room.waiting_rooms')}
+                <span className="text-sm font-normal text-muted-foreground">({rooms?.length || 0})</span>
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetch()}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {t('room.refresh')}
+              </Button>
+            </div>
+
+            {/* Room Cards */}
+            {rooms?.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 text-muted-foreground/50" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 3c-1.5 2-3 3.5-3 6a3 3 0 0 0 6 0c0-2.5-1.5-4-3-6Z" />
+                    <path d="M12 9c-2 3-4 5.5-4 8a4 4 0 0 0 8 0c0-2.5-2-5-4-8Z" />
+                  </svg>
+                </div>
+                <p className="text-muted-foreground text-lg font-medium">{t('room.no_rooms')}</p>
+                <p className="text-muted-foreground/60 mt-1 text-sm">{t('room.create_hint')}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {rooms?.map((room, index) => (
+                  <Card
+                    key={room.id}
+                    className="glass-panel border-border/30 hover:border-accent/30 hover:shadow-lg transition-all duration-300 animate-fade-in-up group"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-foreground truncate group-hover:text-accent transition-colors">
+                            {room.name}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {t('room.creator')}: {room.creator_nickname}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 shrink-0 ml-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                            {t('room.waiting')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Player slots visualization */}
+                      <div className="flex items-center gap-1.5 mb-4">
+                        {Array.from({ length: room.max_players }).map((_, i) => (
+                          <div
+                            key={i}
+                            className={`h-1.5 flex-1 rounded-full transition-colors ${
+                              i < room.current_players
+                                ? 'bg-accent/70'
+                                : 'bg-muted/50'
+                            }`}
+                          />
+                        ))}
+                        <span className="text-xs text-muted-foreground ml-1 tabular-nums">
+                          {room.current_players}/{room.max_players}
+                        </span>
+                      </div>
+
+                      <Button
+                        className="w-full h-10"
+                        variant={room.current_players >= room.max_players ? "secondary" : "default"}
+                        onClick={() => handleJoinRoom(room.id)}
+                        disabled={
+                          !user ||
+                          room.current_players >= room.max_players ||
+                          joinRoomMutation.isPending
+                        }
+                      >
+                        {room.current_players >= room.max_players
+                          ? t('room.room_full')
+                          : joinRoomMutation.isPending
+                          ? t('room.joining')
+                          : t('room.join_room')}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

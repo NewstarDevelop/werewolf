@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { GameHistoryList } from '@/components/history/GameHistoryList';
 import { HistoryFilters } from '@/components/history/HistoryFilters';
 import { GameDetailDialog } from '@/components/history/GameDetailDialog';
@@ -11,7 +9,6 @@ import { useGameHistory } from '@/hooks/useGameHistory';
 
 export default function HistoryPage() {
   const { t } = useTranslation('common');
-  const navigate = useNavigate();
   const [selectedWinner, setSelectedWinner] = useState<string | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
@@ -49,36 +46,23 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background/95 to-accent/5">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-full relative">
+      <div className="fixed inset-0 atmosphere-night z-0 pointer-events-none" />
+      <div className="fixed inset-0 atmosphere-moonlight z-0 opacity-40 pointer-events-none" />
+
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-6 md:py-10 animate-fade-in">
         {/* Header */}
-        <div className="relative mb-8">
-          <div className="absolute left-0 top-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/lobby')}
-              className="gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              {t('common.back')}
-            </Button>
-          </div>
-          <div className="absolute right-0 top-0">
-            <LanguageSwitcher />
-          </div>
-          <div className="text-center">
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 font-display tracking-tight">
-              {t('history.title')}
-            </h1>
-            <p className="text-muted-foreground">{t('history.my_games')}</p>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-foreground font-display tracking-tight">
+            {t('history.title')}
+          </h1>
+          <p className="text-muted-foreground mt-1">{t('history.my_games')}</p>
         </div>
 
         {/* Error State */}
         {error && (
-          <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6">
-            <p className="text-destructive text-center">
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 mb-6 animate-fade-in">
+            <p className="text-destructive text-center text-sm">
               {t('common.error')}: {error instanceof Error ? error.message : String(error)}
             </p>
           </div>
@@ -118,11 +102,12 @@ export default function HistoryPage() {
                   size="sm"
                   onClick={handlePreviousPage}
                   disabled={currentPage === 1}
+                  className="border-border/40 hover:border-accent/50"
                 >
                   <ChevronLeft className="w-4 h-4 mr-1" />
                   {t('common.previous')}
                 </Button>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground tabular-nums">
                   {t('common.page_of', { current: currentPage, total: totalPages })}
                 </span>
                 <Button
@@ -130,6 +115,7 @@ export default function HistoryPage() {
                   size="sm"
                   onClick={handleNextPage}
                   disabled={currentPage === totalPages}
+                  className="border-border/40 hover:border-accent/50"
                 >
                   {t('common.next')}
                   <ChevronRight className="w-4 h-4 ml-1" />

@@ -2,7 +2,6 @@
  * User profile page with stats and settings.
  */
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, User as UserIcon, TrendingUp } from 'lucide-react';
+import { Loader2, User as UserIcon } from 'lucide-react';
 import type { PlayerStats } from '@/types/user';
 import { getErrorMessage, logError } from '@/utils/errorHandler';
 
@@ -30,7 +29,6 @@ const profileSchema = z.object({
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const { t } = useTranslation('profile');
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
@@ -97,145 +95,138 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-full relative">
+      <div className="fixed inset-0 atmosphere-night z-0 pointer-events-none" />
+      <div className="fixed inset-0 atmosphere-moonlight z-0 opacity-40 pointer-events-none" />
+
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-6 md:py-10 animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">{t('title')}</h1>
-          <Button variant="outline" onClick={() => navigate('/lobby')}>
-            {t('back_to_lobby')}
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold font-display tracking-tight">{t('title')}</h1>
         </div>
 
-        {/* Profile Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('profile_card.title')}</CardTitle>
-            <CardDescription>{t('profile_card.description')}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Avatar Section */}
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={user.avatar_url || undefined} alt={user.nickname} />
-                <AvatarFallback>
-                  <UserIcon className="h-10 w-10" />
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="text-sm text-muted-foreground">{t('avatar.email')}</p>
-                <p className="font-medium">{user.email || t('avatar.email_not_bound')}</p>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Profile Info - Left */}
+          <div className="lg:col-span-1">
+            <Card className="glass-panel border-border/30">
+              <CardContent className="pt-6 flex flex-col items-center text-center">
+                <Avatar className="h-24 w-24 border-2 border-accent/20 shadow-lg mb-4">
+                  <AvatarImage src={user.avatar_url || undefined} alt={user.nickname} />
+                  <AvatarFallback className="bg-accent/10 text-accent text-2xl font-bold">
+                    <UserIcon className="h-10 w-10" />
+                  </AvatarFallback>
+                </Avatar>
+                <h2 className="text-xl font-semibold">{user.nickname}</h2>
+                <p className="text-sm text-muted-foreground mt-1">{user.email || t('avatar.email_not_bound')}</p>
 
-            <Separator />
+                <Separator className="my-5" />
 
-            {/* Edit Form */}
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="nickname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('form.nickname')}</FormLabel>
-                      <FormControl>
-                        <Input {...field} disabled={isLoading} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Quick Stats */}
+                {isLoadingStats ? (
+                  <div className="py-4">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                  </div>
+                ) : stats ? (
+                  <div className="w-full space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{t('stats.games_played')}</span>
+                      <span className="text-lg font-bold tabular-nums">{stats.games_played}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{t('stats.games_won')}</span>
+                      <span className="text-lg font-bold tabular-nums text-green-600 dark:text-green-400">{stats.games_won}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{t('stats.win_rate')}</span>
+                      <span className="text-lg font-bold tabular-nums text-accent">{(stats.win_rate * 100).toFixed(1)}%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4">{t('stats.no_data')}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-                <FormField
-                  control={form.control}
-                  name="bio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('form.bio')}</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          placeholder={t('form.bio_placeholder')}
-                          className="resize-none"
-                          rows={3}
-                          disabled={isLoading}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          {/* Edit Form - Right */}
+          <div className="lg:col-span-2">
+            <Card className="glass-panel border-border/30">
+              <CardHeader>
+                <CardTitle className="text-lg">{t('profile_card.title')}</CardTitle>
+                <CardDescription className="text-sm">{t('profile_card.description')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                    <FormField
+                      control={form.control}
+                      name="nickname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-foreground/80">{t('form.nickname')}</FormLabel>
+                          <FormControl>
+                            <Input className="h-11 bg-muted/30 border-border/40 focus:border-accent/60" {...field} disabled={isLoading} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="avatar_url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('form.avatar_url')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder={t('form.avatar_url_placeholder')}
-                          disabled={isLoading}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="bio"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-foreground/80">{t('form.bio')}</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              placeholder={t('form.bio_placeholder')}
+                              className="resize-none bg-muted/30 border-border/40 focus:border-accent/60"
+                              rows={3}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t('form.saving')}
-                    </>
-                  ) : (
-                    t('form.save')
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+                    <FormField
+                      control={form.control}
+                      name="avatar_url"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-foreground/80">{t('form.avatar_url')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder={t('form.avatar_url_placeholder')}
+                              className="h-11 bg-muted/30 border-border/40 focus:border-accent/60"
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-        {/* Stats Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              {t('stats.title')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingStats ? (
-              <div className="text-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-              </div>
-            ) : stats ? (
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-3xl font-bold">{stats.games_played}</p>
-                  <p className="text-sm text-muted-foreground">{t('stats.games_played')}</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-green-500">{stats.games_won}</p>
-                  <p className="text-sm text-muted-foreground">{t('stats.games_won')}</p>
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-blue-500">
-                    {(stats.win_rate * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-sm text-muted-foreground">{t('stats.win_rate')}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-center text-muted-foreground py-8">{t('stats.no_data')}</p>
-            )}
-          </CardContent>
-        </Card>
-
+                    <Button type="submit" disabled={isLoading} className="h-11 px-6 font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {t('form.saving')}
+                        </>
+                      ) : (
+                        t('form.save')
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
