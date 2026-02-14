@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.endpoints.game import verify_admin
+from app.api.dependencies import verify_admin
 from app.core.database_async import get_async_db, AsyncSessionLocal
 from app.models.notification import Notification, NotificationOutbox
 from app.models.notification_broadcast import NotificationBroadcast

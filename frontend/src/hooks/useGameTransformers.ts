@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GameState, Role, Player } from '@/services/api';
+import { GameState, Role, PlayerPublic } from '@/services/api';
 import { translateSystemMessage } from '@/utils/messageTranslator';
 
 export interface UIPlayer {
@@ -10,6 +10,16 @@ export interface UIPlayer {
   isAlive: boolean;
   role?: Role;
   seatId: number;
+}
+
+export interface UIMessage {
+  id: number;
+  sender: string;
+  message: string;
+  isUser: boolean;
+  isSystem: boolean;
+  timestamp: string;
+  day?: number;
 }
 
 export function useGameTransformers(gameState: GameState | null | undefined) {
@@ -37,7 +47,7 @@ export function useGameTransformers(gameState: GameState | null | undefined) {
   }, [gameState, isGameOver, t]);
 
   const playerMap = useMemo(() => {
-    if (!gameState) return new Map<number, Player>();
+    if (!gameState) return new Map<number, PlayerPublic>();
     return new Map(gameState.players.map(p => [p.seat_id, p]));
   }, [gameState]);
 
@@ -47,7 +57,12 @@ export function useGameTransformers(gameState: GameState | null | undefined) {
       const player = playerMap.get(m.seat_id);
       const isSystem = m.type === "system" || m.seat_id === 0;
       const isUser = m.seat_id === gameState.my_seat;
-      const messageText = isSystem ? translateSystemMessage(m.text, t) : m.text;
+      // Translate system messages: prefer structured i18n_key, fallback to regex
+      const messageText = isSystem
+        ? (m.i18n_key
+          ? t(`game:${m.i18n_key}`, { ...(m.i18n_params || {}), defaultValue: m.text })
+          : translateSystemMessage(m.text, t))
+        : m.text;
 
       return {
         id: idx + 1,

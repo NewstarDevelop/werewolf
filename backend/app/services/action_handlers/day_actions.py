@@ -55,12 +55,19 @@ def handle_vote_action(
 ) -> dict:
     """Handle day vote action."""
     if action_type == ActionType.VOTE:
-        if target_id is not None and target_id != 0:
-            try:
-                validate_target(game, target_id, ActionType.VOTE, player.seat_id)
-            except ValueError as e:
-                return ActionResult.fail(str(e)).to_dict()
-        game.day_votes[player.seat_id] = target_id if target_id else 0
+        # Explicit abstain: target_id is None or 0
+        if not target_id:
+            game.day_votes[player.seat_id] = 0
+            game.add_action(player.seat_id, ActionType.VOTE, 0)
+            return ActionResult.ok(
+                t("api_responses.vote_abstained", language=game.language)
+            ).to_dict()
+        # Vote for a specific target
+        try:
+            validate_target(game, target_id, ActionType.VOTE, player.seat_id)
+        except ValueError as e:
+            return ActionResult.fail(str(e)).to_dict()
+        game.day_votes[player.seat_id] = target_id
         game.add_action(player.seat_id, ActionType.VOTE, target_id)
         return ActionResult.ok(
             t("api_responses.vote_recorded", language=game.language)

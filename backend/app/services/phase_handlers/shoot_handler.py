@@ -36,7 +36,8 @@ async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
     if not can_shoot:
         seat_suffix = t("vote_format.seat_suffix", language=lang)
         if shooter.role == Role.HUNTER:
-            game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{shooter.seat_id}{seat_suffix}"), MessageType.SYSTEM,
+                            i18n_key="system_messages.hunter_poisoned", i18n_params={"seat_id": shooter.seat_id})
         return continue_after_death_shoot(game)
 
     if game.is_human_player(shooter.seat_id):
@@ -49,12 +50,14 @@ async def handle_death_shoot(game: Game, llm: "LLMService") -> dict:
         seat_suffix = t("vote_format.seat_suffix", language=lang)
         if target:
             shoot_message = t("shoot_message.shoot_hit", language=lang, shooter_name=shooter_name, shooter_seat=shooter.seat_id, suffix=seat_suffix, target=target)
-            game.add_message(0, shoot_message, MessageType.SYSTEM)
+            game.add_message(0, shoot_message, MessageType.SYSTEM,
+                            i18n_key="shoot_message.shoot_hit", i18n_params={"shooter_seat": shooter.seat_id, "target": target})
             game.kill_player(target)
             game.add_action(shooter.seat_id, ActionType.SHOOT, target)
         else:
             abstain_message = t("shoot_message.shoot_abstain", language=lang, shooter_name=shooter_name, shooter_seat=shooter.seat_id, suffix=seat_suffix)
-            game.add_message(0, abstain_message, MessageType.SYSTEM)
+            game.add_message(0, abstain_message, MessageType.SYSTEM,
+                            i18n_key="shoot_message.shoot_abstain", i18n_params={"shooter_seat": shooter.seat_id})
 
     game.increment_version()
     return continue_after_death_shoot(game)
@@ -93,7 +96,8 @@ def continue_after_death_shoot(game: Game) -> dict:
                 game.phase = GamePhase.DAY_SPEECH
                 game._spoken_seats_this_round.clear()
                 seat_suffix = t("vote_format.seat_suffix", language=game.language)
-                game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
+                game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM,
+                                i18n_key="system_messages.speech_start", i18n_params={"seat_id": game.speech_order[0]})
         else:
             # Died during day vote - go to next night
             game.day += 1
@@ -113,7 +117,8 @@ async def handle_hunter_shoot(game: Game, llm: "LLMService") -> dict:
     lang = game.language
     if not hunter.can_shoot:
         seat_suffix = t("vote_format.seat_suffix", language=lang)
-        game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.hunter_poisoned", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM,
+                        i18n_key="system_messages.hunter_poisoned", i18n_params={"seat_id": hunter.seat_id})
         return continue_after_hunter(game)
 
     if game.is_human_player(hunter.seat_id):
@@ -125,11 +130,13 @@ async def handle_hunter_shoot(game: Game, llm: "LLMService") -> dict:
         target = await llm.decide_shoot_target(hunter, game, targets)
         seat_suffix = t("vote_format.seat_suffix", language=lang)
         if target:
-            game.add_message(0, t("system_messages.hunter_shot", language=lang, hunter_id=f"{hunter.seat_id}{seat_suffix}", target_id=f"{target}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_shot", language=lang, hunter_id=f"{hunter.seat_id}{seat_suffix}", target_id=f"{target}{seat_suffix}"), MessageType.SYSTEM,
+                            i18n_key="system_messages.hunter_shot", i18n_params={"hunter_id": hunter.seat_id, "target_id": target})
             game.kill_player(target)
             game.add_action(hunter.seat_id, ActionType.SHOOT, target)
         else:
-            game.add_message(0, t("system_messages.hunter_abstain", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.hunter_abstain", language=lang, seat_id=f"{hunter.seat_id}{seat_suffix}"), MessageType.SYSTEM,
+                            i18n_key="system_messages.hunter_abstain", i18n_params={"seat_id": hunter.seat_id})
 
     return continue_after_hunter(game)
 

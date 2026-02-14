@@ -26,6 +26,10 @@ export { useGameWebSocket } from './useGameWebSocket';
 export { useGameHistory } from './useGameHistory';
 export { useGameSound } from './useGameSound';
 
+// State transformation utilities
+export { useGameTransformers } from './useGameTransformers';
+export type { UIPlayer, UIMessage } from './useGameTransformers';
+
 // Notification hooks
 export { useNotificationWebSocket } from './useNotificationWebSocket';
 export { useNotifications } from './useNotifications';

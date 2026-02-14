@@ -1,5 +1,6 @@
 """Game data models for in-memory storage."""
 import asyncio
+import logging
 import uuid
 import secrets
 import time
@@ -10,7 +11,6 @@ from app.schemas.enums import (
     GameStatus, GamePhase, Role, ActionType, MessageType, Winner
 )
 from app.schemas.player import Personality
-from app.i18n import t
 
 
 _rng = secrets.SystemRandom()
@@ -151,6 +151,8 @@ class Message:
     seat_id: int  # 0 for system
     content: str
     msg_type: MessageType = MessageType.SPEECH
+    i18n_key: Optional[str] = None       # e.g. "system_messages.night_falls"
+    i18n_params: Optional[dict] = None   # e.g. {"day": 1}
 
 
 @dataclass
@@ -201,6 +203,8 @@ class Game:
     speech_order: list[int] = field(default_factory=list)
     current_speech_index: int = 0
     _spoken_seats_this_round: set[int] = field(default_factory=set)  # P0 Fix: Track who spoke
+    # Role claim tracking (NEW-7: structured claims replace text matching)
+    claimed_roles: dict[int, str] = field(default_factory=dict)  # seat_id -> claimed role (e.g. "seer")
     # Death tracking
     pending_deaths: list[int] = field(default_factory=list)  # Seats to die (can be blocked by guard/witch)
     pending_deaths_unblockable: list[int] = field(default_factory=list)  # Deaths that cannot be blocked (white wolf king explode)
@@ -263,7 +267,9 @@ class Game:
         self,
         seat_id: int,
         content: str,
-        msg_type: MessageType = MessageType.SPEECH
+        msg_type: MessageType = MessageType.SPEECH,
+        i18n_key: Optional[str] = None,
+        i18n_params: Optional[dict] = None
     ) -> Message:
         """Add a message to the game."""
         self._message_counter += 1
@@ -273,9 +279,17 @@ class Game:
             day=self.day,
             seat_id=seat_id,
             content=content,
-            msg_type=msg_type
+            msg_type=msg_type,
+            i18n_key=i18n_key,
+            i18n_params=i18n_params
         )
         self.messages.append(msg)
+        # NEW-7: Detect role claims from player speech
+        if seat_id > 0 and msg_type == MessageType.SPEECH:
+            from app.services.claim_detector import detect_role_claim
+            claimed = detect_role_claim(content)
+            if claimed:
+                self.claimed_roles[seat_id] = claimed
         self.increment_version()
         return msg
 
@@ -363,317 +377,36 @@ class Game:
         return self.current_actor_seat == seat_id
 
     def _get_pending_action_for_player(self, player: Player) -> Optional[dict]:
+        """Determine what action the player needs to take.
+
+        Delegates to game_state_service.get_pending_action_for_player.
         """
-        Determine what action the player needs to take.
-
-        Returns a dict matching PendingAction schema, or None if no action needed.
-        """
-        phase = self.phase
-        role = player.role
-
-        # Hunter can shoot after being eliminated (by vote/kill)
-        # Wolf king can shoot when voted out during day
-        if phase == GamePhase.DEATH_SHOOT:
-            if self.current_actor_seat == player.seat_id:
-                # Hunter must be able to shoot (not poisoned)
-                if player.role == Role.HUNTER and not player.can_shoot:
-                    return None
-                # Wolf king can always shoot when in this phase
-                if player.role in [Role.HUNTER, Role.WOLF_KING]:
-                    alive_seats = self.get_alive_seats()
-                    return {
-                        "type": ActionType.SHOOT.value,
-                        "choices": alive_seats + [0],  # 0 = skip
-                        "message": t("pending_action.shoot_prompt", language=self.language)
-                    }
-
-        # Legacy hunter shoot phase (backward compatibility)
-        if phase == GamePhase.HUNTER_SHOOT and role == Role.HUNTER:
-            if self.current_actor_seat == player.seat_id and player.can_shoot:
-                alive_seats = self.get_alive_seats()
-                return {
-                    "type": ActionType.SHOOT.value,
-                    "choices": alive_seats + [0],  # 0 = skip
-                    "message": t("pending_action.shoot_prompt", language=self.language)
-                }
-
-        if not player.is_alive:
-            return None
-
-        alive_seats = self.get_alive_seats()
-        other_alive = [s for s in alive_seats if s != player.seat_id]
-
-        # Night werewolf chat phase - all wolf-aligned roles participate
-        if phase == GamePhase.NIGHT_WEREWOLF_CHAT and role in WOLF_ROLES:
-            if player.seat_id not in self.wolf_chat_completed:
-                return {
-                    "type": ActionType.SPEAK.value,
-                    "choices": [],
-                    "message": t("pending_action.wolf_chat_prompt", language=self.language)
-                }
-
-        # Night werewolf phase - regular werewolf and wolf king vote (white wolf king handled separately below)
-        if phase == GamePhase.NIGHT_WEREWOLF and role in {Role.WEREWOLF, Role.WOLF_KING}:
-            if player.seat_id not in self.wolf_votes:
-                # 狼人可以击杀任何存活玩家（包括自己，实现自刀策略）
-                kill_targets = alive_seats[:]
-                return {
-                    "type": ActionType.KILL.value,
-                    "choices": kill_targets,
-                    "message": t("pending_action.wolf_kill_prompt", language=self.language)
-                }
-
-        # Night werewolf phase - White wolf king can choose to self-destruct
-        elif phase == GamePhase.NIGHT_WEREWOLF and role == Role.WHITE_WOLF_KING:
-            if player.seat_id not in self.wolf_votes:
-                # White wolf king can either vote for kill OR self-destruct
-                if not self.white_wolf_king_used_explode:
-                    kill_targets = alive_seats[:]
-                    return {
-                        "type": ActionType.KILL.value,  # Frontend will show both KILL and SELF_DESTRUCT options
-                        "choices": kill_targets,
-                        "message": t("pending_action.white_wolf_king_prompt", language=self.language)
-                    }
-                else:
-                    # Already used self-destruct, can only vote for normal kill
-                    kill_targets = alive_seats[:]
-                    return {
-                        "type": ActionType.KILL.value,
-                        "choices": kill_targets,
-                        "message": t("pending_action.wolf_kill_prompt", language=self.language)
-                    }
-
-        # Night guard phase
-        elif phase == GamePhase.NIGHT_GUARD and role == Role.GUARD:
-            # Check if guard has already made decision this night
-            if self.guard_decided:
-                return None
-
-            # Guard can protect any alive player (including self)
-            # Filter out last night's target (cannot guard same person consecutively)
-            protect_choices = alive_seats.copy()
-            if self.guard_last_target and self.guard_last_target in protect_choices:
-                protect_choices.remove(self.guard_last_target)
-
-            return {
-                "type": ActionType.PROTECT.value,
-                "choices": protect_choices + [0],  # 0 = skip
-                "message": t("pending_action.guard_prompt", language=self.language)
-            }
-
-        # Night seer phase
-        elif phase == GamePhase.NIGHT_SEER and role == Role.SEER:
-            if self.seer_verified_this_night:
-                return None
-            unverified = [s for s in other_alive if s not in player.verified_players]
-            if not unverified:
-                return None
-            return {
-                "type": ActionType.VERIFY.value,
-                "choices": unverified,
-                "message": t("pending_action.seer_prompt", language=self.language)
-            }
-
-        # Night witch phase
-        elif phase == GamePhase.NIGHT_WITCH and role == Role.WITCH:
-            used_save_this_night = any(
-                a.day == self.day
-                and a.player_id == player.seat_id
-                and a.action_type == ActionType.SAVE
-                for a in self.actions
-            )
-
-            # Step 1: Save potion decision
-            if not self.witch_save_decided:
-                if player.has_save_potion and self.night_kill_target:
-                    return {
-                        "type": ActionType.SAVE.value,
-                        "choices": [self.night_kill_target, 0],  # 0 = skip
-                        "message": t("pending_action.witch_save_prompt", language=self.language, target=self.night_kill_target)
-                    }
-
-                msg_key = "pending_action.witch_no_target" if self.night_kill_target is None else "pending_action.witch_no_antidote"
-                return {
-                    "type": ActionType.SAVE.value,
-                    "choices": [0],
-                    "message": t(msg_key, language=self.language)
-                }
-
-            # Step 2: Poison potion decision
-            if not self.witch_poison_decided:
-                if used_save_this_night:
-                    return {
-                        "type": ActionType.POISON.value,
-                        "choices": [0],
-                        "message": t("pending_action.witch_used_save", language=self.language)
-                    }
-
-                if player.has_poison_potion:
-                    return {
-                        "type": ActionType.POISON.value,
-                        "choices": other_alive + [0],  # 0 = skip
-                        "message": t("pending_action.witch_poison_prompt", language=self.language, target=self.night_kill_target)
-                        if self.night_kill_target is not None
-                        else t("pending_action.witch_poison_prompt_no_kill", language=self.language)
-                    }
-
-                return {
-                    "type": ActionType.POISON.value,
-                    "choices": [0],
-                    "message": t("pending_action.witch_no_poison", language=self.language)
-                }
-
-        # Day speech phase
-        elif phase == GamePhase.DAY_SPEECH:
-            if (self.current_speech_index < len(self.speech_order) and
-                self.speech_order[self.current_speech_index] == player.seat_id):
-                return {
-                    "type": ActionType.SPEAK.value,
-                    "choices": [],
-                    "message": t("pending_action.speech_prompt", language=self.language)
-                }
-
-        # Day vote phase
-        elif phase == GamePhase.DAY_VOTE:
-            if player.seat_id not in self.day_votes:
-                return {
-                    "type": ActionType.VOTE.value,
-                    "choices": other_alive + [0],  # 0 = abstain
-                    "message": t("pending_action.vote_prompt", language=self.language)
-                }
-
-        return None
+        from app.services.game_state_service import get_pending_action_for_player
+        return get_pending_action_for_player(self, player)
 
     def get_state_for_player(self, player_id: Optional[str] = None) -> dict:
+        """Get game state filtered for specific player's perspective.
+
+        Delegates to game_state_service.build_state_for_player.
         """
-        Get game state filtered for specific player's perspective.
-
-        This replaces the P0 temporary filter_sensitive_info method with
-        proper multi-player support using player_mapping.
-
-        Args:
-            player_id: Player identifier. If None, returns observer view.
-
-        Returns:
-            Filtered game state dictionary safe for the requesting player.
-        """
-        # Find the player's seat using player_mapping
-        seat = self.player_mapping.get(player_id) if player_id else None
-        player = self.get_player(seat) if seat else None
-
-        # Base state (always safe to share)
-        state = {
-            "game_id": self.id,
-            "room_id": self.id,  # Game ID doubles as room ID for redirect on reset
-            "status": self.status.value,
-            "state_version": self.state_version,
-            "day": self.day,
-            "phase": self.phase.value,
-            "current_actor": self.current_actor_seat,  # Renamed: current_actor_seat -> current_actor
-            "alive_seats": self.get_alive_seats(),
-            "pending_deaths": self.pending_deaths,
-            "current_speech_index": self.current_speech_index,
-        }
-
-        # Add players list (frontend expects this field)
-        players = []
-        for p in self.players.values():
-            player_public = {
-                "seat_id": p.seat_id,
-                "is_alive": p.is_alive,
-                "is_human": p.is_human,
-                "name": p.personality.name if p.personality else None,
-                "role": None  # Default: hide role
-            }
-
-            # Show role when: 1) Game finished, or 2) It's the requesting player
-            if self.status == GameStatus.FINISHED:
-                player_public["role"] = p.role.value
-            elif player and p.seat_id == seat:
-                player_public["role"] = p.role.value
-
-            players.append(player_public)
-
-        state["players"] = players
-
-        # Filter messages - remove vote_thought and wolf_chat from non-privileged players
-        filtered_messages = []
-        for msg in self.messages:
-            # Always hide vote_thought
-            if msg.msg_type == MessageType.VOTE_THOUGHT:
-                continue
-            # Hide wolf_chat unless player is a werewolf
-            if msg.msg_type == MessageType.WOLF_CHAT:
-                if not player or player.role not in WOLF_ROLES:
-                    continue
-            filtered_messages.append({
-                "seat_id": msg.seat_id,
-                "text": msg.content,  # Renamed: content -> text
-                "type": msg.msg_type.value,
-                "day": msg.day
-            })
-        state["message_log"] = filtered_messages  # Renamed: messages -> message_log
-
-        # Add winner field (always include, null if game not finished)
-        state["winner"] = self.winner.value if self.winner else None
-
-        # Add player-specific info if authenticated
-        if player:
-            state["my_seat"] = seat
-            state["my_role"] = player.role.value
-
-            # Werewolf-specific info
-            if player.role in WOLF_ROLES:
-                state["wolf_teammates"] = player.teammates
-                state["night_kill_target"] = self.night_kill_target
-                # Wolf votes visible (for frontend to show teammate votes)
-                state["wolf_votes_visible"] = self.wolf_votes
-            else:
-                state["wolf_votes_visible"] = {}
-
-            # Witch-specific info
-            if player.role == Role.WITCH:
-                state["has_save_potion"] = player.has_save_potion
-                state["has_poison_potion"] = player.has_poison_potion
-                # Only show kill target while witch is making night decisions
-                if self.phase == GamePhase.NIGHT_WITCH and not self.witch_poison_decided:
-                    state["night_kill_target"] = self.night_kill_target
-
-            # Guard-specific info
-            if player.role == Role.GUARD:
-                state["guard_last_target"] = self.guard_last_target
-
-            # Seer-specific info
-            if player.role == Role.SEER:
-                state["verified_results"] = player.verified_players
-
-            # Calculate pending_action for human player
-            state["pending_action"] = self._get_pending_action_for_player(player)
-        else:
-            # Observer view - minimal info
-            state["my_seat"] = None
-            state["my_role"] = None
-            state["wolf_votes_visible"] = {}
-            state["pending_action"] = None
-
-        # WL-BUG-001 Fix: Ensure all required fields have default values
-        # This prevents "Cannot convert undefined or null to object" errors
-        # when frontend receives incomplete state (e.g., token mismatch)
-        if "wolf_teammates" not in state:
-            state["wolf_teammates"] = []
-        if "verified_results" not in state:
-            state["verified_results"] = {}
-
-        return state
+        from app.services.game_state_service import build_state_for_player
+        return build_state_for_player(self, player_id)
 
     # Backward compatibility alias for P0 hotfix
     def filter_sensitive_info(self, player_id: Optional[str] = None) -> dict:
         """Deprecated: Use get_state_for_player instead."""
         return self.get_state_for_player(player_id)
 
+    # NOTE: _get_pending_action_for_player and get_state_for_player implementations
+    # have been extracted to app/services/game_state_service.py (NEW-11 refactor).
+    # The methods above are thin wrappers for backward compatibility.
+
 
 class GameStore:
-    """In-memory game storage with LRU/TTL management and optional persistence.
+    """Game storage with LRU/TTL management and optional persistence.
+
+    Uses a pluggable backend (default: InMemoryBackend) for game state storage,
+    enabling future migration to Redis or other backends.
 
     P0-PERF-001 Fix: Added capacity limits and TTL-based cleanup to prevent
     unbounded memory growth from malicious or accidental game creation.
@@ -681,29 +414,62 @@ class GameStore:
     P0-STAB-001 Fix: Added per-game locks to prevent concurrent state corruption.
 
     Persistence: Snapshots are saved to SQLite on key state changes for crash
-    recovery. The in-memory dict remains the primary store for performance.
+    recovery. The in-memory backend remains the primary store for performance.
     """
 
     MAX_GAMES = 1000  # Maximum concurrent games
     GAME_TTL_SECONDS = 7200  # 2 hours TTL for inactive games
 
-    def __init__(self, enable_persistence: bool = True):
-        self.games: dict[str, Game] = {}
+    def __init__(self, enable_persistence: bool = True, backend=None):
+        from app.storage import create_backend
+        self._backend = backend or create_backend()
         self._last_access: dict[str, float] = {}  # game_id -> timestamp
-        self._locks: dict[str, "asyncio.Lock"] = {}  # P0-STAB-001: per-game locks
+        self._locks: dict[str, "asyncio.Lock"] = {}  # P0-STAB-001: per-game locks (local)
+        self._lock_manager = None  # Lazy-init distributed lock manager
+        self._write_cache: dict[str, Game] = {}  # Write-back cache for non-reference backends
         self._persistence_enabled = enable_persistence
         self._persistence = None  # Lazy init to avoid import cycles
         # Cleanup hooks: list of async callables invoked with game_id when a game is removed.
         # Used by LLMService to clean up per-game rate limiter resources.
         self._cleanup_hooks: list = []
 
-    def get_lock(self, game_id: str) -> asyncio.Lock:
+    @property
+    def game_count(self) -> int:
+        """Return the number of active games without materializing all objects."""
+        return self._backend.count()
+
+    @property
+    def games(self) -> dict[str, Game]:
+        """Backward-compatible access to games dict.
+
+        For InMemoryBackend, returns the underlying dict directly.
+        For other backends, returns a snapshot (read-only view).
+
+        WARNING: For RedisBackend this triggers a full scan (O(N)).
+        Prefer game_count for size checks, or get_game() for single access.
+        """
+        from app.storage.memory import InMemoryBackend
+        if isinstance(self._backend, InMemoryBackend):
+            return self._backend._games
+        # Fallback: build dict from backend (for non-memory backends)
+        return {gid: self._backend.get(gid) for gid in self._backend.all_ids()}
+
+    def get_lock(self, game_id: str):
         """Get or create a lock for the specified game.
 
         P0-STAB-001 Fix: Ensures thread-safe access to game state.
-        Uses setdefault() to avoid race condition where two coroutines
-        could create separate Lock instances for the same game_id.
+
+        Returns asyncio.Lock for InMemoryBackend (single-instance),
+        or RedisLock for RedisBackend (multi-instance distributed lock).
+        Both support `async with` context manager.
         """
+        from app.storage.redis_backend import RedisBackend
+        if isinstance(self._backend, RedisBackend):
+            if self._lock_manager is None:
+                from app.storage.distributed_lock import RedisLockManager
+                self._lock_manager = RedisLockManager(self._backend._client)
+            return self._lock_manager.get_lock(game_id)
+        # Local asyncio.Lock for in-memory backend
         return self._locks.setdefault(game_id, asyncio.Lock())
 
     def _run_cleanup_hooks(self, game_id: str) -> None:
@@ -728,7 +494,6 @@ class GameStore:
                 else:
                     hook(game_id)
             except Exception as e:
-                import logging
                 logging.getLogger(__name__).warning(
                     f"Cleanup hook failed for game {game_id}: {e}"
                 )
@@ -749,8 +514,8 @@ class GameStore:
                 to_remove.append(game_id)
 
         for game_id in to_remove:
-            if game_id in self.games:
-                del self.games[game_id]
+            self._backend.delete(game_id)
+            self._write_cache.pop(game_id, None)
             if game_id in self._last_access:
                 del self._last_access[game_id]
             if game_id in self._locks:
@@ -790,9 +555,9 @@ class GameStore:
             config = CLASSIC_9_CONFIG
 
         # Check capacity and cleanup if needed
-        if len(self.games) >= self.MAX_GAMES:
+        if self._backend.count() >= self.MAX_GAMES:
             cleaned = self._cleanup_old_games()
-            if len(self.games) >= self.MAX_GAMES:
+            if self._backend.count() >= self.MAX_GAMES:
                 raise ValueError(
                     f"Server at capacity ({self.MAX_GAMES} games). "
                     f"Cleaned {cleaned} old games but still full. Try again later."
@@ -857,7 +622,7 @@ class GameStore:
                 player.wolf_persona = shuffled_personas[idx % len(shuffled_personas)]
 
         game.status = GameStatus.PLAYING
-        self.games[game_id] = game
+        self._backend.put(game_id, game)
         self._last_access[game_id] = time.time()  # P0-PERF-001: Track access time
         self._save_snapshot(game)
         return game
@@ -867,9 +632,10 @@ class GameStore:
 
         P0-PERF-001 Fix: Updates last access time for TTL management.
         """
-        game = self.games.get(game_id)
+        game = self._backend.get(game_id)
         if game:
             self._last_access[game_id] = time.time()
+            self._write_cache[game_id] = game
         return game
 
     def delete_game(self, game_id: str) -> bool:
@@ -880,8 +646,9 @@ class GameStore:
         """
         from app.services.log_manager import clear_game_logs
 
-        if game_id in self.games:
-            del self.games[game_id]
+        if self._backend.delete(game_id):
+            # Clean up write cache
+            self._write_cache.pop(game_id, None)
             # Clean up access tracking
             if game_id in self._last_access:
                 del self._last_access[game_id]
@@ -923,14 +690,20 @@ class GameStore:
         if p:
             p.delete_snapshot(game_id)
 
-    def save_game_state(self, game_id: str) -> None:
+    async def save_game_state(self, game_id: str) -> None:
         """Explicitly save current game state snapshot.
 
         Call this after important state transitions (phase changes, etc.)
+        Also writes the cached game object back to the storage backend,
+        which is essential for non-reference backends like Redis.
+
+        B-4 FIX: Now async — offloads blocking SQLite persistence to thread pool.
         """
-        game = self.games.get(game_id)
+        game = self._write_cache.get(game_id) or self._backend.get(game_id)
         if game:
-            self._save_snapshot(game)
+            self._backend.put(game_id, game)
+            # Offload blocking SQLite write to thread pool
+            await asyncio.to_thread(self._save_snapshot, game)
 
     def recover_from_snapshots(self) -> int:
         """Recover active games from persistence on startup.
@@ -944,14 +717,22 @@ class GameStore:
         recovered = p.load_all_active()
         count = 0
         for game_id, game in recovered.items():
-            if game_id not in self.games:
-                self.games[game_id] = game
+            if not self._backend.exists(game_id):
+                self._backend.put(game_id, game)
                 self._last_access[game_id] = time.time()
                 count += 1
         if count:
-            import logging
             logging.getLogger(__name__).info(f"Recovered {count} games from snapshots")
         return count
+
+
+def create_game_store(**kwargs) -> GameStore:
+    """Factory function for creating GameStore instances.
+
+    Supports dependency injection for testing. Accepts all GameStore __init__ kwargs
+    (backend, enable_persistence, etc.).
+    """
+    return GameStore(**kwargs)
 
 
 # Global game store instance

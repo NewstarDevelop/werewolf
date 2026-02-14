@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
-from app.api.endpoints.game import verify_admin
+from app.api.dependencies import verify_admin
 from app.schemas.config_env import EnvVarResponse, EnvVarMergedResponse, EnvUpdateRequest, EnvUpdateResult
 from app.services.env_file_manager import (
     EnvFileManager,

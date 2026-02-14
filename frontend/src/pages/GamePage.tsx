@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import GameStatusBar from "@/components/game/GameStatusBar";
@@ -11,23 +11,13 @@ import GameAnalysisDialog from "@/components/game/GameAnalysisDialog";
 import { toast } from "sonner";
 import { useGame } from "@/hooks/useGame";
 import { useGameSound } from "@/hooks/useGameSound";
+import { useGameTransformers } from "@/hooks/useGameTransformers";
 import {
   isNightPhase,
-  type Role,
-  type Player,
 } from "@/services/api";
 import { useTranslation } from "react-i18next";
-import { translateSystemMessage, translateActionMessage } from "@/utils/messageTranslator";
+import { translateActionMessage } from "@/utils/messageTranslator";
 import { saveLastGameId, clearLastRoomId, clearLastGameId } from "@/hooks/useActiveGame";
-
-interface UIPlayer {
-  id: number;
-  name: string;
-  isUser: boolean;
-  isAlive: boolean;
-  role?: Role;
-  seatId: number;
-}
 
 const GamePage = () => {
   const { t } = useTranslation(['common', 'game']);
@@ -43,8 +33,7 @@ const GamePage = () => {
     if (!gameIdFromRoute) {
       navigate('/lobby', { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameIdFromRoute]);
+  }, [gameIdFromRoute, navigate]);
 
   // Save gameId to localStorage so sidebar "Current Game" can navigate back
   useEffect(() => {
@@ -110,62 +99,8 @@ const GamePage = () => {
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false);
 
-  // Transform game state to UI format
-  const players = useMemo<UIPlayer[]>(() => {
-    if (!gameState) return [];
-    return [...gameState.players]
-      .sort((a, b) => a.seat_id - b.seat_id)  // Sort by seat_id to fix border highlighting
-      .map((p) => {
-        // WL-008 Fix: Use my_seat to identify current player, not is_human
-        // is_human means "is this seat a human player" (multiple can be true in multiplayer)
-        // my_seat identifies "which seat belongs to the requesting player"
-        const isMe = p.seat_id === gameState.my_seat;
-        return {
-          id: p.seat_id,
-          name: isMe ? t('common:player.you') : p.name || t('common:player.default_name', { id: p.seat_id }),
-          isUser: isMe,
-          isAlive: p.is_alive,
-          // Show role for: 1) Current player always, 2) All players when game is finished
-          role: isMe ? gameState.my_role : (isGameOver ? (p.role ?? undefined) : undefined),
-          seatId: p.seat_id,
-        };
-      });
-  }, [gameState, isGameOver, t]);
-
-  // 预构建 seat_id -> player Map，避免 O(n) 线性查找
-  const playerMap = useMemo(() => {
-    if (!gameState) return new Map<number, Player>();
-    return new Map(gameState.players.map(p => [p.seat_id, p]));
-  }, [gameState]);
-
-  // Transform messages to UI format
-  const messages = useMemo(() => {
-    if (!gameState) return [];
-    return gameState.message_log.map((m, idx) => {
-      const player = playerMap.get(m.seat_id); // O(1) 查找替代 find()
-      const isSystem = m.type === "system" || m.seat_id === 0;
-      const isUser = m.seat_id === gameState.my_seat;
-
-      // Translate system messages
-      const messageText = isSystem
-        ? translateSystemMessage(m.text, t)
-        : m.text;
-
-      return {
-        id: idx + 1,
-        sender: isSystem
-          ? t('common:player.system')
-          : isUser
-          ? t('common:player.you')
-          : player?.name || t('common:player.seat', { id: m.seat_id }),
-        message: messageText,
-        isUser,
-        isSystem,
-        timestamp: "",
-        day: m.day,
-      };
-    });
-  }, [gameState, playerMap, t]);
+  // Use shared hook for player/message transformation (DRY)
+  const { players, messages } = useGameTransformers(gameState);
 
   const playersAlive = players.filter((p) => p.isAlive).length;
   const turnCount = gameState?.day || 1;
@@ -284,8 +219,10 @@ const GamePage = () => {
           }
           break;
         case "self_destruct":
-          await selfDestruct();
-          toast.success(t('common:toast.self_destruct_activated'));
+          if (selectedPlayerId) {
+            await selfDestruct(selectedPlayerId);
+            toast.success(t('common:toast.self_destruct_activated'));
+          }
           break;
         default:
           await skip();

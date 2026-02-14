@@ -75,7 +75,7 @@ class TestWebSocketGameSecurity:
 
         # Extract token should get from subprotocol
         import asyncio
-        token, source = asyncio.get_event_loop().run_until_complete(
+        token, source = asyncio.run(
             extract_token(mock_ws, allow_query_token=False)
         )
 
@@ -93,7 +93,7 @@ class TestWebSocketGameSecurity:
         mock_ws.query_params = {}
 
         import asyncio
-        token, source = asyncio.get_event_loop().run_until_complete(
+        token, source = asyncio.run(
             extract_token(mock_ws, allow_query_token=False)
         )
 
@@ -111,7 +111,7 @@ class TestWebSocketGameSecurity:
         mock_ws.query_params = {"token": "query_token_value"}
 
         import asyncio
-        token, source = asyncio.get_event_loop().run_until_complete(
+        token, source = asyncio.run(
             extract_token(mock_ws, allow_query_token=False)
         )
 

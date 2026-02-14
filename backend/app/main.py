@@ -185,6 +185,14 @@ async def _startup(background_tasks: list[asyncio.Task]):
     init_game_logging()
     logger.info("Game logging initialized")
 
+    # Start cross-instance game broadcaster (Redis Pub/Sub)
+    from app.storage.game_broadcaster import GameUpdateBroadcaster
+    from app.services.websocket_manager import websocket_manager
+    import app.storage.game_broadcaster as gb_module
+    broadcaster = GameUpdateBroadcaster(websocket_manager)
+    await broadcaster.start()
+    gb_module.game_broadcaster = broadcaster
+
     # FIX: Start background task for periodic rate limiter cleanup
     task1 = asyncio.create_task(_periodic_rate_limiter_cleanup())
     background_tasks.append(task1)
@@ -244,10 +252,10 @@ async def _periodic_game_store_cleanup():
             if cleaned > 0:
                 logger.info(
                     f"Game store cleanup: {cleaned} expired game(s) removed. "
-                    f"Active games: {len(game_store.games)}"
+                    f"Active games: {game_store.game_count}"
                 )
             else:
-                logger.debug(f"Game store cleanup: no expired games. Active: {len(game_store.games)}")
+                logger.debug(f"Game store cleanup: no expired games. Active: {game_store.game_count}")
 
         except Exception as e:
             logger.error(f"Error in game store cleanup task: {e}")
@@ -327,6 +335,15 @@ async def _shutdown(background_tasks: list[asyncio.Task]):
         await close_async_db()
     except Exception as e:
         logger.warning(f"Error closing async database: {e}")
+
+    # Stop game broadcaster
+    from app.storage.game_broadcaster import game_broadcaster
+    if game_broadcaster:
+        try:
+            await game_broadcaster.stop()
+            logger.info("Game broadcaster stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping game broadcaster: {e}")
 
     # Close Redis connections if any
     from app.services.notification_emitter import _publisher, _publisher_initialized

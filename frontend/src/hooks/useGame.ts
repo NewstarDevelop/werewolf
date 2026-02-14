@@ -2,7 +2,7 @@
  * useGame Hook - Facade pattern composing specialized hooks
  */
 import { useState, useCallback } from 'react';
-import { ActionType, Role, isNightPhase, needsHumanAction } from '@/services/api';
+import { Role, isNightPhase, needsHumanAction } from '@/services/api';
 import { useGameState } from './useGameState';
 import { useGameActions } from './useGameActions';
 import { useGameAutomation } from './useGameAutomation';
@@ -34,7 +34,6 @@ export function useGame(options: UseGameOptions = {}) {
 
   // Actions management hook
   const {
-    startGameMutation,
     stepGameMutation,
     submitActionMutation,
     handleStartGame: baseHandleStartGame,
@@ -115,7 +114,7 @@ export function useGame(options: UseGameOptions = {}) {
   );
 
   const handleSelfDestruct = useCallback(
-    () => handleAction('self_destruct'),
+    (targetId: number) => handleAction('self_destruct', targetId),
     [handleAction]
   );
 

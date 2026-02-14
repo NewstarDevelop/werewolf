@@ -17,9 +17,20 @@ vi.mock('@/utils/token', () => ({
   clearToken: vi.fn(),
 }));
 
+// Mock i18n config to prevent loading errors
+vi.mock('@/i18n/config', () => ({
+  default: { language: 'en' },
+}));
+
 describe('API Configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('API_BASE_URL defaults to empty string for relative paths', async () => {
@@ -31,13 +42,18 @@ describe('API Configuration', () => {
   });
 
   it('authorizedFetch includes credentials', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ data: 'test' }),
-    });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ data: 'test' }),
+      })
+    );
 
     const { authorizedFetch } = await import('./api');
-    await authorizedFetch('/test-endpoint');
+    const promise = authorizedFetch('/test-endpoint');
+    await vi.runAllTimersAsync();
+    await promise;
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
@@ -48,13 +64,18 @@ describe('API Configuration', () => {
   });
 
   it('authorizedFetch includes Content-Type header', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ data: 'test' }),
-    });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ data: 'test' }),
+      })
+    );
 
     const { authorizedFetch } = await import('./api');
-    await authorizedFetch('/test-endpoint');
+    const promise = authorizedFetch('/test-endpoint');
+    await vi.runAllTimersAsync();
+    await promise;
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
@@ -67,21 +88,38 @@ describe('API Configuration', () => {
   });
 
   it('authorizedFetch throws ApiError on non-ok response', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: () => Promise.resolve({ detail: 'Unauthorized' }),
-    });
+    // Use real timers for this test to avoid unhandled rejection from AbortController timeout
+    vi.useRealTimers();
+
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 401,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ detail: 'Unauthorized' }),
+      })
+    );
 
     const { authorizedFetch, ApiError } = await import('./api');
 
-    await expect(authorizedFetch('/test-endpoint')).rejects.toThrow();
+    let caughtError: unknown = null;
+    try {
+      await authorizedFetch('/test-endpoint');
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApiError);
+
+    // Restore fake timers for afterEach cleanup
+    vi.useFakeTimers();
   });
 });
 
 describe('Type Definitions', () => {
   it('Role type includes all expected roles', async () => {
-    const { Role } = await import('./api') as any;
+    // Just import to verify module loads
+    await import('./api');
 
     // Just verify the types are defined (compile-time check)
     const roles: string[] = [

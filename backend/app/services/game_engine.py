@@ -54,9 +54,10 @@ class GameEngine:
         self.llm = LLMService()
         # Register per-game rate limiter cleanup hook so resources are freed
         # when games are deleted or expire from GameStore.
-        game_store._cleanup_hooks.append(
-            lambda game_id: self.llm._per_game_limiter.cleanup_game(game_id)
-        )
+        async def _cleanup_limiter(game_id: str) -> None:
+            await self.llm._per_game_limiter.cleanup_game(game_id)
+
+        game_store._cleanup_hooks.append(_cleanup_limiter)
 
     async def close(self) -> None:
         """
@@ -129,7 +130,7 @@ class GameEngine:
             if result.get("status") == "game_over":
                 game_store._delete_snapshot(game_id)
             else:
-                game_store.save_game_state(game_id)
+                await game_store.save_game_state(game_id)
             return result
 
         return {"status": "error", "message": f"Unknown phase: {game.phase}"}
@@ -187,7 +188,7 @@ class GameEngine:
 
         # Persist snapshot after human action
         if result.get("success"):
-            game_store.save_game_state(game_id)
+            await game_store.save_game_state(game_id)
 
         return result
 

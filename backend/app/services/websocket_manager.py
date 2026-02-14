@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     """Manages per-player WebSocket connections for game rooms."""
 
+    MAX_CONNECTIONS_PER_GAME = 20
+    MAX_TOTAL_CONNECTIONS = 500
+
     def __init__(self):
         # (game_id, player_id) -> WebSocket for precise player routing
         self.connections: Dict[Tuple[str, str], WebSocket] = {}
@@ -24,10 +27,23 @@ class ConnectionManager:
             websocket: The WebSocket connection
             subprotocol: Optional subprotocol to accept (for Sec-WebSocket-Protocol)
         """
-        await websocket.accept(subprotocol=subprotocol)
-
         key = (game_id, player_id)
         existing = self.connections.get(key)
+
+        # Enforce connection limits (skip check if reconnecting same player)
+        if not existing:
+            total = self.get_total_connection_count()
+            if total >= self.MAX_TOTAL_CONNECTIONS:
+                logger.warning(f"Global connection limit reached ({total}). Rejecting {player_id} for {game_id}")
+                await websocket.close(code=1013, reason="Server overloaded")
+                return
+            game_count = self.get_connection_count(game_id)
+            if game_count >= self.MAX_CONNECTIONS_PER_GAME:
+                logger.warning(f"Per-game connection limit reached ({game_count}) for {game_id}. Rejecting {player_id}")
+                await websocket.close(code=1013, reason="Too many connections for this game")
+                return
+
+        await websocket.accept(subprotocol=subprotocol)
         self.connections[key] = websocket
 
         if game_id not in self._game_players:

@@ -3,18 +3,10 @@ import { Users } from "lucide-react";
 import { PendingAction, Role } from "@/services/api";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-
-interface Player {
-  id: number;
-  name: string;
-  isUser: boolean;
-  isAlive: boolean;
-  role?: Role;
-  seatId: number;
-}
+import type { UIPlayer } from "@/hooks/useGameTransformers";
 
 interface PlayerGridProps {
-  players: Player[];
+  players: UIPlayer[];
   selectedPlayerId: number | null;
   onSelectPlayer: (id: number) => void;
   currentActor?: number | null;

@@ -22,7 +22,8 @@ async def handle_day_announcement(game: Game) -> dict:
         death_sep = t("vote_format.death_separator", language=game.language)
         seat_suffix = t("vote_format.seat_suffix", language=game.language)
         deaths_str = death_sep.join([f"{s}{seat_suffix}" for s in game.last_night_deaths])
-        game.add_message(0, t("system_messages.day_breaks_deaths", language=game.language, deaths=deaths_str), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.day_breaks_deaths", language=game.language, deaths=deaths_str), MessageType.SYSTEM,
+                        i18n_key="system_messages.day_breaks_deaths", i18n_params={"deaths": [s for s in game.last_night_deaths]})
 
         # Check win condition immediately after night deaths (before hunter shoot)
         winner = game.check_winner()
@@ -40,7 +41,8 @@ async def handle_day_announcement(game: Game) -> dict:
                 game.phase = GamePhase.HUNTER_SHOOT
                 return {"status": "updated", "new_phase": game.phase}
     else:
-        game.add_message(0, t("system_messages.day_breaks_peaceful", language=game.language), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.day_breaks_peaceful", language=game.language), MessageType.SYSTEM,
+                        i18n_key="system_messages.day_breaks_peaceful")
 
     # Check win condition (for peaceful nights)
     winner = game.check_winner()
@@ -63,7 +65,8 @@ async def handle_day_announcement(game: Game) -> dict:
     game.phase = GamePhase.DAY_SPEECH
     game._spoken_seats_this_round.clear()  # P0 Fix: Reset speech tracker
     seat_suffix = t("vote_format.seat_suffix", language=game.language)
-    game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM)
+    game.add_message(0, t("system_messages.speech_start", language=game.language, seat_id=f"{game.speech_order[0]}{seat_suffix}"), MessageType.SYSTEM,
+                    i18n_key="system_messages.speech_start", i18n_params={"seat_id": game.speech_order[0]})
     game.increment_version()
     return {"status": "updated", "new_phase": game.phase}
 
@@ -124,7 +127,8 @@ async def handle_day_speech(game: Game, llm: "LLMService") -> dict:
         # All speeches done, move to vote
         game.phase = GamePhase.DAY_VOTE
         game.day_votes = {}
-        game.add_message(0, t("system_messages.speech_end", language=game.language), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.speech_end", language=game.language), MessageType.SYSTEM,
+                        i18n_key="system_messages.speech_end")
         game.increment_version()
         return {"status": "updated", "new_phase": game.phase}
 
@@ -139,7 +143,8 @@ async def handle_day_speech(game: Game, llm: "LLMService") -> dict:
         # All remaining seats invalid, move to vote
         game.phase = GamePhase.DAY_VOTE
         game.day_votes = {}
-        game.add_message(0, t("system_messages.speech_end", language=game.language), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.speech_end", language=game.language), MessageType.SYSTEM,
+                        i18n_key="system_messages.speech_end")
         game.increment_version()
         return {"status": "updated", "new_phase": game.phase}
 
@@ -210,20 +215,24 @@ async def handle_day_vote_result(game: Game) -> dict:
             vote_summary.append(f"{voter}{seat_suffix}{vote_word}{target}{seat_suffix}")
         else:
             vote_summary.append(f"{voter}{seat_suffix}{abstain_word}")
-    game.add_message(0, t("system_messages.vote_result", language=game.language, summary=separator.join(vote_summary)), MessageType.SYSTEM)
+    game.add_message(0, t("system_messages.vote_result", language=game.language, summary=separator.join(vote_summary)), MessageType.SYSTEM,
+                    i18n_key="system_messages.vote_result", i18n_params={"votes": {int(k): int(v) for k, v in game.day_votes.items()}})
 
     if not vote_counts:
-        game.add_message(0, t("system_messages.vote_all_abstain", language=game.language), MessageType.SYSTEM)
+        game.add_message(0, t("system_messages.vote_all_abstain", language=game.language), MessageType.SYSTEM,
+                        i18n_key="system_messages.vote_all_abstain")
     else:
         max_votes = max(vote_counts.values())
         top_targets = [tid for tid, v in vote_counts.items() if v == max_votes]
 
         if len(top_targets) > 1:
             # Tie - no one dies (simplified rule)
-            game.add_message(0, t("system_messages.vote_tie", language=game.language), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.vote_tie", language=game.language), MessageType.SYSTEM,
+                            i18n_key="system_messages.vote_tie")
         else:
             eliminated = top_targets[0]
-            game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM)
+            game.add_message(0, t("system_messages.player_exiled", language=game.language, seat_id=f"{eliminated}{seat_suffix}"), MessageType.SYSTEM,
+                            i18n_key="system_messages.player_exiled", i18n_params={"seat_id": eliminated})
             game.kill_player(eliminated)
 
             # Check win condition immediately after death
@@ -258,6 +267,7 @@ async def handle_day_vote_result(game: Game) -> dict:
 async def handle_game_over(game: Game) -> dict:
     """Handle game over."""
     winner_text = t("winners.villagers", language=game.language) if game.winner == Winner.VILLAGER else t("winners.werewolves", language=game.language)
-    game.add_message(0, t("system_messages.game_over", language=game.language, winner=winner_text), MessageType.SYSTEM)
+    game.add_message(0, t("system_messages.game_over", language=game.language, winner=winner_text), MessageType.SYSTEM,
+                    i18n_key="system_messages.game_over", i18n_params={"winner": game.winner.value if game.winner else "none"})
     game.increment_version()
     return {"status": "game_over", "winner": game.winner}

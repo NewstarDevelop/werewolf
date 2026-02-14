@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.endpoints.game import verify_admin
+from app.api.dependencies import verify_admin
 from app.core.database_async import get_async_db
 from app.models.user import User
 from app.schemas.admin import (
@@ -60,7 +60,7 @@ async def restart_service(
     logger.warning(f"RESTART_REQUESTED by actor={actor_id} from ip={client_ip}")
 
     # Schedule SIGTERM after 1s on the event loop (non-blocking, no threadpool)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.call_later(1, _send_sigterm)
 
     return RestartResponse(

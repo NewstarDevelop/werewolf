@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 # Entrypoint script for werewolf-backend container
 # Executes database migrations before starting the FastAPI server
 
-set -e
+set -euo pipefail
 
 echo "===================================="
 echo "Werewolf Backend Container Starting"

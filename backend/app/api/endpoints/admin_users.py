@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.endpoints.game import verify_admin
+from app.api.dependencies import verify_admin
 from app.core.database_async import get_async_db
 from app.models.user import User
 from app.schemas.admin_users import (

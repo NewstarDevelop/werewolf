@@ -252,11 +252,13 @@ async def get_optional_user(
     return payload
 
 
-async def get_admin(
-    authorization: Optional[str] = Header(None)
+async def verify_admin(
+    authorization: Optional[str] = Header(None),
 ) -> Dict:
     """
-    Dependency to verify admin privileges.
+    Dependency to verify admin privileges (JWT admin token).
+
+    Unified admin verification used by all admin endpoints.
 
     Args:
         authorization: Authorization header (format: "Bearer <token>")
@@ -265,16 +267,18 @@ async def get_admin(
         Dict containing admin info
 
     Raises:
-        HTTPException: 401 if token is missing/invalid, 403 if not admin
+        HTTPException: 403 if token is missing/invalid or not admin
     """
-    # First verify it's a valid player token
-    player = await get_current_player(authorization, user_access_token=None)
+    detail = "Admin access required. Provide JWT admin token."
+    if not authorization:
+        raise HTTPException(status_code=403, detail=detail)
 
-    # Check if player has admin privileges
+    try:
+        player = await get_current_player(authorization, user_access_token=None)
+    except HTTPException:
+        raise HTTPException(status_code=403, detail=detail)
+
     if not player.get("is_admin", False):
-        raise HTTPException(
-            status_code=403,
-            detail="Admin privileges required"
-        )
+        raise HTTPException(status_code=403, detail=detail)
 
     return player

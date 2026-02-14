@@ -27,8 +27,8 @@ function mergeMessages(oldMessages: MessageInGame[], newMessages: MessageInGame[
 export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdate }: UseGameWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const queryClient = useQueryClient();
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-  const pingIntervalRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const shouldReconnectRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const MAX_RECONNECT_DELAY = 30000; // 30s max
@@ -122,7 +122,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
       // Use shared WebSocket utilities for URL and auth
       const wsUrl = buildWebSocketUrl(`/ws/game/${gameId}`);
 
-      console.log('[WebSocket] Connecting to:', wsUrl);
+      console.debug('[WebSocket] Connecting to:', wsUrl);
 
       // Security: Use Sec-WebSocket-Protocol to pass token instead of query string
       // This prevents token leakage in server logs, browser history, and Referer headers
@@ -131,7 +131,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
       shouldReconnectRef.current = true;
 
       ws.onopen = () => {
-        console.log('[WebSocket] Connected to game', gameId);
+        console.debug('[WebSocket] Connected to game', gameId);
         setIsConnected(true);
         setConnectionError(null);
         reconnectAttemptRef.current = 0; // Reset backoff on successful connection
@@ -144,7 +144,7 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
         try {
           if (event.data === 'pong') return;
           const message: WebSocketMessage = JSON.parse(event.data);
-          console.log('[WebSocket] Received message:', message.type);
+          console.debug('[WebSocket] Received message:', message.type);
 
           if (message.type === 'game_update' || message.type === 'connected') {
             // Unified handling for both message types with version control
@@ -170,14 +170,14 @@ export function useGameWebSocket({ gameId, enabled = true, onError, onFirstUpdat
       };
 
       ws.onclose = (event) => {
-        console.log('[WebSocket] Disconnected:', event.code, event.reason);
+        console.debug('[WebSocket] Disconnected:', event.code, event.reason);
         setIsConnected(false);
 
         // Attempt to reconnect with exponential backoff (unless intentionally closed)
         if (event.code !== 1000 && enabled && shouldReconnectRef.current) {
           const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current), MAX_RECONNECT_DELAY);
           reconnectAttemptRef.current += 1;
-          console.log(`[WebSocket] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttemptRef.current})...`);
+          console.debug(`[WebSocket] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttemptRef.current})...`);
           reconnectTimeoutRef.current = setTimeout(connect, delay);
         }
       };

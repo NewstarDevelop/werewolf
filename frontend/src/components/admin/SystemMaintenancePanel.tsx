@@ -97,7 +97,7 @@ export function SystemMaintenancePanel({ token }: SystemMaintenancePanelProps) {
     } finally {
       setIsChecking(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   // Run update
   const handleRunUpdate = useCallback(async (force: boolean = false, confirmPhrase?: string) => {

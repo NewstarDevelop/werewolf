@@ -1,6 +1,5 @@
 """Base utilities for action handlers."""
-from typing import Optional
-from app.models.game import Game, WOLF_ROLES
+from app.models.game import Game
 from app.schemas.enums import ActionType
 from app.i18n import t
 

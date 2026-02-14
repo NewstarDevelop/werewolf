@@ -95,7 +95,7 @@ def _serialize_player(player: "Player") -> dict:
 
 
 def _serialize_message(msg: "Message") -> dict:
-    return {
+    d = {
         "id": msg.id,
         "game_id": msg.game_id,
         "day": msg.day,
@@ -103,6 +103,11 @@ def _serialize_message(msg: "Message") -> dict:
         "content": msg.content,
         "msg_type": msg.msg_type.value,
     }
+    if msg.i18n_key:
+        d["i18n_key"] = msg.i18n_key
+    if msg.i18n_params:
+        d["i18n_params"] = msg.i18n_params
+    return d
 
 
 def _serialize_action(action: "Action") -> dict:
@@ -196,6 +201,8 @@ def _deserialize_game(data: dict) -> "Game":
             seat_id=m_data["seat_id"],
             content=m_data["content"],
             msg_type=MessageType(m_data["msg_type"]),
+            i18n_key=m_data.get("i18n_key"),
+            i18n_params=m_data.get("i18n_params"),
         )
         game.messages.append(msg)
 

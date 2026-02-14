@@ -19,7 +19,8 @@ _rng = secrets.SystemRandom()
 
 async def handle_night_start(game: Game) -> dict:
     """Handle night start - transition to werewolf chat phase."""
-    game.add_message(0, t("system_messages.night_falls", language=game.language, day=game.day), MessageType.SYSTEM)
+    game.add_message(0, t("system_messages.night_falls", language=game.language, day=game.day), MessageType.SYSTEM,
+                    i18n_key="system_messages.night_falls", i18n_params={"day": game.day})
     game.phase = GamePhase.NIGHT_WEREWOLF_CHAT
     game.wolf_chat_completed = set()  # Reset wolf chat tracker
     game.wolf_votes = {}
@@ -54,7 +55,8 @@ async def handle_night_werewolf_chat(game: Game, llm: "LLMService") -> dict:
     # All werewolves have chatted, move to kill vote phase
     # Summarize wolf night plan before moving to next phase
     game.wolf_night_plan = summarize_wolf_plan(game)
-    game.add_message(0, t("system_messages.werewolf_discussion_end", language=game.language), MessageType.SYSTEM)
+    game.add_message(0, t("system_messages.werewolf_discussion_end", language=game.language), MessageType.SYSTEM,
+                    i18n_key="system_messages.werewolf_discussion_end")
     game.phase = GamePhase.NIGHT_WEREWOLF
     game.increment_version()
     return {"status": "updated", "new_phase": game.phase}
@@ -102,7 +104,7 @@ async def handle_night_werewolf(game: Game, llm: "LLMService") -> dict:
             for target in valid_votes.values():
                 vote_counts[target] = vote_counts.get(target, 0) + 1
             max_votes = max(vote_counts.values())
-            top_targets = [t for t, v in vote_counts.items() if v == max_votes]
+            top_targets = [tid for tid, v in vote_counts.items() if v == max_votes]
             game.night_kill_target = _rng.choice(top_targets)
             game.pending_deaths.append(game.night_kill_target)
 

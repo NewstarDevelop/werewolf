@@ -170,7 +170,7 @@ export async function fetchApi<T>(
       if (isTimeoutAbort) {
         if (retryCount < MAX_RETRIES) {
           retryCount++;
-          console.log(`Request timeout, retrying... (${MAX_RETRIES - retryCount + 1} attempts left)`);
+          console.log(`Request timeout, retrying... (${MAX_RETRIES - retryCount} attempts left)`);
           continue;
         }
         throw new ApiError(408, 'Request timeout');
@@ -181,7 +181,7 @@ export async function fetchApi<T>(
         if (retryCount < MAX_RETRIES) {
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
-          console.log(`Network error, retrying... (${MAX_RETRIES - retryCount + 1} attempts left) in ${delay}ms`);
+          console.log(`Network error, retrying... (${MAX_RETRIES - retryCount} attempts left) in ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }

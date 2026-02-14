@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.auth import create_player_token
 from app.core.database_async import get_async_db
 from app.models.game import game_store
-from app.api.dependencies import get_current_player, get_optional_user
+from app.api.dependencies import get_current_player, get_optional_user, verify_admin
 from app.schemas.enums import GameStatus
 from app.schemas.game import (
     GameStartRequest, GameStartResponse, StepResponse
@@ -67,32 +67,6 @@ async def _persist_game_over(
             extra={"game_id": game_id},
             exc_info=True
         )
-
-
-# T-SEC-004: Admin verification (JWT admin token only)
-async def verify_admin(
-    authorization: Optional[str] = Header(None),
-):
-    """
-    Admin verification using JWT admin token.
-
-    Authorization header must contain an admin token:
-    - Created via create_admin_token()
-    - Token must have is_admin=True
-    """
-    detail = "Admin access required. Provide JWT admin token."
-    if not authorization:
-        raise HTTPException(status_code=403, detail=detail)
-
-    try:
-        player = await get_current_player(authorization, user_access_token=None)
-    except HTTPException:
-        raise HTTPException(status_code=403, detail=detail)
-
-    if not player.get("is_admin", False):
-        raise HTTPException(status_code=403, detail=detail)
-
-    return player
 
 
 def verify_game_membership(game_id: str, current_player: Dict):
@@ -239,50 +213,52 @@ async def step_game(
     game = verify_game_membership(game_id, current_player)
 
     # P0-STAB-001: Acquire per-game lock to prevent concurrent state corruption
+    # A-2 FIX: Only hold lock for state mutation; persist & broadcast run outside
     async with game_store.get_lock(game_id):
         result = await game_engine.step(game_id)  # WL-010: await async step
 
-        status = result.get("status", "error")
-        new_phase = result.get("new_phase")
-        message = result.get("message")
-        winner = result.get("winner")
+    status = result.get("status", "error")
+    new_phase = result.get("new_phase")
+    message = result.get("message")
+    winner = result.get("winner")
 
-        if status == "error":
-            raise HTTPException(status_code=400, detail=message or "Unknown error")
+    if status == "error":
+        raise HTTPException(status_code=400, detail=message or "Unknown error")
 
-        # Persist game completion if game ended
-        await _persist_game_over(db, game_id, status, winner)
+    # Persist game completion if game ended (outside lock — DB write only)
+    await _persist_game_over(db, game_id, status, winner)
 
-        # WebSocket: 推送游戏状态更新到所有连接的客户端
-        try:
-            # Get all player IDs for this game to broadcast to
-            if game.player_mapping:
-                # Multi-player mode: use new broadcast_to_game_players with per-player filtering
-                await websocket_manager.broadcast_to_game_players(
-                    game_id,
-                    "game_update",
-                    lambda pid: game.get_state_for_player(pid)
-                )
-            else:
-                # Single-player mode: send full state
-                full_state = game.get_state_for_player(None)
-                await websocket_manager.broadcast_to_game(
-                    game_id,
-                    "game_update",
-                    full_state
-                )
-        except Exception as e:
-            logger.warning(
-                "Failed to broadcast game update via WebSocket",
-                extra={"game_id": game_id, "error": str(e)},
-                exc_info=True
+    # WebSocket: 推送游戏状态更新到所有连接的客户端 (outside lock)
+    try:
+        if game.player_mapping:
+            await websocket_manager.broadcast_to_game_players(
+                game_id,
+                "game_update",
+                lambda pid: game.get_state_for_player(pid)
             )
-
-        return StepResponse(
-            status=status,
-            new_phase=new_phase,
-            message=message or (f"Winner: {winner}" if winner else None)
+        else:
+            full_state = game.get_state_for_player(None)
+            await websocket_manager.broadcast_to_game(
+                game_id,
+                "game_update",
+                full_state
+            )
+        # Cross-instance broadcast via Redis Pub/Sub
+        from app.storage.game_broadcaster import game_broadcaster
+        if game_broadcaster:
+            await game_broadcaster.publish_game_update(game_id)
+    except Exception as e:
+        logger.warning(
+            "Failed to broadcast game update via WebSocket",
+            extra={"game_id": game_id, "error": str(e)},
+            exc_info=True
         )
+
+    return StepResponse(
+        status=status,
+        new_phase=new_phase,
+        message=message or (f"Winner: {winner}" if winner else None)
+    )
 
 
 @router.post("/{game_id}/action", response_model=ActionResponse)
@@ -316,6 +292,7 @@ async def submit_action(
         )
 
     # P0-STAB-001: Acquire per-game lock to prevent concurrent state corruption
+    # A-2 FIX: Only hold lock for state mutation; persist & broadcast run outside
     async with game_store.get_lock(game_id):
         result = await game_engine.process_human_action(
             game_id=game_id,
@@ -325,43 +302,45 @@ async def submit_action(
             content=request.content
         )
 
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=400,
-                detail=result.get("message", "Action failed")
-            )
-
-        # Persist game completion if action ended the game
-        await _persist_game_over(db, game_id, result.get("status"), result.get("winner"))
-
-        # WebSocket: 推送游戏状态更新到所有连接的客户端
-        try:
-            if game.player_mapping:
-                # Multi-player mode: use new broadcast_to_game_players with per-player filtering
-                await websocket_manager.broadcast_to_game_players(
-                    game_id,
-                    "game_update",
-                    lambda pid: game.get_state_for_player(pid)
-                )
-            else:
-                # Single-player mode
-                player_state = game.get_state_for_player(player_id)
-                await websocket_manager.broadcast_to_game(
-                    game_id,
-                    "game_update",
-                    player_state
-                )
-        except Exception as e:
-            logger.warning(
-                "Failed to broadcast action update via WebSocket",
-                extra={"game_id": game_id, "error": str(e)},
-                exc_info=True
-            )
-
-        return ActionResponse(
-            success=True,
-            message=result.get("message")
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("message", "Action failed")
         )
+
+    # Persist game completion if action ended the game (outside lock)
+    await _persist_game_over(db, game_id, result.get("status"), result.get("winner"))
+
+    # WebSocket: 推送游戏状态更新到所有连接的客户端 (outside lock)
+    try:
+        if game.player_mapping:
+            await websocket_manager.broadcast_to_game_players(
+                game_id,
+                "game_update",
+                lambda pid: game.get_state_for_player(pid)
+            )
+        else:
+            player_state = game.get_state_for_player(player_id)
+            await websocket_manager.broadcast_to_game(
+                game_id,
+                "game_update",
+                player_state
+            )
+        # Cross-instance broadcast via Redis Pub/Sub
+        from app.storage.game_broadcaster import game_broadcaster
+        if game_broadcaster:
+            await game_broadcaster.publish_game_update(game_id)
+    except Exception as e:
+        logger.warning(
+            "Failed to broadcast action update via WebSocket",
+            extra={"game_id": game_id, "error": str(e)},
+            exc_info=True
+        )
+
+    return ActionResponse(
+        success=True,
+        message=result.get("message")
+    )
 
 
 @router.delete("/{game_id}")

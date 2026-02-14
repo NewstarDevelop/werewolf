@@ -197,10 +197,11 @@ class TestGameStoreIntegration:
 
     def test_save_game_state_explicit(self, store):
         """Explicit save_game_state persists current state."""
+        import asyncio
         game = store.create_game(human_seat=1, game_id="int-explicit")
         game.day = 3
         game.phase = GamePhase.DAY_VOTE
-        store.save_game_state("int-explicit")
+        asyncio.run(store.save_game_state("int-explicit"))
 
         loaded = store._persistence.load_all_active()
         assert loaded["int-explicit"].day == 3

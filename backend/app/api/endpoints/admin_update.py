@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.endpoints.game import verify_admin
+from app.api.dependencies import verify_admin
 from app.core.config import settings
 from app.core.database_async import get_async_db
 from app.models.room import Room, RoomStatus

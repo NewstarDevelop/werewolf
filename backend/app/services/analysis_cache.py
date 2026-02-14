@@ -131,7 +131,7 @@ class AnalysisCache:
                     if data.get("game_id") == game_id:
                         cache_file.unlink()
                         count += 1
-                except:
+                except Exception:
                     pass
             logger.info(f"Cleared {count} cache entries for {game_id}")
             return count

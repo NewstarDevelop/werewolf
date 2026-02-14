@@ -682,28 +682,9 @@ class LLMService:
             if target.verified_players:
                 return 100  # Active seer with verification history
 
-            # Signal 2: Check speech content for seer claims (bilingual patterns)
-            seer_claim_patterns_zh = [
-                "我是预言家", "本预言家", "作为预言家",
-                "我验了", "我查验", "我昨晚验", "我昨晚查",
-                "给了金水", "给了查杀", "验到", "查到"
-            ]
-            seer_claim_patterns_en = [
-                "i am the seer", "i'm the seer", "as the seer",
-                "i checked", "i verified", "last night i checked",
-                "found werewolf", "found good", "gave gold"
-            ]
-            seer_patterns = seer_claim_patterns_zh + seer_claim_patterns_en
-            negative_patterns = [
-                "不是预言家", "假预言家", "not the seer", "fake seer"
-            ]
-
-            for msg in game.messages:
-                if msg.seat_id == target_id:
-                    content = msg.content.lower()
-                    if any(p in content for p in seer_patterns):
-                        if not any(neg in content for neg in negative_patterns):
-                            return 100  # Must save revealed seer
+            # Signal 2: Structured claim tracking (NEW-7)
+            if game.claimed_roles.get(target_id) == "seer":
+                return 100  # Must save revealed seer
 
         # Power roles (non-seer) have medium-high value
         from app.schemas.enums import Role as RoleEnum

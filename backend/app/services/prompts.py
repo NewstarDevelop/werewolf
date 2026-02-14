@@ -1,12 +1,15 @@
 """Prompt templates for AI players in Werewolf game."""
 
+import re
+from collections import defaultdict
 from typing import TYPE_CHECKING
+
 from app.i18n import t, normalize_language
+from app.schemas.enums import ActionType, MessageType
 from app.services.prompts_templates import SYSTEM_PROMPT_ZH, SYSTEM_PROMPT_EN
 
 if TYPE_CHECKING:
     from app.models.game import Game, Player
-    from app.schemas.enums import GamePhase, MessageType
 
 # Wolf roles for checking (includes wolf_king and white_wolf_king)
 WOLF_ROLE_VALUES = {"werewolf", "wolf_king", "white_wolf_king"}
@@ -17,15 +20,13 @@ def _is_garbled_or_meaningless(content: str) -> bool:
 
     用于预言家查验黑名单和好人噪音过滤。
     """
-    import re
-
     if not content or len(content.strip()) < 3:
         return True
 
     # 检测乱码特征
     # 1. 过多特殊字符（允许常见标点和符号）
     # 允许：中文、英文、数字、空格、中英文标点、常见符号(~-._…)
-    special_char_ratio = len(re.findall(r'[^\u4e00-\u9fa5a-zA-Z0-9\s，。！？、：；""''（）~\-._…·,.:;!?\'"()\[\]]', content)) / max(len(content), 1)
+    special_char_ratio = len(re.findall(r'[^\u4e00-\u9fa5a-zA-Z0-9\s，。！？、：；\u201c\u201d\u2018\u2019（）~\x2d._…·,.:;!?\'"()\[\]]', content)) / max(len(content), 1)
     if special_char_ratio > 0.5:
         return True
 
@@ -57,8 +58,6 @@ def _analyze_player_speech_quality(game: "Game", seat_id: int) -> dict:
             "reason": str  # 原因
         }
     """
-    from app.schemas.enums import MessageType
-
     speeches = [msg for msg in game.messages
                 if msg.seat_id == seat_id and msg.msg_type == MessageType.SPEECH]
 
@@ -95,9 +94,6 @@ def _build_voting_pattern_analysis(game: "Game", player: "Player", language: str
 
     预处理投票数据，让AI关注"硬事实"而非"噪音"。
     """
-    from app.schemas.enums import ActionType
-    from collections import defaultdict
-
     if game.day < 2:
         return ""
 
@@ -249,7 +245,7 @@ def build_system_prompt(player: "Player", game: "Game", language: str = "zh") ->
     # Wolf teammates info (only for werewolves, wolf_king, white_wolf_king)
     wolf_info = ""
     if player.role.value in WOLF_ROLE_VALUES and player.teammates:
-        teammates_str = "、".join([f"{t}号" for t in player.teammates]) if language == "zh" else ", ".join([f"#{t}" for t in player.teammates])
+        teammates_str = "、".join([f"{tid}号" for tid in player.teammates]) if language == "zh" else ", ".join([f"#{tid}" for tid in player.teammates])
         wolf_info = f"\n{t('prompts.wolf_teammates', language=language, teammates=teammates_str)}\n{t('prompts.wolf_info_note', language=language)}"
 
         # P2优化：添加狼人差异化战术角色策略
@@ -397,7 +393,7 @@ def build_context_prompt(player: "Player", game: "Game", action_type: str = "spe
             # 狼人夜间讨论专用 prompt
             separator = "、" if language == "zh" else ", "
             seat_suffix = "号" if language == "zh" else ""
-            teammates_str = separator.join([f"{t}{seat_suffix}" for t in (player.teammates or [])])
+            teammates_str = separator.join([f"{tid}{seat_suffix}" for tid in (player.teammates or [])])
 
             if language == "zh":
                 phase_instruction = f"""
@@ -823,30 +819,9 @@ def build_wolf_strategy_prompt(player: "Player", game: "Game", language: str = "
     # Check if conditions are right for advanced wolf tactics
     strategy_hints = []
 
-    # Check if real seer has claimed (using language-specific patterns)
-    seer_claimed = False
-    if language == "zh":
-        seer_patterns = [
-            "我是预言家", "本预言家", "作为预言家",
-            "我验了", "我查验", "我昨晚验", "我昨晚查",
-            "给了金水", "给了查杀", "验到金水", "验到查杀", "验出狼"
-        ]
-        negative_patterns = ["不是预言家", "假预言家", "狼人悍跳预言家"]
-    else:
-        seer_patterns = [
-            "I am the seer", "I'm the seer", "as the seer",
-            "I checked", "I verified", "last night I checked",
-            "gave gold", "gave kill", "found werewolf", "found good"
-        ]
-        negative_patterns = ["not the seer", "fake seer", "werewolf claiming seer"]
-
-    for msg in game.messages:
-        if msg.seat_id != player.seat_id:
-            content = msg.content.lower()
-            if any(pattern.lower() in content for pattern in seer_patterns):
-                if not any(neg.lower() in content for neg in negative_patterns):
-                    seer_claimed = True
-                    break
+    # Check if real seer has claimed (NEW-7: use structured claimed_roles)
+    from app.services.claim_detector import has_seer_claim
+    seer_claimed = has_seer_claim(game.claimed_roles, exclude_seat=player.seat_id)
 
     # Scenario 1: Seer has claimed, consider counter-claiming
     if seer_claimed and game.day >= 2:

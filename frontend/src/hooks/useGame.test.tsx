@@ -5,9 +5,10 @@
  * Verifies initialization and basic functionality.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
+import type { useGameActions } from './useGameActions';
 
 // Mock the API module
 vi.mock('@/services/api', () => ({
@@ -205,7 +206,7 @@ describe('useGame Action Handlers', () => {
       handleStep: vi.fn(),
       handleAction: vi.fn(),
       stepMutateRef: { current: null },
-    } as any);
+    } as unknown as ReturnType<typeof useGameActions>);
 
     const { result } = renderHook(() => useGame(), {
       wrapper: createWrapper(),
@@ -225,7 +226,7 @@ describe('useGame Action Handlers', () => {
       handleStep: vi.fn(),
       handleAction: vi.fn(),
       stepMutateRef: { current: null },
-    } as any);
+    } as unknown as ReturnType<typeof useGameActions>);
 
     const { result } = renderHook(() => useGame(), {
       wrapper: createWrapper(),

@@ -490,7 +490,7 @@ async def _call_ai_analyzer(prompt: str, language: str, mode: str) -> str:
     # All attempts failed - close client before returning
     try:
         await client.close()
-    except:
+    except Exception:
         pass
 
     logger.error("All analysis attempts failed, returning fallback")

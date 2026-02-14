@@ -23,6 +23,8 @@ def create_player_token(player_id: str, room_id: Optional[str] = None) -> str:
     payload = {
         "player_id": player_id,
         "is_admin": False,
+        "jti": str(uuid.uuid4()),
+        "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     }
 

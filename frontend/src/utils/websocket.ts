@@ -33,7 +33,10 @@ export function buildWebSocketUrl(path: string): string {
  * @returns Array of subprotocols: ['auth', '<token>']
  */
 export function getAuthSubprotocols(): string[] {
-  const token = getToken() || '';
+  const token = getToken();
+  if (!token) {
+    return ['auth'];
+  }
   return ['auth', token];
 }
 

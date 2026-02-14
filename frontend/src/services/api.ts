@@ -6,6 +6,7 @@
  */
 
 import { fetchApi } from '@/lib/api-client';
+import i18n from '@/i18n/config';
 import {
   GameStartRequest,
   GameStartResponse,
@@ -38,7 +39,7 @@ export const authorizedFetch = fetchApi;
 export async function startGame(request: GameStartRequest = {}): Promise<GameStartResponse> {
   // Auto-detect current language if not provided
   if (!request.language) {
-    request.language = 'zh'; // Default, caller should provide specific language
+    request.language = i18n.language?.startsWith('en') ? 'en' : 'zh';
   }
 
   return fetchApi<GameStartResponse>('/api/game/start', {

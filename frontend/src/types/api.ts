@@ -42,6 +42,8 @@ export interface MessageInGame {
   text: string;
   type: MessageType;
   day: number;
+  i18n_key?: string;              // Structured i18n key from backend
+  i18n_params?: Record<string, unknown>;  // Parameters for i18n interpolation
 }
 
 export interface PendingAction {
