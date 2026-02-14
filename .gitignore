@@ -32,6 +32,10 @@ build/
 .playwright-mcp/
 tmpclaude-*
 
+# Audit / Review reports
+*AUDIT_REPORT*
+*REVIEW_REPORT*
+
 # Environment
 .env
 .env.*
