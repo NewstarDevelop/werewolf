@@ -73,8 +73,8 @@ class RedisLock:
         )
         return False
 
-    def release(self) -> None:
-        """Release the lock if we hold it.
+    def _release_sync(self) -> None:
+        """Synchronous lock release (for use in threads or non-async contexts).
 
         Uses a Lua script to atomically check-and-delete, ensuring
         only the lock holder can release it.
@@ -97,6 +97,15 @@ class RedisLock:
         finally:
             self._token = None
 
+    async def release(self) -> None:
+        """Release the lock without blocking the event loop.
+
+        Offloads the synchronous Redis call to a thread pool.
+        """
+        if self._token is None:
+            return
+        await asyncio.to_thread(self._release_sync)
+
     async def __aenter__(self):
         acquired = await self.acquire()
         if not acquired:
@@ -106,7 +115,7 @@ class RedisLock:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self.release()
+        await self.release()
         return False
 
 

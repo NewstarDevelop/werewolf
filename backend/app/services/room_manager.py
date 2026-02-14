@@ -319,23 +319,46 @@ class RoomManager:
         room_id: str,
         player_id: str
     ) -> bool:
-        """切换玩家准备状态，返回新状态"""
-        result = await db.execute(
-            select(RoomPlayer).where(
-                RoomPlayer.room_id == room_id,
-                RoomPlayer.player_id == player_id
-            )
-        )
-        player = result.scalar_one_or_none()
+        """切换玩家准备状态，返回新状态
 
-        if not player:
-            raise ValueError("玩家未加入房间")
+        BUG-FIX: Added retry logic for SQLite concurrency, matching
+        join_room/leave_room patterns to prevent OperationalError under load.
+        """
+        max_retries = 5
+        retry_delay = 0.2
 
-        player.is_ready = not player.is_ready
-        await db.commit()
+        for attempt in range(max_retries):
+            try:
+                result = await db.execute(
+                    select(RoomPlayer).where(
+                        RoomPlayer.room_id == room_id,
+                        RoomPlayer.player_id == player_id
+                    )
+                )
+                player = result.scalar_one_or_none()
 
-        logger.info(f"Player {player.nickname} ready status: {player.is_ready}")
-        return player.is_ready
+                if not player:
+                    raise ValueError("玩家未加入房间")
+
+                player.is_ready = not player.is_ready
+                await db.commit()
+
+                logger.info(f"Player {player.nickname} ready status: {player.is_ready}")
+                return player.is_ready
+
+            except OperationalError:
+                await db.rollback()
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(
+                        f"Database locked on toggle_ready attempt {attempt + 1}/{max_retries}, "
+                        f"retrying in {wait_time:.2f}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise ValueError("服务器繁忙，请稍后重试")
+
+        raise ValueError("操作失败，请重试")
 
     async def start_game(
         self,

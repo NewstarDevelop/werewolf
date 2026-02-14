@@ -21,10 +21,44 @@ from app.services.game_analyzer import analyze_game
 from app.services.analysis_cache import AnalysisCache
 from app.services.room_manager import room_manager
 from app.services.websocket_manager import websocket_manager
+from app.services.game_rate_limiter import game_api_limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/game", tags=["game"])
 logger = logging.getLogger(__name__)
+
+
+async def _broadcast_game_state(game_id: str, game, fallback_player_id: Optional[str] = None) -> None:
+    """Broadcast game state update to all connected WebSocket clients.
+
+    Args:
+        game_id: Game identifier
+        game: Game instance for state serialization
+        fallback_player_id: Player ID for single-player fallback broadcast
+    """
+    try:
+        if game.player_mapping:
+            await websocket_manager.broadcast_to_game_players(
+                game_id,
+                "game_update",
+                lambda pid: game.get_state_for_player(pid)
+            )
+        else:
+            state = game.get_state_for_player(fallback_player_id)
+            await websocket_manager.broadcast_to_game(
+                game_id,
+                "game_update",
+                state
+            )
+        from app.storage.game_broadcaster import game_broadcaster
+        if game_broadcaster:
+            await game_broadcaster.publish_game_update(game_id)
+    except Exception as e:
+        logger.warning(
+            "Failed to broadcast game update via WebSocket",
+            extra={"game_id": game_id, "error": str(e)},
+            exc_info=True
+        )
 
 
 async def _persist_game_over(
@@ -209,6 +243,17 @@ async def step_game(
     Security: T-SEC-003 - Room mode validates room_id matches game_id
     P0-STAB-001 Fix: Uses per-game lock to prevent concurrent state corruption
     """
+    # SEC-FIX: Rate limit game step calls to prevent LLM quota abuse
+    rate_key = current_player.get("player_id", game_id)
+    is_allowed, retry_after = game_api_limiter.check_rate_limit(rate_key)
+    if not is_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)}
+        )
+    game_api_limiter.record_request(rate_key)
+
     # T-SEC-003: Verify game membership (handles 404 and 403)
     game = verify_game_membership(game_id, current_player)
 
@@ -228,31 +273,8 @@ async def step_game(
     # Persist game completion if game ended (outside lock — DB write only)
     await _persist_game_over(db, game_id, status, winner)
 
-    # WebSocket: 推送游戏状态更新到所有连接的客户端 (outside lock)
-    try:
-        if game.player_mapping:
-            await websocket_manager.broadcast_to_game_players(
-                game_id,
-                "game_update",
-                lambda pid: game.get_state_for_player(pid)
-            )
-        else:
-            full_state = game.get_state_for_player(None)
-            await websocket_manager.broadcast_to_game(
-                game_id,
-                "game_update",
-                full_state
-            )
-        # Cross-instance broadcast via Redis Pub/Sub
-        from app.storage.game_broadcaster import game_broadcaster
-        if game_broadcaster:
-            await game_broadcaster.publish_game_update(game_id)
-    except Exception as e:
-        logger.warning(
-            "Failed to broadcast game update via WebSocket",
-            extra={"game_id": game_id, "error": str(e)},
-            exc_info=True
-        )
+    # WebSocket: broadcast game state to all connected clients (outside lock)
+    await _broadcast_game_state(game_id, game)
 
     return StepResponse(
         status=status,
@@ -277,6 +299,17 @@ async def submit_action(
              seat_id is derived from token, not trusted from request body
     P0-STAB-001 Fix: Uses per-game lock to prevent concurrent state corruption
     """
+    # SEC-FIX: Rate limit game action calls to prevent LLM quota abuse
+    rate_key = current_player.get("player_id", game_id)
+    is_allowed, retry_after = game_api_limiter.check_rate_limit(rate_key)
+    if not is_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)}
+        )
+    game_api_limiter.record_request(rate_key)
+
     # T-SEC-003: Verify game membership (handles 404 and 403)
     game = verify_game_membership(game_id, current_player)
 
@@ -311,31 +344,8 @@ async def submit_action(
     # Persist game completion if action ended the game (outside lock)
     await _persist_game_over(db, game_id, result.get("status"), result.get("winner"))
 
-    # WebSocket: 推送游戏状态更新到所有连接的客户端 (outside lock)
-    try:
-        if game.player_mapping:
-            await websocket_manager.broadcast_to_game_players(
-                game_id,
-                "game_update",
-                lambda pid: game.get_state_for_player(pid)
-            )
-        else:
-            player_state = game.get_state_for_player(player_id)
-            await websocket_manager.broadcast_to_game(
-                game_id,
-                "game_update",
-                player_state
-            )
-        # Cross-instance broadcast via Redis Pub/Sub
-        from app.storage.game_broadcaster import game_broadcaster
-        if game_broadcaster:
-            await game_broadcaster.publish_game_update(game_id)
-    except Exception as e:
-        logger.warning(
-            "Failed to broadcast action update via WebSocket",
-            extra={"game_id": game_id, "error": str(e)},
-            exc_info=True
-        )
+    # WebSocket: broadcast game state to all connected clients (outside lock)
+    await _broadcast_game_state(game_id, game, fallback_player_id=player_id)
 
     return ActionResponse(
         success=True,

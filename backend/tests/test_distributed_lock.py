@@ -52,7 +52,7 @@ class TestRedisLock:
         assert acquired is True
         assert "test:lock:1" in fake_redis._store
 
-        lock.release()
+        await lock.release()
         assert "test:lock:1" not in fake_redis._store
 
     @pytest.mark.asyncio
@@ -65,7 +65,7 @@ class TestRedisLock:
         acquired = await lock2.acquire()
         assert acquired is False
 
-        lock1.release()
+        await lock1.release()
 
     @pytest.mark.asyncio
     async def test_acquire_succeeds_after_release(self, fake_redis):
@@ -73,12 +73,12 @@ class TestRedisLock:
         lock2 = RedisLock(fake_redis, "test:lock:1", ttl=10, acquire_timeout=0.5)
 
         await lock1.acquire()
-        lock1.release()
+        await lock1.release()
 
         # Now lock2 should succeed
         acquired = await lock2.acquire()
         assert acquired is True
-        lock2.release()
+        await lock2.release()
 
     @pytest.mark.asyncio
     async def test_only_holder_can_release(self, fake_redis):
@@ -89,17 +89,17 @@ class TestRedisLock:
         await lock1.acquire()
         # lock2 tries to release — should fail (wrong token)
         lock2._token = "wrong-token"
-        lock2.release()
+        await lock2.release()
 
         # Lock should still be held by lock1
         assert "test:lock:1" in fake_redis._store
-        lock1.release()
+        await lock1.release()
 
     @pytest.mark.asyncio
     async def test_release_without_acquire_is_noop(self, fake_redis):
         lock = RedisLock(fake_redis, "test:lock:1", ttl=10)
         # Should not raise
-        lock.release()
+        await lock.release()
 
     @pytest.mark.asyncio
     async def test_async_context_manager(self, fake_redis):
@@ -119,7 +119,7 @@ class TestRedisLock:
             async with lock2:
                 pass  # Should not reach here
 
-        lock1.release()
+        await lock1.release()
 
     @pytest.mark.asyncio
     async def test_context_manager_releases_on_exception(self, fake_redis):
@@ -139,7 +139,7 @@ class TestRedisLock:
         lock._client = MagicMock()
         lock._client.eval.side_effect = ConnectionError("Redis down")
         # Should not raise
-        lock.release()
+        await lock.release()
 
 
 class TestRedisLockManager:
@@ -167,8 +167,8 @@ class TestRedisLockManager:
         acquired = await lock2.acquire()
         assert acquired is True
 
-        lock1.release()
-        lock2.release()
+        await lock1.release()
+        await lock2.release()
 
 
 class TestGameStoreGetLock:

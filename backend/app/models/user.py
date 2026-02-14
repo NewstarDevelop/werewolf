@@ -56,7 +56,16 @@ class OAuthAccount(Base):
 
 
 class RefreshToken(Base):
-    """Refresh Token模型 - 用于安全会话管理"""
+    """Refresh Token模型 - 用于安全会话管理
+
+    TODO: This model is defined but not yet wired into any API endpoint.
+    To complete the refresh token flow:
+    1. Add POST /api/auth/refresh endpoint that accepts refresh_token cookie
+    2. Implement token rotation (issue new refresh token, revoke old one)
+    3. Add refresh token cookie alongside access token in login/register responses
+    4. Frontend: auto-refresh access token before expiry using refresh token
+    Current access token expiry is 2 hours (see config_security.py JWT_EXPIRE_MINUTES).
+    """
     __tablename__ = "refresh_tokens"
 
     id = Column(String(36), primary_key=True)  # UUID (jti)

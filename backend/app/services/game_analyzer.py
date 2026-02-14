@@ -42,9 +42,9 @@ async def analyze_game(game: Game) -> Dict[str, Any]:
 
     analysis_mode = settings.ANALYSIS_MODE
 
-    # Try cache first
+    # Try cache first (offload sync file I/O to thread pool)
     if settings.ANALYSIS_CACHE_ENABLED:
-        cached = AnalysisCache.get(game.id, analysis_mode, analysis_language)
+        cached = await asyncio.to_thread(AnalysisCache.get, game.id, analysis_mode, analysis_language)
         if cached:
             logger.info(f"Returning cached analysis for game {game.id}")
             return cached["result"]
@@ -73,9 +73,9 @@ async def analyze_game(game: Game) -> Dict[str, Any]:
         "analysis_language": analysis_language,
     }
 
-    # Save to cache
+    # Save to cache (offload sync file I/O to thread pool)
     if settings.ANALYSIS_CACHE_ENABLED:
-        AnalysisCache.set(game.id, analysis_mode, analysis_language, result)
+        await asyncio.to_thread(AnalysisCache.set, game.id, analysis_mode, analysis_language, result)
 
     return result
 
@@ -153,7 +153,11 @@ def _collect_game_data(game: Game) -> Dict[str, Any]:
 
 
 def _calculate_survival_days(game: Game, seat_id: int) -> int:
-    """Calculate how many days a player survived."""
+    """Calculate how many days a player survived.
+
+    Scans action history for lethal events (KILL, POISON, SHOOT, SELF_DESTRUCT)
+    targeting this player to determine the day of death.
+    """
     player = game.players.get(seat_id)
     if not player:
         return 0
@@ -161,14 +165,29 @@ def _calculate_survival_days(game: Game, seat_id: int) -> int:
     if player.is_alive:
         return game.day
 
-    # Find death day
-    for day in range(1, game.day + 1):
-        # Check if player died this day (in pending_deaths or actions)
-        # For simplicity, if dead, assume died on last day
-        pass
+    # Lethal action types that indicate a player was killed
+    lethal_actions = {ActionType.KILL, ActionType.POISON, ActionType.SHOOT, ActionType.SELF_DESTRUCT}
 
-    # Default: survived until current day or died on last day
-    return game.day if player.is_alive else max(1, game.day - 1)
+    # Find the earliest lethal action targeting this player
+    death_day = None
+    for action in game.actions:
+        if action.target_id == seat_id and action.action_type in lethal_actions:
+            if death_day is None or action.day < death_day:
+                death_day = action.day
+
+    # Also check vote eliminations: if player was the most-voted target
+    # Vote eliminations are not directly recorded as a single action,
+    # so fall back to system messages announcing death
+    if death_day is None:
+        for msg in game.messages:
+            if (msg.msg_type == MessageType.SYSTEM
+                    and msg.seat_id == seat_id
+                    and msg.day is not None):
+                # System messages about a specific player likely indicate their death
+                death_day = msg.day
+                break
+
+    return death_day if death_day is not None else max(1, game.day - 1)
 
 
 def _get_analysis_prompt_by_mode(game_data: Dict[str, Any], language: str, mode: str) -> str:

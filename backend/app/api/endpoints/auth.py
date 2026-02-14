@@ -344,6 +344,11 @@ async def oauth_callback(
 async def reset_password(body: PasswordResetRequest):
     """
     Request password reset (always returns 202 to prevent email enumeration).
+
+    TODO: Implement actual password reset flow:
+    1. Generate PasswordResetToken (model already defined in app.models.user)
+    2. Send reset link via email
+    3. Add /reset-password/confirm endpoint to verify token and set new password
     """
     # Always return success to prevent email enumeration
     # In production, send email with reset link here

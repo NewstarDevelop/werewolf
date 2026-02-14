@@ -253,5 +253,29 @@ class GameEngine:
         return {"success": False, "message": t("api_responses.invalid_phase_action", language=game.language)}
 
 
-# Global engine instance
-game_engine = GameEngine()
+# Global engine instance — lazy initialization to avoid import-time side effects
+# (LLMService creates httpx clients in __init__)
+_game_engine: Optional[GameEngine] = None
+
+
+def get_game_engine() -> GameEngine:
+    """Get or create the global GameEngine instance (lazy singleton)."""
+    global _game_engine
+    if _game_engine is None:
+        _game_engine = GameEngine()
+    return _game_engine
+
+
+# Backward-compatible module-level alias.
+# This is a proxy object that defers to the lazy singleton.
+class _GameEngineProxy:
+    """Proxy that forwards attribute access to the lazily-created GameEngine."""
+
+    def __getattr__(self, name):
+        return getattr(get_game_engine(), name)
+
+    def __bool__(self):
+        return True
+
+
+game_engine = _GameEngineProxy()

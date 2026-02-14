@@ -47,6 +47,8 @@ def create_admin_token() -> str:
     payload = {
         "player_id": "admin",
         "is_admin": True,
+        "jti": str(uuid.uuid4()),
+        "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     }
 

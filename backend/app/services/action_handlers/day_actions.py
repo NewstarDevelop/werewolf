@@ -56,7 +56,7 @@ def handle_vote_action(
     """Handle day vote action."""
     if action_type == ActionType.VOTE:
         # Explicit abstain: target_id is None or 0
-        if not target_id:
+        if target_id is None or target_id == 0:
             game.day_votes[player.seat_id] = 0
             game.add_action(player.seat_id, ActionType.VOTE, 0)
             return ActionResult.ok(

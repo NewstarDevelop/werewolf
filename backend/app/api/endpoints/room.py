@@ -15,6 +15,7 @@ from app.models.room import RoomStatus
 from app.models.user import User
 from app.services.notification_emitter import emit_notification, emit_to_users
 from app.schemas.notification import NotificationCategory, NotificationPersistPolicy
+from app.i18n import t
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 logger = logging.getLogger(__name__)
@@ -41,11 +42,6 @@ class JoinRoomRequest(BaseModel):
     Server now generates UUID to ensure client cannot forge identities.
     """
     nickname: str = Field(..., min_length=1, max_length=20, description="玩家昵称")
-
-
-class ReadyRequest(BaseModel):
-    """准备请求"""
-    player_id: str
 
 
 class StartGameRequest(BaseModel):
@@ -195,14 +191,14 @@ async def create_room(
             room_id=room.id
         )
 
-        # 发送房间创建成功通知
+        # 发送房间创建成功通知 (i18n)
         try:
             await emit_notification(
                 db,
                 user_id=user_id,
                 category=NotificationCategory.ROOM,
-                title="房间创建成功",
-                body=f"房间「{room.name}」已创建，等待玩家加入",
+                title=t("notifications.room_created_title", language=request.language),
+                body=t("notifications.room_created_body", language=request.language, room_name=room.name),
                 data={"room_id": room.id, "room_name": room.name},
                 persist_policy=NotificationPersistPolicy.DURABLE,
                 idempotency_key=f"room_created:{room.id}",
@@ -381,6 +377,14 @@ async def join_room(
         # 提取 user_id（如果用户已登录）
         user_id = auth_user.get("user_id") if auth_user else None
 
+        # SEC-FIX: 已登录用户强制使用注册昵称，防止冒充他人
+        nickname = request.nickname
+        if user_id:
+            user_result = await db.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                nickname = user.nickname
+
         # 获取房间信息（用于通知房主）
         room = await room_manager.get_room(db, room_id)
         if not room:
@@ -390,7 +394,7 @@ async def join_room(
             db,
             room_id,
             player_id,
-            request.nickname,
+            nickname,
             user_id=user_id
         )
 
@@ -407,12 +411,12 @@ async def join_room(
                     db,
                     user_id=room.creator_user_id,
                     category=NotificationCategory.ROOM,
-                    title="新玩家加入",
-                    body=f"玩家「{request.nickname}」加入了房间「{room.name}」",
+                    title=t("notifications.player_joined_title", language=room.language),
+                    body=t("notifications.player_joined_body", language=room.language, nickname=nickname, room_name=room.name),
                     data={
                         "room_id": room_id,
                         "room_name": room.name,
-                        "player_nickname": request.nickname,
+                        "player_nickname": nickname,
                     },
                     persist_policy=NotificationPersistPolicy.DURABLE,
                     idempotency_key=f"player_joined:{room_id}:{player_id}",
@@ -599,8 +603,8 @@ async def start_game(
                     db,
                     user_ids=player_user_ids,
                     category=NotificationCategory.GAME,
-                    title="游戏开始",
-                    body=f"房间「{room.name}」的游戏已开始",
+                    title=t("notifications.game_started_title", language=room.language),
+                    body=t("notifications.game_started_body", language=room.language, room_name=room.name),
                     data={"room_id": room_id, "game_id": game_id, "room_name": room.name},
                     persist_policy=NotificationPersistPolicy.DURABLE,
                     idempotency_key_prefix=f"game_started:{game_id}",
@@ -638,6 +642,8 @@ async def delete_room(
 
     Requires: JWT authentication + room owner
     """
+    from app.models.game import game_store
+
     try:
         # 验证玩家在该房间中且为房主
         player_id = current_player["player_id"]
@@ -649,6 +655,13 @@ async def delete_room(
         if not room:
             raise HTTPException(status_code=404, detail="房间不存在")
 
+        # SEC-FIX: 禁止删除 PLAYING 状态的房间，防止孤立内存中的 game 对象
+        if room.status == RoomStatus.PLAYING:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete room while game is in progress"
+            )
+
         # 验证是否为房主（通过creator_id）
         players = await room_manager.get_room_players(db, room_id)
         creator = next((p for p in players if p.is_creator), None)
@@ -657,6 +670,9 @@ async def delete_room(
 
         success = await room_manager.delete_room(db, room_id)
         if success:
+            # BUG-FIX: 同时清理内存中的 game 对象，防止 TTL 内内存泄漏
+            if game_store.get_game(room_id):
+                game_store.delete_game(room_id)
             return {"success": True, "message": "房间已删除"}
         raise HTTPException(status_code=404, detail="房间不存在")
     except HTTPException:

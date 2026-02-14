@@ -1,12 +1,38 @@
 """FastAPI dependency injection functions for authentication."""
+import time
 from fastapi import Header, HTTPException, Depends, Cookie
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 
 from app.core.auth import verify_player_token
 from app.core.database_async import get_async_db
+
+
+# PERF-FIX: Short TTL cache for user validation to reduce DB queries.
+# Maps user_id -> (is_active, cached_at). Entries expire after _USER_CACHE_TTL seconds.
+_USER_CACHE_TTL = 30  # seconds
+_user_cache: Dict[str, Tuple[bool, float]] = {}
+_USER_CACHE_MAX_SIZE = 1000
+
+
+def _check_user_cache(user_id: str) -> Optional[bool]:
+    """Return cached is_active status if fresh, else None."""
+    entry = _user_cache.get(user_id)
+    if entry and (time.time() - entry[1]) < _USER_CACHE_TTL:
+        return entry[0]
+    return None
+
+
+def _set_user_cache(user_id: str, is_active: bool) -> None:
+    """Cache user active status. Evict oldest entries if over capacity."""
+    if len(_user_cache) >= _USER_CACHE_MAX_SIZE:
+        # Evict ~10% oldest entries
+        sorted_keys = sorted(_user_cache, key=lambda k: _user_cache[k][1])
+        for k in sorted_keys[:_USER_CACHE_MAX_SIZE // 10]:
+            _user_cache.pop(k, None)
+    _user_cache[user_id] = (is_active, time.time())
 
 
 def _extract_bearer_token(authorization: str) -> Optional[str]:
@@ -176,7 +202,17 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # Real-time user validation
+    # PERF-FIX: Check cache before hitting DB
+    cached_active = _check_user_cache(user_id)
+    if cached_active is not None:
+        if not cached_active:
+            raise HTTPException(
+                status_code=403,
+                detail="User account is disabled. Please contact support."
+            )
+        return payload
+
+    # Real-time user validation (cache miss)
     from app.models.user import User
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -187,6 +223,8 @@ async def get_current_user(
             detail="User not found. Token may be invalid.",
             headers={"WWW-Authenticate": "Bearer"}
         )
+
+    _set_user_cache(user_id, user.is_active)
 
     if not user.is_active:
         raise HTTPException(
@@ -241,14 +279,22 @@ async def get_optional_user(
     if not user_id:
         return None
 
-    # Validate user exists and is active
+    # PERF-FIX: Check cache before hitting DB
+    cached_active = _check_user_cache(user_id)
+    if cached_active is not None:
+        return payload if cached_active else None
+
+    # Validate user exists and is active (cache miss)
     from app.models.user import User
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
+        if user:
+            _set_user_cache(user_id, False)
         return None
 
+    _set_user_cache(user_id, True)
     return payload
 
 

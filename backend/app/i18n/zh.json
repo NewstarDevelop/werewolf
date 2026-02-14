@@ -181,5 +181,13 @@
   "winners": {
     "villagers": "好人阵营",
     "werewolves": "狼人阵营"
+  },
+  "notifications": {
+    "room_created_title": "房间创建成功",
+    "room_created_body": "房间「{room_name}」已创建，等待玩家加入",
+    "player_joined_title": "新玩家加入",
+    "player_joined_body": "玩家「{nickname}」加入了房间「{room_name}」",
+    "game_started_title": "游戏开始",
+    "game_started_body": "房间「{room_name}」的游戏已开始"
   }
 }

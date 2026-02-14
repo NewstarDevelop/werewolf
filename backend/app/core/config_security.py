@@ -43,7 +43,7 @@ class SecurityConfig(BaseSettings):
     # JWT settings
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 1 week
+    JWT_EXPIRE_MINUTES: int = 60 * 2  # 2 hours (shortened from 7 days for security)
 
     # Frontend URL for CORS and WebSocket
     FRONTEND_URL: Optional[str] = None

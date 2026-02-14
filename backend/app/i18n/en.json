@@ -181,5 +181,13 @@
   "winners": {
     "villagers": "Village Team",
     "werewolves": "Werewolf Team"
+  },
+  "notifications": {
+    "room_created_title": "Room Created",
+    "room_created_body": "Room \"{room_name}\" has been created, waiting for players",
+    "player_joined_title": "New Player Joined",
+    "player_joined_body": "Player \"{nickname}\" joined room \"{room_name}\"",
+    "game_started_title": "Game Started",
+    "game_started_body": "The game in room \"{room_name}\" has started"
   }
 }

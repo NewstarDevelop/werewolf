@@ -1,4 +1,5 @@
 """WebSocket connection manager for real-time game updates."""
+import asyncio
 import logging
 from typing import Dict, Tuple, Set, Optional, Callable
 from fastapi import WebSocket
@@ -115,12 +116,17 @@ class ConnectionManager:
             logger.debug(f"No active connections for game {game_id}")
             return
 
-        for player_id in list(self._game_players[game_id]):
+        # PERF-FIX: Build states and send in parallel using asyncio.gather
+        async def _send_to_one(pid: str):
             try:
-                player_state = state_builder(player_id)
-                await self.send_to_player(game_id, player_id, message_type, player_state)
+                player_state = state_builder(pid)
+                await self.send_to_player(game_id, pid, message_type, player_state)
             except Exception as e:
-                logger.error(f"Failed to build/send state for player {player_id}: {e}")
+                logger.error(f"Failed to build/send state for player {pid}: {e}")
+
+        tasks = [_send_to_one(pid) for pid in list(self._game_players[game_id])]
+        if tasks:
+            await asyncio.gather(*tasks)
 
     async def broadcast_to_game(self, game_id: str, event_type: str, data: dict):
         """
@@ -130,8 +136,13 @@ class ConnectionManager:
         if game_id not in self._game_players:
             return
 
-        for player_id in list(self._game_players[game_id]):
-            await self.send_to_player(game_id, player_id, event_type, data)
+        # PERF-FIX: Send in parallel
+        tasks = [
+            self.send_to_player(game_id, pid, event_type, data)
+            for pid in list(self._game_players[game_id])
+        ]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def get_connection_count(self, game_id: str) -> int:
         """Get the number of active connections for a game."""
