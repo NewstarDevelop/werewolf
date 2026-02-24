@@ -2,7 +2,6 @@
  * Admin API service for admin panel operations
  */
 
-import { getAuthHeader } from '@/utils/token';
 import type {
   BroadcastBatchRequest,
   BroadcastBatchResponse,
@@ -32,7 +31,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '';
  * All tokens use Authorization header with Bearer scheme.
  */
 function buildHeaders(adminToken?: string): HeadersInit {
-  const headers: HeadersInit = { ...getAuthHeader() };
+  const headers: HeadersInit = {};
 
   if (adminToken) {
     headers['Authorization'] = `Bearer ${adminToken}`;

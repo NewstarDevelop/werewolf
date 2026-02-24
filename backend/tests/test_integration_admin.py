@@ -1,6 +1,7 @@
 """Integration tests for admin endpoints."""
 import pytest
 from app.core.config import settings
+from app.core.auth import create_player_token, create_admin_token
 
 ADMIN_PW = "test-admin-password"
 
@@ -106,3 +107,41 @@ class TestAdminAccess:
         resp = client.get("/api/auth/admin-verify")
         assert resp.status_code == 200
         assert resp.json()["valid"] is False
+
+    def test_admin_verify_falls_back_to_admin_cookie_when_header_is_room_token(self, client):
+        """Room/game token in header should not block valid admin cookie verification."""
+        room_token = create_player_token("player-1", room_id="room-1")
+        admin_cookie_token = create_admin_token()
+
+        resp = client.get(
+            "/api/auth/admin-verify",
+            headers=_auth_header(room_token),
+            cookies={"user_access_token": admin_cookie_token},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["valid"] is True
+        assert resp.json()["is_admin"] is True
+
+    def test_admin_endpoint_falls_back_to_admin_cookie_when_header_is_room_token(self, client):
+        """Admin endpoints should honor admin cookie when header carries room token."""
+        room_token = create_player_token("player-1", room_id="room-1")
+        admin_cookie_token = create_admin_token()
+
+        resp = client.get(
+            "/api/admin/users",
+            headers=_auth_header(room_token),
+            cookies={"user_access_token": admin_cookie_token},
+        )
+        assert resp.status_code == 200
+
+    def test_admin_endpoint_falls_back_to_admin_cookie_when_header_is_malformed(self, client):
+        """Malformed Authorization header should not block valid admin cookie fallback."""
+        admin_cookie_token = create_admin_token()
+
+        resp = client.get(
+            "/api/admin/users",
+            headers={"Authorization": "Token malformed-value"},
+            cookies={"user_access_token": admin_cookie_token},
+        )
+        assert resp.status_code == 200

@@ -3,7 +3,6 @@
  */
 
 import { EnvVariable, EnvUpdateRequest, EnvUpdateResult } from '@/types/config';
-import { getAuthHeader } from '@/utils/token';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
@@ -12,7 +11,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '';
  * All tokens use Authorization header with Bearer scheme.
  */
 function buildHeaders(adminToken?: string): HeadersInit {
-  const headers: HeadersInit = { ...getAuthHeader() };
+  const headers: HeadersInit = {};
 
   if (adminToken) {
     headers['Authorization'] = `Bearer ${adminToken}`;

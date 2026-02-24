@@ -300,6 +300,7 @@ async def get_optional_user(
 
 async def verify_admin(
     authorization: Optional[str] = Header(None),
+    user_access_token: Optional[str] = Cookie(None),
 ) -> Dict:
     """
     Dependency to verify admin privileges (JWT admin token).
@@ -308,6 +309,7 @@ async def verify_admin(
 
     Args:
         authorization: Authorization header (format: "Bearer <token>")
+        user_access_token: HttpOnly cookie containing JWT token
 
     Returns:
         Dict containing admin info
@@ -316,15 +318,36 @@ async def verify_admin(
         HTTPException: 403 if token is missing/invalid or not admin
     """
     detail = "Admin access required. Provide JWT admin token."
-    if not authorization:
+    header_payload: Optional[Dict] = None
+    cookie_payload: Optional[Dict] = None
+
+    # Parse header token (strict Bearer format)
+    if authorization:
+        header_token = _extract_bearer_token(authorization)
+        if header_token:
+            header_payload = _verify_token_safe(header_token)
+
+    # Parse cookie token
+    if user_access_token:
+        cookie_payload = _verify_token_safe(user_access_token)
+
+    header_is_admin = bool(header_payload and header_payload.get("is_admin", False))
+    cookie_is_admin = bool(cookie_payload and cookie_payload.get("is_admin", False))
+
+    # 1) Header has explicit admin token -> pass
+    if header_is_admin:
+        return header_payload
+
+    # 2) Header has explicit user identity but non-admin -> deny (no fallback)
+    header_user_id = header_payload.get("user_id") if header_payload else None
+    if header_user_id:
+        cookie_user_id = cookie_payload.get("user_id") if cookie_payload else None
+        if cookie_user_id and cookie_user_id != header_user_id:
+            raise HTTPException(status_code=403, detail=detail)
         raise HTTPException(status_code=403, detail=detail)
 
-    try:
-        player = await get_current_player(authorization, user_access_token=None)
-    except HTTPException:
-        raise HTTPException(status_code=403, detail=detail)
+    # 3) Header missing/invalid/room-token -> fallback to cookie admin session
+    if cookie_is_admin:
+        return cookie_payload
 
-    if not player.get("is_admin", False):
-        raise HTTPException(status_code=403, detail=detail)
-
-    return player
+    raise HTTPException(status_code=403, detail=detail)
