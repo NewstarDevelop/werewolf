@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.db
+*.sqlite
+node_modules/
+dist/
+.env
+.venv/
+*.egg-info/
+
+# AI / dev tooling
+.claude/
+.spec-workflow/
+CLAUDE.md
+article.md
+docs/
+harness/
