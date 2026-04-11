@@ -7,7 +7,11 @@ from app.domain.enums import Role
 from app.domain.game_context import GameContext
 from app.main import app
 from app.services.setup_game import setup_game
-from app.ws.routes import attach_context_bridge, run_game_session
+from app.ws.routes import (
+    WebSocketGameEngine,
+    attach_context_bridge,
+    run_game_session,
+)
 
 
 def test_websocket_sends_welcome_message() -> None:
@@ -129,6 +133,41 @@ def test_run_game_session_emits_game_over_payload() -> None:
                     seat_id: player.role.value
                     for seat_id, player in sorted(setup_result.context.players.items())
                 },
+            },
+            "meta": {},
+        },
+    ]
+
+
+def test_websocket_game_engine_emits_ai_thinking_payload() -> None:
+    sent_payloads: list[dict[str, object]] = []
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def run() -> None:
+        engine = WebSocketGameEngine(send_json=send_json)
+        await engine._notify_thinking(4, True)
+        await engine._notify_thinking(4, False)
+
+    asyncio.run(run())
+
+    assert sent_payloads == [
+        {
+            "type": "AI_THINKING",
+            "data": {
+                "seat_id": 4,
+                "is_thinking": True,
+                "message": None,
+            },
+            "meta": {},
+        },
+        {
+            "type": "AI_THINKING",
+            "data": {
+                "seat_id": 4,
+                "is_thinking": False,
+                "message": None,
             },
             "meta": {},
         },

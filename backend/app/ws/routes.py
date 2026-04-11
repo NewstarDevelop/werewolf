@@ -9,6 +9,8 @@ from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
 from app.protocols.c2s import ClientEnvelope
 from app.protocols.s2c import (
+    AIThinkingEnvelope,
+    AIThinkingPayload,
     ChatUpdateEnvelope,
     ChatUpdatePayload,
     GameOverEnvelope,
@@ -54,6 +56,13 @@ def build_public_message(message: str) -> dict[str, object]:
     ).model_dump()
 
 
+def build_ai_thinking_message(seat_id: int, is_thinking: bool) -> dict[str, object]:
+    return AIThinkingEnvelope(
+        type="AI_THINKING",
+        data=AIThinkingPayload(seat_id=seat_id, is_thinking=is_thinking),
+    ).model_dump()
+
+
 def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     winner = check_win(context)
     if winner is None:
@@ -83,6 +92,15 @@ def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
     )
 
 
+class WebSocketGameEngine(GameEngine):
+    def __init__(self, *, send_json: SendJson) -> None:
+        super().__init__()
+        self._send_json = send_json
+
+    async def _notify_thinking(self, seat_id: int, is_thinking: bool) -> None:
+        await self._send_json(build_ai_thinking_message(seat_id, is_thinking))
+
+
 async def run_game_session(
     setup_result: GameSetupResult,
     send_json: SendJson,
@@ -90,7 +108,7 @@ async def run_game_session(
     engine: GameEngine | None = None,
     max_rounds: int = 20,
 ) -> None:
-    active_engine = engine or GameEngine()
+    active_engine = engine or WebSocketGameEngine(send_json=send_json)
     final_context = await active_engine.run_loop(
         context=setup_result.context,
         max_rounds=max_rounds,
