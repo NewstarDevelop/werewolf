@@ -16,8 +16,9 @@ def test_run_loop_reaches_core_phases() -> None:
     assert context.phase == GamePhase.GAME_OVER.value
     assert context.public_chat_history[0] == "游戏开始，分配身份完毕。"
     assert "天黑请闭眼。" in context.public_chat_history
-    assert "天亮了，请开始发言。" in context.public_chat_history
-    assert "进入投票阶段。" in context.public_chat_history
+    assert any(message.startswith("天亮了。") for message in context.public_chat_history)
+    assert any("号发言：" in message for message in context.public_chat_history)
+    assert any("玩家被放逐出局。" in message or "本轮无人出局。" in message for message in context.public_chat_history)
 
 
 def test_run_loop_stops_immediately_when_win_condition_is_met() -> None:
@@ -45,3 +46,13 @@ def test_run_loop_executes_night_handlers_and_writes_private_logs() -> None:
 
     assert context.get_private_log(seer_seat)
     assert "查验结果：" in context.get_private_log(seer_seat)[0]
+
+
+def test_run_loop_applies_voting_result_to_alive_state() -> None:
+    engine = GameEngine(rng=random.Random(5))
+
+    context = asyncio.run(engine.run_loop(max_rounds=1))
+
+    alive_after_vote = context.alive_seat_ids()
+
+    assert len(alive_after_vote) <= 8

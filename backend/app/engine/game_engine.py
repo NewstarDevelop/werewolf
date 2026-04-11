@@ -2,7 +2,10 @@ import random
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
+from app.engine.day.day_speaking import run_day_speaking
 from app.engine.check_win import check_win
+from app.engine.day.dead_last_words import announce_deaths_and_last_words
+from app.engine.day.voting import resolve_voting
 from app.engine.init import initialize_game
 from app.engine.night.seer_action import resolve_seer_action
 from app.engine.night.witch_action import WitchResources, resolve_witch_action
@@ -35,6 +38,25 @@ class GameEngine:
         if not valid_targets:
             raise ValueError("no valid wolf target available")
         return valid_targets[0]
+
+    async def _human_speaker(self, seat_id: int) -> str:
+        return f"{seat_id}号选择过麦。"
+
+    async def _ai_speaker(self, seat_id: int) -> str:
+        return f"{seat_id}号正在陈述自己的判断。"
+
+    async def _notify_thinking(self, _: int, __: bool) -> None:
+        return None
+
+    def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+        alive_seats = context.alive_seat_ids()
+        votes: dict[int, int | None] = {}
+
+        for seat_id in alive_seats:
+            candidates = [candidate for candidate in alive_seats if candidate != seat_id]
+            votes[seat_id] = candidates[0] if candidates else None
+
+        return votes
 
     async def run_loop(
         self,
@@ -103,10 +125,28 @@ class GameEngine:
                 game_context.players[seat_id].mark_dead()
 
             game_context.phase = GamePhase.DAY_START.value
-            game_context.add_public_message("天亮了，请开始发言。")
+            announcement = announce_deaths_and_last_words(game_context)
+            if announcement.eligible_last_words:
+                game_context.phase = GamePhase.DEAD_LAST_WORDS.value
+
+            game_context.phase = GamePhase.DAY_SPEAKING.value
+            alive_seats = game_context.alive_seat_ids()
+            if alive_seats:
+                await run_day_speaking(
+                    game_context,
+                    start_seat=alive_seats[0],
+                    human_speaker=self._human_speaker,
+                    ai_speaker=self._ai_speaker,
+                    notify_thinking=self._notify_thinking,
+                )
 
             game_context.phase = GamePhase.VOTING.value
-            game_context.add_public_message("进入投票阶段。")
+            voting_result = resolve_voting(
+                game_context,
+                votes_by_voter=self._build_votes(game_context),
+            )
+            game_context.phase = GamePhase.VOTE_RESULT.value
+            game_context.add_public_message(voting_result.summary)
 
             winner = check_win(game_context)
             if winner is not None:
