@@ -2,7 +2,13 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.protocols.c2s import ClientEnvelope
-from app.protocols.s2c import SystemMessageEnvelope, SystemMessagePayload
+from app.protocols.s2c import (
+    ChatUpdateEnvelope,
+    ChatUpdatePayload,
+    SystemMessageEnvelope,
+    SystemMessagePayload,
+)
+from app.services.setup_game import setup_game
 from app.ws.manager import ConnectionManager
 
 router = APIRouter()
@@ -16,10 +22,31 @@ def build_system_message(message: str) -> dict[str, object]:
     ).model_dump()
 
 
+def build_private_message(message: str, seat_id: int) -> dict[str, object]:
+    return ChatUpdateEnvelope(
+        type="CHAT_UPDATE",
+        data=ChatUpdatePayload(
+            message=message,
+            seat_id=seat_id,
+            speaker="系统",
+            visibility="private",
+        ),
+    ).model_dump()
+
+
 @router.websocket("/ws/game")
 async def game_socket(websocket: WebSocket) -> None:
+    setup_result = setup_game()
+
     await manager.connect(websocket)
     await manager.send_json(websocket, build_system_message("connected"))
+    await manager.send_json(
+        websocket,
+        build_private_message(
+            setup_result.human_view["private_log"][-1],
+            setup_result.human_seat_id,
+        ),
+    )
 
     try:
         while True:
