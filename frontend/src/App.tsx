@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
 import { createGameSocketUrl, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
+import type { RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
 const statusText: Record<ConnectionPhase, string> = {
   idle: "尚未连接",
@@ -88,10 +90,13 @@ export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
+  const [pendingAction, setPendingAction] = useState<RequireInputEnvelope["data"] | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const latestMessage = entries.length > 0 ? entries[entries.length - 1].message : "等待服务端推送";
 
   useEffect(() => {
     const socket = new WebSocket(createGameSocketUrl(window.location));
+    socketRef.current = socket;
 
     setPhase("connecting");
 
@@ -113,6 +118,9 @@ export function App() {
           applyThinkingState(current, payload.data.seat_id, payload.data.is_thinking),
         );
       }
+      if (payload.type === "REQUIRE_INPUT") {
+        setPendingAction(payload.data);
+      }
     });
 
     socket.addEventListener("error", () => {
@@ -121,12 +129,29 @@ export function App() {
 
     socket.addEventListener("close", () => {
       setPhase("closed");
+      setPendingAction(null);
     });
 
     return () => {
       socket.close();
+      socketRef.current = null;
     };
   }, []);
+
+  function handleSubmitAction(payload: SubmitActionPayload) {
+    const socket = socketRef.current;
+    if (!socket) {
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "SUBMIT_ACTION",
+        data: payload,
+      }),
+    );
+    setPendingAction(null);
+  }
 
   return (
     <main className="app-shell">
@@ -148,6 +173,7 @@ export function App() {
         </dl>
         <PlayerList players={players} />
         <ChatHistory entries={entries} />
+        <ActionPanel request={pendingAction} onSubmit={handleSubmitAction} />
       </section>
     </main>
   );

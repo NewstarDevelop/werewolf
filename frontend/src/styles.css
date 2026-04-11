@@ -259,6 +259,94 @@ h1 {
   font-size: 0.78rem;
 }
 
+.chat-anchor {
+  height: 1px;
+}
+
+.action-panel {
+  margin-top: 28px;
+  padding: 24px;
+  border-radius: 22px;
+  background:
+    linear-gradient(160deg, rgba(36, 18, 11, 0.88), rgba(18, 10, 8, 0.88)),
+    rgba(13, 8, 7, 0.75);
+  border: 1px solid rgba(246, 197, 139, 0.16);
+}
+
+.action-idle {
+  margin-top: 22px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.action-idle p {
+  margin: 8px 0 0;
+  color: rgba(245, 241, 232, 0.72);
+}
+
+.action-shell {
+  margin-top: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.action-prompt {
+  margin: 0;
+  color: rgba(245, 241, 232, 0.88);
+}
+
+.speech-form {
+  display: grid;
+  gap: 10px;
+}
+
+.speech-form textarea {
+  resize: vertical;
+  min-height: 112px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+}
+
+.speech-form small {
+  color: rgba(245, 241, 232, 0.6);
+}
+
+.target-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.target-button,
+.action-submit {
+  border: 0;
+  border-radius: 16px;
+  padding: 12px 14px;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.target-button.is-selected {
+  background: rgba(246, 197, 139, 0.22);
+  color: #ffd9a8;
+}
+
+.action-submit {
+  background: linear-gradient(135deg, #d38c47, #8e4b26);
+}
+
+.action-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 @media (max-width: 720px) {
   .hero {
     padding: 28px 22px;
@@ -272,6 +360,10 @@ h1 {
 @media (max-width: 520px) {
   .player-grid {
     grid-template-columns: 1fr;
+  }
+
+  .target-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .panel-header {

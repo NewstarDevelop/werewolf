@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -8,6 +8,7 @@ class MockWebSocket {
   static instances: MockWebSocket[] = [];
 
   listeners = new Map<string, Array<(event?: MessageEvent) => void>>();
+  sentPayloads: string[] = [];
 
   constructor(public readonly url: string) {
     MockWebSocket.instances.push(this);
@@ -21,6 +22,10 @@ class MockWebSocket {
 
   close() {
     return undefined;
+  }
+
+  send(payload: string) {
+    this.sentPayloads.push(payload);
   }
 
   emit(type: string, data?: unknown) {
@@ -91,5 +96,33 @@ describe("App", () => {
       expect(within(logList).getByText("你的查验结果是：5号是狼人。")).toBeInTheDocument();
       expect(within(logList).getByText("私信")).toBeInTheDocument();
     });
+  });
+
+  it("unlocks action panel on require input and relocks after submit", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+    const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    socket?.emit("message", {
+      type: "REQUIRE_INPUT",
+      data: {
+        action_type: "VOTE",
+        prompt: "请选择投票目标",
+        allowed_targets: [2, 4, 7],
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByText("请选择投票目标")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "4号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+
+    expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"VOTE\"");
+    expect(socket?.sentPayloads[0]).toContain("\"target\":4");
+    expect(within(view.container).getByText("等待中")).toBeInTheDocument();
   });
 });
