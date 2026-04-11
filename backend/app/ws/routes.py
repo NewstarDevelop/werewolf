@@ -30,7 +30,7 @@ async def game_socket(websocket: WebSocket) -> None:
                 await manager.send_json(websocket, build_system_message("invalid payload"))
                 continue
 
-            action = envelope.data.action.upper()
+            action = envelope.data.action_type
             await manager.send_json(
                 websocket,
                 build_system_message(f"ack:{action}"),
