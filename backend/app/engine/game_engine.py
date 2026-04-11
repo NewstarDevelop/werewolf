@@ -83,6 +83,21 @@ class GameEngine:
     ) -> int:
         return allowed_targets[0]
 
+    async def _select_witch_action(
+        self,
+        context: GameContext,
+        *,
+        witch_seat: int,
+        resources: WitchResources,
+        save_candidates: list[int],
+        poison_candidates: list[int],
+    ) -> tuple[int | None, int | None]:
+        save_target = save_candidates[0] if save_candidates and resources.has_antidote else None
+        poison_target = poison_candidates[0] if poison_candidates and resources.has_poison else None
+        if save_target is not None:
+            poison_target = None
+        return save_target, poison_target
+
     def _handle_hunter_shot(
         self,
         context: GameContext,
@@ -218,16 +233,26 @@ class GameEngine:
                     for seat_id in game_context.killed_tonight
                     if seat_id != witch_seat
                 ]
+                poison_candidates = [
+                    seat_id
+                    for seat_id, player in sorted(game_context.players.items())
+                    if player.is_alive
+                    and seat_id != witch_seat
+                    and seat_id not in game_context.killed_tonight
+                ]
+                save_target, poison_target = await self._select_witch_action(
+                    game_context,
+                    witch_seat=witch_seat,
+                    resources=resources,
+                    save_candidates=save_candidates,
+                    poison_candidates=poison_candidates,
+                )
                 resolve_witch_action(
                     game_context,
                     witch_seat=witch_seat,
                     resources=resources,
-                    save_target=save_candidates[0] if save_candidates and resources.has_antidote else None,
-                    poison_target=(
-                        self._choose_witch_poison_target(game_context, witch_seat, resources)
-                        if resources.has_poison
-                        else None
-                    ),
+                    save_target=save_target,
+                    poison_target=poison_target,
                 )
 
             game_context.phase = GamePhase.NIGHT_END.value

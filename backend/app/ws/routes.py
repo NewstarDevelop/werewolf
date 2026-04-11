@@ -252,6 +252,55 @@ class WebSocketGameEngine(GameEngine):
             allowed_targets=allowed_targets,
         )
 
+    async def _select_witch_action(
+        self,
+        context: GameContext,
+        *,
+        witch_seat: int,
+        resources,
+        save_candidates: list[int],
+        poison_candidates: list[int],
+    ) -> tuple[int | None, int | None]:
+        player = context.players[witch_seat]
+        if not isinstance(player, HumanPlayer):
+            return await super()._select_witch_action(
+                context,
+                witch_seat=witch_seat,
+                resources=resources,
+                save_candidates=save_candidates,
+                poison_candidates=poison_candidates,
+            )
+
+        prompt_parts: list[str] = []
+        if save_candidates and resources.has_antidote:
+            prompt_parts.append(f"\u6628\u591c {save_candidates[0]} \u53f7\u88ab\u51fb\u6740\uff0c\u4f60\u53ef\u4ee5\u9009\u62e9\u6551\u4eba\u3002")
+        if resources.has_poison:
+            prompt_parts.append("\u4f60\u4e5f\u53ef\u4ee5\u9009\u62e9\u6bd2\u4eba\u6216\u8df3\u8fc7\u3002")
+        prompt = " ".join(prompt_parts) or "\u8bf7\u9009\u62e9\u672c\u56de\u5408\u662f\u5426\u7528\u836f\u3002"
+        payload = await self._await_human_input(
+            witch_seat,
+            action_type="WITCH_ACTION",
+            prompt=prompt,
+            allowed_targets=poison_candidates,
+        )
+
+        action_type = payload.get("action_type")
+        if action_type == "WITCH_SAVE" and save_candidates and resources.has_antidote:
+            return save_candidates[0], None
+        if action_type == "WITCH_POISON":
+            target = payload.get("target")
+            if isinstance(target, int) and target in set(poison_candidates):
+                return None, target
+        if action_type == "PASS":
+            return None, None
+        return await super()._select_witch_action(
+            context,
+            witch_seat=witch_seat,
+            resources=resources,
+            save_candidates=save_candidates,
+            poison_candidates=poison_candidates,
+        )
+
     async def run_loop(
         self,
         *,

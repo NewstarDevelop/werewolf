@@ -8,6 +8,7 @@ from app.domain.game_context import GameContext
 from app.domain.player import HumanPlayer
 from app.main import app
 from app.services.setup_game import setup_game
+from app.engine.night.witch_action import WitchResources
 from app.ws.routes import (
     WebSocketGameEngine,
     attach_context_bridge,
@@ -378,6 +379,53 @@ def test_websocket_game_engine_requests_and_consumes_human_seer_target() -> None
                 "action_type": "SEER_CHECK",
                 "prompt": "\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u67e5\u9a8c\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
                 "allowed_targets": [2, 3],
+            },
+            "meta": {},
+        },
+    ]
+
+
+def test_websocket_game_engine_requests_and_consumes_human_witch_action() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WITCH))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.WOLF))
+    context.add_player(HumanPlayer(seat_id=3, role=Role.VILLAGER))
+    context.add_player(HumanPlayer(seat_id=4, role=Role.SEER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            action_task = asyncio.create_task(
+                engine._select_witch_action(
+                    context,
+                    witch_seat=1,
+                    resources=engine._witch_resources.setdefault(1, WitchResources()),
+                    save_candidates=[3],
+                    poison_candidates=[2, 4],
+                )
+            )
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "WITCH_POISON", "target": 2})
+            result = await action_task
+            assert result == (None, 2)
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "WITCH_ACTION",
+                "prompt": "\u6628\u591c 3 \u53f7\u88ab\u51fb\u6740\uff0c\u4f60\u53ef\u4ee5\u9009\u62e9\u6551\u4eba\u3002 \u4f60\u4e5f\u53ef\u4ee5\u9009\u62e9\u6bd2\u4eba\u6216\u8df3\u8fc7\u3002",
+                "allowed_targets": [2, 4],
             },
             "meta": {},
         },
