@@ -34,12 +34,27 @@ def build_private_message(message: str, seat_id: int) -> dict[str, object]:
     ).model_dump()
 
 
+def build_public_message(message: str) -> dict[str, object]:
+    return ChatUpdateEnvelope(
+        type="CHAT_UPDATE",
+        data=ChatUpdatePayload(
+            message=message,
+            speaker="系统",
+            visibility="public",
+        ),
+    ).model_dump()
+
+
 @router.websocket("/ws/game")
 async def game_socket(websocket: WebSocket) -> None:
     setup_result = setup_game()
 
     await manager.connect(websocket)
     await manager.send_json(websocket, build_system_message("connected"))
+    await manager.send_json(
+        websocket,
+        build_public_message(setup_result.context.public_chat_history[0]),
+    )
     await manager.send_json(
         websocket,
         build_private_message(
