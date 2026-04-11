@@ -139,6 +139,32 @@ describe("App", () => {
     });
   });
 
+  it("renders game over summary and revealed roles", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "GAME_OVER",
+      data: {
+        winning_side: "GOOD",
+        summary: "狼人已全部出局，好人阵营获胜。",
+        revealed_roles: {
+          1: "WOLF",
+          2: "SEER",
+        },
+      },
+    });
+
+    await waitFor(() => {
+      const logList = within(view.container).getByLabelText("对局日志列表");
+      expect(within(logList).getByText("狼人已全部出局，好人阵营获胜。")).toBeInTheDocument();
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("狼人");
+      expect(within(view.container).getByLabelText("2号玩家")).toHaveTextContent("预言家");
+    });
+  });
+
   it("unlocks action panel on require input and relocks after submit", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);

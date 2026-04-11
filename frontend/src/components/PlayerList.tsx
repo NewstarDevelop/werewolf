@@ -37,7 +37,11 @@ export function PlayerList({ players }: PlayerListProps) {
             <div className="seat-chip">{player.seatId}</div>
             <div className="player-copy">
               <strong>{player.seatId}号玩家</strong>
-              <span>{player.isHuman ? `真人 · ${player.roleLabel ?? "身份待同步"}` : "AI 玩家"}</span>
+              <span>
+                {player.isHuman
+                  ? `真人 · ${player.roleLabel ?? "身份待同步"}`
+                  : player.roleLabel ?? "AI 玩家"}
+              </span>
             </div>
             <div className="player-tags" aria-label={`${player.seatId}号状态`}>
               <span>{player.isAlive ? "存活" : "墓碑"}</span>

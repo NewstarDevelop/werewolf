@@ -4,7 +4,7 @@ import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
 import { createGameSocketUrl, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
-import type { RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
+import type { GameOverEnvelope, RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
 const statusText: Record<ConnectionPhase, string> = {
   idle: "尚未连接",
@@ -71,6 +71,15 @@ function applyPublicChatMessage(players: PlayerListItem[], message: string) {
   return applySystemMessage(players, message);
 }
 
+function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
+  return players.map((player) => ({
+    ...player,
+    roleLabel: payload.revealed_roles[player.seatId]
+      ? (roleText[payload.revealed_roles[player.seatId]] ?? payload.revealed_roles[player.seatId])
+      : player.roleLabel,
+  }));
+}
+
 function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   if (payload.type === "SYSTEM_MSG") {
     return {
@@ -88,6 +97,15 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
       speaker: payload.data.visibility === "private"
         ? payload.data.speaker ?? "你的视角"
         : payload.data.speaker ?? (payload.data.seat_id ? `${payload.data.seat_id}号玩家` : "玩家发言"),
+    };
+  }
+
+  if (payload.type === "GAME_OVER") {
+    return {
+      id: `game-over-${crypto.randomUUID()}`,
+      kind: "system",
+      message: payload.data.summary,
+      speaker: "结算",
     };
   }
 
@@ -134,6 +152,10 @@ export function App() {
       }
       if (payload.type === "REQUIRE_INPUT") {
         setPendingAction(payload.data);
+      }
+      if (payload.type === "GAME_OVER") {
+        setPlayers((current) => applyGameOver(current, payload.data));
+        setPendingAction(null);
       }
     });
 
