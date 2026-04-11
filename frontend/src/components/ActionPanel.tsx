@@ -4,6 +4,7 @@ import type { RequireInputEnvelope, SubmitActionPayload } from "../types/ws";
 
 type PendingAction = RequireInputEnvelope["data"] | null;
 type WitchActionType = "WITCH_SAVE" | "WITCH_POISON" | "PASS";
+type TargetSelection = number | "PASS" | null;
 
 interface ActionPanelProps {
   request: PendingAction;
@@ -16,27 +17,37 @@ function isTargetedAction(actionType: RequireInputEnvelope["data"]["action_type"
 
 export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const [speechText, setSpeechText] = useState("");
-  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<TargetSelection>(null);
   const [selectedWitchAction, setSelectedWitchAction] = useState<WitchActionType | null>(null);
 
   const canSubmitSpeech = speechText.trim().length > 0;
-  const canSubmitTarget = selectedTarget !== null;
+  const canSubmitTarget = typeof selectedTarget === "number";
+  const canSubmitVote = selectedTarget === "PASS" || canSubmitTarget;
   const canSubmitWitchAction =
     selectedWitchAction === "WITCH_SAVE"
     || selectedWitchAction === "PASS"
     || (selectedWitchAction === "WITCH_POISON" && canSubmitTarget);
+
   const helperText = useMemo(() => {
     if (!request) {
       return "等待其他玩家行动...";
     }
     if (request.action_type === "SPEAK") {
-      return "轮到你发言，提交后将立即回锁。";
+      return "轮到你发言，提交后将立刻回锁。";
     }
     if (request.action_type === "WITCH_ACTION") {
       return "请选择救人、毒人或跳过本回合行动。";
     }
+    if (request.action_type === "VOTE") {
+      return "请选择放逐目标，或者直接弃票。";
+    }
     return "请选择一个合法目标并确认提交。";
   }, [request]);
+
+  function resetSelections() {
+    setSelectedTarget(null);
+    setSelectedWitchAction(null);
+  }
 
   function handleSubmit() {
     if (!request) {
@@ -63,24 +74,30 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
       } else if (selectedWitchAction === "WITCH_POISON" && canSubmitTarget) {
         onSubmit({
           action_type: "WITCH_POISON",
-          target: selectedTarget,
+          target: selectedTarget as number,
         });
       } else {
         return;
       }
-      setSelectedTarget(null);
-      setSelectedWitchAction(null);
+      resetSelections();
+      return;
+    }
+
+    if (request.action_type === "VOTE" && selectedTarget === "PASS") {
+      onSubmit({ action_type: "PASS" });
+      resetSelections();
       return;
     }
 
     if (!canSubmitTarget) {
       return;
     }
+
     onSubmit({
       action_type: request.action_type,
-      target: selectedTarget,
+      target: selectedTarget as number,
     });
-    setSelectedTarget(null);
+    resetSelections();
   }
 
   return (
@@ -133,7 +150,10 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
               <button
                 type="button"
                 className={selectedWitchAction === "WITCH_POISON" ? "target-button is-selected" : "target-button"}
-                onClick={() => setSelectedWitchAction("WITCH_POISON")}
+                onClick={() => {
+                  setSelectedWitchAction("WITCH_POISON");
+                  setSelectedTarget(null);
+                }}
               >
                 毒人
               </button>
@@ -165,6 +185,18 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
             </div>
           ) : null}
 
+          {request.action_type === "VOTE" ? (
+            <div className="target-grid" aria-label="投票操作列表">
+              <button
+                type="button"
+                className={selectedTarget === "PASS" ? "target-button is-selected" : "target-button"}
+                onClick={() => setSelectedTarget("PASS")}
+              >
+                弃票
+              </button>
+            </div>
+          ) : null}
+
           {isTargetedAction(request.action_type) ? (
             <div className="target-grid" aria-label="合法目标列表">
               {request.allowed_targets.map((target) => (
@@ -189,7 +221,9 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                 ? !canSubmitSpeech
                 : request.action_type === "WITCH_ACTION"
                   ? !canSubmitWitchAction
-                  : !canSubmitTarget
+                  : request.action_type === "VOTE"
+                    ? !canSubmitVote
+                    : !canSubmitTarget
             }
           >
             确认提交

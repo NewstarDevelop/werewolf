@@ -184,6 +184,8 @@ class WebSocketGameEngine(GameEngine):
             prompt="\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
             allowed_targets=allowed_targets,
         )
+        if payload.get("action_type") == "PASS":
+            return None
         target = payload.get("target")
         if isinstance(target, int) and target in set(allowed_targets):
             return target

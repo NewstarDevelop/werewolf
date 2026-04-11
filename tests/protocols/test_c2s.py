@@ -36,6 +36,17 @@ def test_targeted_action_rejects_missing_target() -> None:
         )
 
 
+def test_pass_action_can_omit_target() -> None:
+    payload = ClientEnvelope.model_validate(
+        {
+            "type": "SUBMIT_ACTION",
+            "data": {"action_type": "PASS"},
+        }
+    )
+
+    assert payload.data == SubmitActionPayload(action_type="PASS")
+
+
 def test_speak_action_rejects_empty_text() -> None:
     with pytest.raises(ValidationError):
         ClientEnvelope.model_validate(

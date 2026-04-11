@@ -264,3 +264,39 @@ def test_websocket_game_engine_requests_and_consumes_human_vote() -> None:
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_accepts_pass_for_human_vote() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            task = asyncio.create_task(engine._human_vote(1, allowed_targets=[2, 3, 4]))
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "PASS"})
+            result = await task
+            assert result is None
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "VOTE",
+                "prompt": "\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
+                "allowed_targets": [2, 3, 4],
+            },
+            "meta": {},
+        },
+    ]

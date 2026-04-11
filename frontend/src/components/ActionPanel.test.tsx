@@ -56,6 +56,25 @@ describe("ActionPanel", () => {
     });
   });
 
+  it("submits vote pass payload", () => {
+    const onSubmit = vi.fn();
+    const view = render(
+      <ActionPanel
+        request={{
+          action_type: "VOTE",
+          prompt: "请选择投票目标",
+          allowed_targets: [2, 4, 7],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "弃票" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ action_type: "PASS" });
+  });
+
   it("maps witch action to save, poison and pass payloads", () => {
     const onSubmit = vi.fn();
     const view = render(
