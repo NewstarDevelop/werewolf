@@ -55,4 +55,34 @@ describe("ActionPanel", () => {
       target: 4,
     });
   });
+
+  it("maps witch action to save, poison and pass payloads", () => {
+    const onSubmit = vi.fn();
+    const view = render(
+      <ActionPanel
+        request={{
+          action_type: "WITCH_ACTION",
+          prompt: "请选择女巫行动",
+          allowed_targets: [2, 5],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "救人" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ action_type: "WITCH_SAVE" });
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "毒人" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      action_type: "WITCH_POISON",
+      target: 5,
+    });
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "跳过" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ action_type: "PASS" });
+  });
 });

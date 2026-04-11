@@ -48,7 +48,6 @@ export interface SubmitActionPayload {
     | "VOTE"
     | "WOLF_KILL"
     | "SEER_CHECK"
-    | "WITCH_ACTION"
     | "WITCH_SAVE"
     | "WITCH_POISON"
     | "PASS";
