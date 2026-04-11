@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { PlayerList, type PlayerListItem } from "./components/PlayerList";
 import { createGameSocketUrl, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
 
 const statusText: Record<ConnectionPhase, string> = {
@@ -10,9 +11,59 @@ const statusText: Record<ConnectionPhase, string> = {
   error: "连接异常",
 };
 
+const roleText: Record<string, string> = {
+  VILLAGER: "平民",
+  WOLF: "狼人",
+  SEER: "预言家",
+  WITCH: "女巫",
+  HUNTER: "猎人",
+};
+
+function createInitialPlayers(): PlayerListItem[] {
+  return Array.from({ length: 9 }, (_, index) => ({
+    seatId: index + 1,
+    isAlive: true,
+    isHuman: index === 0,
+    roleLabel: index === 0 ? "身份待同步" : undefined,
+    isThinking: false,
+  }));
+}
+
+function applyThinkingState(players: PlayerListItem[], seatId: number, isThinking: boolean) {
+  return players.map((player) =>
+    player.seatId === seatId ? { ...player, isThinking } : player,
+  );
+}
+
+function applySystemMessage(players: PlayerListItem[], message: string) {
+  let nextPlayers = players;
+  const identityMatch = message.match(/你的座位号是\s*(\d+)\s*号，身份是\s*([A-Z_]+)\s*。?/);
+
+  if (identityMatch) {
+    const humanSeat = Number(identityMatch[1]);
+    const humanRole = roleText[identityMatch[2]] ?? identityMatch[2];
+    nextPlayers = nextPlayers.map((player) => ({
+      ...player,
+      isHuman: player.seatId === humanSeat,
+      roleLabel: player.seatId === humanSeat ? humanRole : undefined,
+    }));
+  }
+
+  const deathMatches = [...message.matchAll(/(\d+)号(?:玩家)?(?:被放逐出局|死亡)/g)];
+  if (deathMatches.length > 0) {
+    const deadSeats = new Set(deathMatches.map((match) => Number(match[1])));
+    nextPlayers = nextPlayers.map((player) =>
+      deadSeats.has(player.seatId) ? { ...player, isAlive: false, isThinking: false } : player,
+    );
+  }
+
+  return nextPlayers;
+}
+
 export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
   const [messages, setMessages] = useState<string[]>([]);
+  const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
   const latestMessage = messages.length > 0 ? messages[messages.length - 1] : "等待服务端推送";
 
   useEffect(() => {
@@ -28,6 +79,12 @@ export function App() {
       const payload = JSON.parse(event.data) as ServerEnvelope;
       if (payload.type === "SYSTEM_MSG") {
         setMessages((current) => [...current, payload.data.message]);
+        setPlayers((current) => applySystemMessage(current, payload.data.message));
+      }
+      if (payload.type === "AI_THINKING") {
+        setPlayers((current) =>
+          applyThinkingState(current, payload.data.seat_id, payload.data.is_thinking),
+        );
       }
     });
 
@@ -62,6 +119,7 @@ export function App() {
             <dd>{latestMessage}</dd>
           </div>
         </dl>
+        <PlayerList players={players} />
       </section>
     </main>
   );

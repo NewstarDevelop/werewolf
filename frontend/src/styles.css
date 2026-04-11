@@ -74,3 +74,151 @@ h1 {
   margin: 8px 0 0;
   font-size: 1.1rem;
 }
+
+.player-panel {
+  margin-top: 28px;
+  padding: 24px;
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    rgba(10, 7, 6, 0.65);
+  border: 1px solid rgba(223, 178, 122, 0.16);
+}
+
+.panel-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.panel-kicker {
+  margin: 4px 0 0;
+  writing-mode: vertical-rl;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: rgba(223, 178, 122, 0.8);
+  font-size: 0.78rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.panel-copy {
+  margin: 6px 0 0;
+  color: rgba(245, 241, 232, 0.7);
+}
+
+.player-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0;
+  margin: 22px 0 0;
+}
+
+.player-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.player-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(223, 178, 122, 0.28);
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.18);
+}
+
+.player-card.is-human {
+  border-color: rgba(223, 178, 122, 0.45);
+  background: linear-gradient(135deg, rgba(223, 178, 122, 0.18), rgba(255, 255, 255, 0.04));
+}
+
+.player-card.is-dead {
+  opacity: 0.62;
+  filter: saturate(0.6);
+}
+
+.player-card.is-thinking {
+  border-color: rgba(124, 200, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(124, 200, 255, 0.12), 0 18px 28px rgba(0, 0, 0, 0.18);
+}
+
+.seat-chip {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6c58b;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.player-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.player-copy strong {
+  font-size: 1rem;
+}
+
+.player-copy span {
+  color: rgba(245, 241, 232, 0.72);
+  font-size: 0.92rem;
+}
+
+.player-tags {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.player-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(245, 241, 232, 0.86);
+  font-size: 0.82rem;
+}
+
+.player-tags .thinking-pill {
+  background: rgba(124, 200, 255, 0.16);
+  color: #bfe7ff;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding: 28px 22px;
+  }
+
+  .player-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .player-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-header {
+    align-items: stretch;
+  }
+
+  .panel-kicker {
+    writing-mode: initial;
+  }
+}
