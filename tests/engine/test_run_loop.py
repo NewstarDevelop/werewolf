@@ -5,6 +5,7 @@ from app.domain.enums import Role
 from app.domain.game_context import GameContext
 from app.domain.player import HumanPlayer, Player
 from app.engine.game_engine import GameEngine
+from app.engine.night.witch_action import WitchResources
 from app.engine.states.phase import GamePhase
 
 
@@ -98,3 +99,33 @@ def test_run_loop_resolves_hunter_shot_after_banish() -> None:
     assert "1号玩家被放逐出局。" in final_context.public_chat_history
     assert "1号猎人开枪带走了2号玩家。" in final_context.public_chat_history
     assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
+
+
+def test_run_loop_blocks_hunter_shot_when_poisoned() -> None:
+    class PoisonHunterEngine(GameEngine):
+        def _choose_wolf_target(self, context: GameContext) -> int:
+            return 4
+
+        def _choose_witch_poison_target(
+            self,
+            context: GameContext,
+            witch_seat: int,
+        ) -> int | None:
+            return 1
+
+    context = GameContext()
+    context.add_player(Player(seat_id=1, role=Role.HUNTER))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.WOLF))
+    context.add_player(Player(seat_id=3, role=Role.WITCH))
+    context.add_player(Player(seat_id=4, role=Role.VILLAGER))
+
+    engine = PoisonHunterEngine()
+    engine._witch_resources[3] = WitchResources(has_antidote=False, has_poison=True)
+    final_context = asyncio.run(engine.run_loop(context=context, max_rounds=1))
+
+    assert final_context.phase == GamePhase.GAME_OVER.value
+    assert final_context.players[1].is_alive is False
+    assert final_context.players[2].is_alive is True
+    assert final_context.players[4].is_alive is False
+    assert "1号猎人被毒死，无法开枪。" in final_context.public_chat_history
+    assert final_context.public_chat_history[-1] == "平民已全部出局，狼人阵营获胜。"

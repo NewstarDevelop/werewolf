@@ -50,6 +50,13 @@ class GameEngine:
             return None
         return valid_targets[0]
 
+    def _choose_witch_poison_target(
+        self,
+        context: GameContext,
+        witch_seat: int,
+    ) -> int | None:
+        return None
+
     def _handle_hunter_shot(
         self,
         context: GameContext,
@@ -121,7 +128,7 @@ class GameEngine:
 
         for _ in range(max_rounds):
             game_context.phase = GamePhase.NIGHT_START.value
-            game_context.killed_tonight.clear()
+            game_context.clear_night_deaths()
             game_context.add_public_message("天黑请闭眼。")
 
             game_context.phase = GamePhase.WOLF_ACTION.value
@@ -159,13 +166,22 @@ class GameEngine:
                     witch_seat=witch_seat,
                     resources=resources,
                     save_target=save_candidates[0] if save_candidates and resources.has_antidote else None,
+                    poison_target=(
+                        self._choose_witch_poison_target(game_context, witch_seat)
+                        if resources.has_poison
+                        else None
+                    ),
                 )
 
             game_context.phase = GamePhase.NIGHT_END.value
             for seat_id in list(game_context.killed_tonight):
                 game_context.players[seat_id].mark_dead()
                 if game_context.players[seat_id].role is Role.HUNTER:
-                    if self._handle_hunter_shot(game_context, hunter_seat=seat_id):
+                    if self._handle_hunter_shot(
+                        game_context,
+                        hunter_seat=seat_id,
+                        poisoned="poison" in game_context.death_causes_for(seat_id),
+                    ):
                         return game_context
 
             game_context.phase = GamePhase.DAY_START.value
