@@ -54,8 +54,21 @@ class GameEngine:
         self,
         context: GameContext,
         witch_seat: int,
+        resources: WitchResources,
     ) -> int | None:
-        return None
+        if resources.has_antidote and context.killed_tonight:
+            return None
+
+        valid_targets = [
+            seat_id
+            for seat_id, player in sorted(context.players.items())
+            if player.is_alive
+            and seat_id != witch_seat
+            and seat_id not in context.killed_tonight
+        ]
+        if not valid_targets:
+            return None
+        return valid_targets[0]
 
     def _handle_hunter_shot(
         self,
@@ -167,7 +180,7 @@ class GameEngine:
                     resources=resources,
                     save_target=save_candidates[0] if save_candidates and resources.has_antidote else None,
                     poison_target=(
-                        self._choose_witch_poison_target(game_context, witch_seat)
+                        self._choose_witch_poison_target(game_context, witch_seat, resources)
                         if resources.has_poison
                         else None
                     ),

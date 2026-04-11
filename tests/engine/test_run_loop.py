@@ -113,6 +113,7 @@ def test_run_loop_blocks_hunter_shot_when_poisoned() -> None:
             self,
             context: GameContext,
             witch_seat: int,
+            resources: WitchResources,
         ) -> int | None:
             return 1
 
@@ -137,10 +138,39 @@ def test_run_loop_blocks_hunter_shot_when_poisoned() -> None:
     assert final_context.public_chat_history[-1] == "平民已全部出局，狼人阵营获胜。"
 
 
+def test_run_loop_uses_default_witch_poison_after_antidote_is_spent() -> None:
+    class DefaultPoisonEngine(GameEngine):
+        def _choose_wolf_target(self, context: GameContext) -> int:
+            return 4
+
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(Player(seat_id=2, role=Role.VILLAGER))
+    context.add_player(Player(seat_id=3, role=Role.WITCH))
+    context.add_player(Player(seat_id=4, role=Role.VILLAGER))
+
+    engine = DefaultPoisonEngine()
+    engine._witch_resources[3] = WitchResources(has_antidote=False, has_poison=True)
+    final_context = asyncio.run(engine.run_loop(context=context, max_rounds=1))
+
+    assert final_context.players[1].is_alive is False
+    assert final_context.players[4].is_alive is False
+    assert "天亮了。昨夜死亡的是 4号、1号。" in final_context.public_chat_history
+    assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
+
+
 def test_run_loop_increments_day_count_between_rounds() -> None:
     class MultiRoundEngine(GameEngine):
         def _choose_wolf_target(self, context: GameContext) -> int:
             return 4
+
+        def _choose_witch_poison_target(
+            self,
+            context: GameContext,
+            witch_seat: int,
+            resources: WitchResources,
+        ) -> int | None:
+            return None
 
         def _build_votes(self, context: GameContext) -> dict[int, int | None]:
             alive_seats = context.alive_seat_ids()
