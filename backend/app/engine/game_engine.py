@@ -50,6 +50,43 @@ class GameEngine:
         return valid_targets[0]
 
     async def _select_wolf_target(self, context: GameContext) -> int:
+        human_wolf = next(
+            (
+                player
+                for player in context.players.values()
+                if isinstance(player, HumanPlayer)
+                and player.is_alive
+                and player.role is Role.WOLF
+            ),
+            None,
+        )
+        if human_wolf is not None or self._llm_client is None:
+            return self._choose_wolf_target(context)
+
+        alpha_wolf = next(
+            (
+                player
+                for _, player in sorted(context.players.items())
+                if isinstance(player, AIPlayer)
+                and player.is_alive
+                and player.role is Role.WOLF
+            ),
+            None,
+        )
+        valid_targets = [
+            seat_id
+            for seat_id, player in sorted(context.players.items())
+            if player.is_alive and player.role is not Role.WOLF
+        ]
+        if alpha_wolf is None or not valid_targets:
+            return self._choose_wolf_target(context)
+
+        response = self._llm_client.request_targeted_action(
+            prompt=build_night_prompt(context, seat_id=alpha_wolf.seat_id),
+            allowed_targets=valid_targets,
+        )
+        if response.target in set(valid_targets):
+            return response.target
         return self._choose_wolf_target(context)
 
     def _choose_hunter_target(self, context: GameContext, hunter_seat: int) -> int | None:
@@ -281,9 +318,11 @@ class GameEngine:
             game_context.add_public_message("天黑请闭眼。")
 
             game_context.phase = GamePhase.WOLF_ACTION.value
+            wolf_target = await self._select_wolf_target(game_context)
             resolve_wolf_action(
                 game_context,
-                human_target=await self._select_wolf_target(game_context),
+                human_target=wolf_target,
+                ai_target=wolf_target,
             )
 
             seer_seat = self._first_alive_seat_by_role(game_context, Role.SEER)

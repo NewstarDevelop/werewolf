@@ -15,6 +15,7 @@ def resolve_wolf_action(
     context: GameContext,
     *,
     human_target: int | None = None,
+    ai_target: int | None = None,
 ) -> int:
     alive_wolves = [
         player
@@ -43,7 +44,12 @@ def resolve_wolf_action(
         target_seat = human_target
     else:
         alpha_wolf = alive_wolves[0]
-        target_seat = min(valid_targets)
+        if ai_target is not None:
+            if ai_target not in valid_targets:
+                raise ValueError("ai wolf target must be a living non-wolf player")
+            target_seat = ai_target
+        else:
+            target_seat = min(valid_targets)
         context.add_private_message(alpha_wolf.seat_id, f"Alpha 狼决定击杀 {target_seat} 号。")
 
     context.mark_killed_tonight(target_seat, cause="wolf")

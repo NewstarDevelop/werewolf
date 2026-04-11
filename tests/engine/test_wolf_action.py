@@ -42,6 +42,20 @@ def test_all_ai_wolves_use_alpha_choice() -> None:
     assert context.get_private_log(2) == ["Alpha 狼决定击杀 3 号。"]
 
 
+def test_all_ai_wolves_can_use_explicit_ai_target() -> None:
+    context = build_context(
+        AIPlayer(seat_id=2, role=Role.WOLF, personality="aggressive"),
+        AIPlayer(seat_id=5, role=Role.WOLF, personality="steady"),
+        Player(seat_id=3, role=Role.SEER),
+        Player(seat_id=4, role=Role.VILLAGER),
+    )
+
+    target = resolve_wolf_action(context, ai_target=4)
+
+    assert target == 4
+    assert context.killed_tonight == [4]
+
+
 def test_human_wolf_cannot_choose_invalid_target() -> None:
     context = build_context(
         HumanPlayer(seat_id=1, role=Role.WOLF),
