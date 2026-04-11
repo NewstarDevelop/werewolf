@@ -10,6 +10,7 @@ from app.domain.game_context import GameContext
 from app.domain.player import HumanPlayer
 from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
+from app.llm.local_provider import build_default_llm_client
 from app.protocols.c2s import ClientEnvelope
 from app.protocols.s2c import (
     AIThinkingEnvelope,
@@ -115,7 +116,7 @@ def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
 
 class WebSocketGameEngine(GameEngine):
     def __init__(self, *, send_json: SendJson) -> None:
-        super().__init__()
+        super().__init__(llm_client=build_default_llm_client())
         self._send_json = send_json
         self._active_context: GameContext | None = None
 

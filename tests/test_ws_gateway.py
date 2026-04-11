@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
-from app.domain.player import HumanPlayer
+from app.domain.player import AIPlayer, HumanPlayer
 from app.main import app
 from app.services.setup_game import setup_game
 from app.engine.night.witch_action import WitchResources
@@ -175,6 +175,23 @@ def test_websocket_game_engine_emits_ai_thinking_payload() -> None:
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_uses_default_llm_client_for_ai_speech() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(AIPlayer(seat_id=2, role=Role.SEER, personality="谨慎分析"))
+    context.add_player(HumanPlayer(seat_id=1, role=Role.VILLAGER))
+    context.add_player(HumanPlayer(seat_id=3, role=Role.WOLF))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+    speech = asyncio.run(engine._llm_speaker(context, 2))
+
+    assert speech
+    assert "听" in speech
 
 
 def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
