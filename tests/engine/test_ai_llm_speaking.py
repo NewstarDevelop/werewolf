@@ -47,5 +47,5 @@ def test_run_loop_uses_llm_client_for_ai_speech() -> None:
 
     final_context = asyncio.run(engine.run_loop(context=context, max_rounds=1))
 
-    assert len(provider.prompts) == 1
+    assert any("发言" in prompt.task_prompt for prompt in provider.prompts)
     assert any("2号先报个轻身份，后置位再听一轮。" in message for message in final_context.public_chat_history)

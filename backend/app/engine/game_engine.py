@@ -116,6 +116,21 @@ class GameEngine:
         save_candidates: list[int],
         poison_candidates: list[int],
     ) -> tuple[int | None, int | None]:
+        player = context.players[witch_seat]
+        if self._llm_client is not None and isinstance(player, AIPlayer):
+            response = self._llm_client.request_targeted_action(
+                prompt=build_night_prompt(context, seat_id=witch_seat),
+                allowed_targets=poison_candidates,
+            )
+            if response.use_antidote and save_candidates and resources.has_antidote:
+                return save_candidates[0], None
+            if (
+                response.use_poison
+                and resources.has_poison
+                and response.target in set(poison_candidates)
+            ):
+                return None, response.target
+
         save_target = save_candidates[0] if save_candidates and resources.has_antidote else None
         poison_target = (
             self._choose_witch_poison_target(context, witch_seat, resources)
