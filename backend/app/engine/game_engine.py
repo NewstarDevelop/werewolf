@@ -13,7 +13,7 @@ from app.engine.night.seer_action import resolve_seer_action
 from app.engine.night.witch_action import WitchResources, resolve_witch_action
 from app.engine.night.wolf_action import resolve_wolf_action
 from app.engine.states.phase import GamePhase
-from app.llm.builders import build_speech_prompt, build_vote_prompt
+from app.llm.builders import build_night_prompt, build_speech_prompt, build_vote_prompt
 from app.llm.fallback import FallbackLLMClient
 
 
@@ -97,6 +97,14 @@ class GameEngine:
         seer_seat: int,
         allowed_targets: list[int],
     ) -> int:
+        player = context.players[seer_seat]
+        if self._llm_client is not None and isinstance(player, AIPlayer):
+            response = self._llm_client.request_targeted_action(
+                prompt=build_night_prompt(context, seat_id=seer_seat),
+                allowed_targets=allowed_targets,
+            )
+            if response.target in set(allowed_targets):
+                return response.target
         return allowed_targets[0]
 
     async def _select_witch_action(
