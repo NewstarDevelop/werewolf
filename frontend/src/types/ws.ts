@@ -42,6 +42,25 @@ export interface GameOverEnvelope {
   };
 }
 
+export interface SubmitActionPayload {
+  action_type:
+    | "SPEAK"
+    | "VOTE"
+    | "WOLF_KILL"
+    | "SEER_CHECK"
+    | "WITCH_SAVE"
+    | "WITCH_POISON"
+    | "PASS";
+  target?: number;
+  text?: string;
+}
+
+export interface ClientEnvelope {
+  type: "SUBMIT_ACTION";
+  data: SubmitActionPayload;
+  meta?: Record<string, unknown>;
+}
+
 export type ServerEnvelope =
   | SystemMessageEnvelope
   | ChatUpdateEnvelope

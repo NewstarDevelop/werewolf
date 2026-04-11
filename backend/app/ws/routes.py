@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.protocols.c2s import ClientEnvelope
-from app.protocols.s2c import ServerEnvelope, SystemMessagePayload
+from app.protocols.s2c import SystemMessageEnvelope, SystemMessagePayload
 from app.ws.manager import ConnectionManager
 
 router = APIRouter()
@@ -10,7 +10,7 @@ manager = ConnectionManager()
 
 
 def build_system_message(message: str) -> dict[str, object]:
-    return ServerEnvelope(
+    return SystemMessageEnvelope(
         type="SYSTEM_MSG",
         data=SystemMessagePayload(message=message),
     ).model_dump()
@@ -30,7 +30,7 @@ async def game_socket(websocket: WebSocket) -> None:
                 await manager.send_json(websocket, build_system_message("invalid payload"))
                 continue
 
-            action = envelope.data.action.upper()
+            action = envelope.data.action_type
             await manager.send_json(
                 websocket,
                 build_system_message(f"ack:{action}"),
