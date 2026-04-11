@@ -13,7 +13,7 @@ from app.engine.night.seer_action import resolve_seer_action
 from app.engine.night.witch_action import WitchResources, resolve_witch_action
 from app.engine.night.wolf_action import resolve_wolf_action
 from app.engine.states.phase import GamePhase
-from app.llm.builders import build_speech_prompt
+from app.llm.builders import build_speech_prompt, build_vote_prompt
 from app.llm.fallback import FallbackLLMClient
 
 
@@ -186,6 +186,23 @@ class GameEngine:
     async def _notify_thinking(self, _: int, __: bool) -> None:
         return None
 
+    async def _llm_vote(
+        self,
+        context: GameContext,
+        seat_id: int,
+        *,
+        allowed_targets: list[int],
+    ) -> int | None:
+        player = context.players[seat_id]
+        if self._llm_client is None or not isinstance(player, AIPlayer):
+            return await self._ai_vote(seat_id, allowed_targets=allowed_targets)
+
+        response = self._llm_client.request_vote(
+            prompt=build_vote_prompt(context, seat_id=seat_id),
+            allowed_targets=allowed_targets,
+        )
+        return None if response.vote_target == 0 else response.vote_target
+
     async def _build_votes(self, context: GameContext) -> dict[int, int | None]:
         alive_seats = context.alive_seat_ids()
         votes: dict[int, int | None] = {}
@@ -200,9 +217,17 @@ class GameEngine:
                 )
                 continue
 
-            votes[seat_id] = await self._ai_vote(
-                seat_id,
-                allowed_targets=candidates,
+            votes[seat_id] = (
+                await self._llm_vote(
+                    context,
+                    seat_id,
+                    allowed_targets=candidates,
+                )
+                if self._llm_client is not None
+                else await self._ai_vote(
+                    seat_id,
+                    allowed_targets=candidates,
+                )
             )
 
         return votes
