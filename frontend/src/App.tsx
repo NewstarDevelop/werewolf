@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
 import { createGameSocketUrl, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
 
@@ -60,11 +61,34 @@ function applySystemMessage(players: PlayerListItem[], message: string) {
   return nextPlayers;
 }
 
+function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
+  if (payload.type === "SYSTEM_MSG") {
+    return {
+      id: `system-${crypto.randomUUID()}`,
+      kind: "system",
+      message: payload.data.message,
+    };
+  }
+
+  if (payload.type === "CHAT_UPDATE") {
+    return {
+      id: `chat-${crypto.randomUUID()}`,
+      kind: payload.data.visibility === "private" ? "private" : "speech",
+      message: payload.data.message,
+      speaker: payload.data.visibility === "private"
+        ? payload.data.speaker ?? "你的视角"
+        : payload.data.speaker ?? (payload.data.seat_id ? `${payload.data.seat_id}号玩家` : "玩家发言"),
+    };
+  }
+
+  return null;
+}
+
 export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
-  const [messages, setMessages] = useState<string[]>([]);
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
-  const latestMessage = messages.length > 0 ? messages[messages.length - 1] : "等待服务端推送";
+  const latestMessage = entries.length > 0 ? entries[entries.length - 1].message : "等待服务端推送";
 
   useEffect(() => {
     const socket = new WebSocket(createGameSocketUrl(window.location));
@@ -77,8 +101,11 @@ export function App() {
 
     socket.addEventListener("message", (event) => {
       const payload = JSON.parse(event.data) as ServerEnvelope;
+      const chatEntry = buildChatEntry(payload);
+      if (chatEntry) {
+        setEntries((current) => [...current, chatEntry]);
+      }
       if (payload.type === "SYSTEM_MSG") {
-        setMessages((current) => [...current, payload.data.message]);
         setPlayers((current) => applySystemMessage(current, payload.data.message));
       }
       if (payload.type === "AI_THINKING") {
@@ -120,6 +147,7 @@ export function App() {
           </div>
         </dl>
         <PlayerList players={players} />
+        <ChatHistory entries={entries} />
       </section>
     </main>
   );

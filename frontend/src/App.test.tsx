@@ -1,5 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { createGameSocketUrl } from "./ws/client";
@@ -31,6 +31,10 @@ class MockWebSocket {
 }
 
 describe("App", () => {
+  beforeEach(() => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
   it("renders the shell heading and player list", () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -65,5 +69,27 @@ describe("App", () => {
     );
 
     expect(url).toBe("ws://localhost:8000/ws/game");
+  });
+
+  it("renders structured chat entries from websocket messages", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "你的查验结果是：5号是狼人。",
+        speaker: "你的视角",
+        visibility: "private",
+      },
+    });
+
+    await waitFor(() => {
+      const logList = within(view.container).getByLabelText("对局日志列表");
+      expect(within(logList).getByText("你的查验结果是：5号是狼人。")).toBeInTheDocument();
+      expect(within(logList).getByText("私信")).toBeInTheDocument();
+    });
   });
 });
