@@ -30,3 +30,18 @@ def test_run_loop_stops_immediately_when_win_condition_is_met() -> None:
 
     assert final_context.phase == GamePhase.GAME_OVER.value
     assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
+
+
+def test_run_loop_executes_night_handlers_and_writes_private_logs() -> None:
+    engine = GameEngine(rng=random.Random(2))
+
+    context = asyncio.run(engine.run_loop(max_rounds=1))
+
+    seer_seat = next(
+        seat_id
+        for seat_id, player in context.players.items()
+        if player.role is Role.SEER
+    )
+
+    assert context.get_private_log(seer_seat)
+    assert "查验结果：" in context.get_private_log(seer_seat)[0]
