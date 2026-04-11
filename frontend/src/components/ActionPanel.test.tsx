@@ -56,6 +56,28 @@ describe("ActionPanel", () => {
     });
   });
 
+  it("submits hunter shoot payload with selected seat", () => {
+    const onSubmit = vi.fn();
+    const view = render(
+      <ActionPanel
+        request={{
+          action_type: "HUNTER_SHOOT",
+          prompt: "请选择开枪目标",
+          allowed_targets: [2, 5],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      action_type: "HUNTER_SHOOT",
+      target: 5,
+    });
+  });
+
   it("submits vote pass payload", () => {
     const onSubmit = vi.fn();
     const view = render(
