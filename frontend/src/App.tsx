@@ -38,20 +38,24 @@ function applyThinkingState(players: PlayerListItem[], seatId: number, isThinkin
   );
 }
 
-function applySystemMessage(players: PlayerListItem[], message: string) {
-  let nextPlayers = players;
+function applyIdentityMessage(players: PlayerListItem[], message: string) {
   const identityMatch = message.match(/你的座位号是\s*(\d+)\s*号，身份是\s*([A-Z_]+)\s*。?/);
 
-  if (identityMatch) {
-    const humanSeat = Number(identityMatch[1]);
-    const humanRole = roleText[identityMatch[2]] ?? identityMatch[2];
-    nextPlayers = nextPlayers.map((player) => ({
-      ...player,
-      isHuman: player.seatId === humanSeat,
-      roleLabel: player.seatId === humanSeat ? humanRole : undefined,
-    }));
+  if (!identityMatch) {
+    return players;
   }
 
+  const humanSeat = Number(identityMatch[1]);
+  const humanRole = roleText[identityMatch[2]] ?? identityMatch[2];
+  return players.map((player) => ({
+    ...player,
+    isHuman: player.seatId === humanSeat,
+    roleLabel: player.seatId === humanSeat ? humanRole : undefined,
+  }));
+}
+
+function applySystemMessage(players: PlayerListItem[], message: string) {
+  let nextPlayers = applyIdentityMessage(players, message);
   const deathMatches = [...message.matchAll(/(\d+)号(?:玩家)?(?:被放逐出局|死亡)/g)];
   if (deathMatches.length > 0) {
     const deadSeats = new Set(deathMatches.map((match) => Number(match[1])));
@@ -112,6 +116,9 @@ export function App() {
       }
       if (payload.type === "SYSTEM_MSG") {
         setPlayers((current) => applySystemMessage(current, payload.data.message));
+      }
+      if (payload.type === "CHAT_UPDATE" && payload.data.visibility === "private") {
+        setPlayers((current) => applyIdentityMessage(current, payload.data.message));
       }
       if (payload.type === "AI_THINKING") {
         setPlayers((current) =>

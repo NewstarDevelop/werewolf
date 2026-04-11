@@ -98,6 +98,27 @@ describe("App", () => {
     });
   });
 
+  it("syncs the human seat and role from private identity messages", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "你的座位号是 5 号，身份是 SEER。",
+        speaker: "系统",
+        visibility: "private",
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 预言家");
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("AI 玩家");
+    });
+  });
+
   it("unlocks action panel on require input and relocks after submit", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
