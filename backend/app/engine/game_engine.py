@@ -74,6 +74,15 @@ class GameEngine:
             return None
         return valid_targets[0]
 
+    async def _select_seer_target(
+        self,
+        context: GameContext,
+        *,
+        seer_seat: int,
+        allowed_targets: list[int],
+    ) -> int:
+        return allowed_targets[0]
+
     def _handle_hunter_shot(
         self,
         context: GameContext,
@@ -193,7 +202,11 @@ class GameEngine:
                     resolve_seer_action(
                         game_context,
                         seer_seat=seer_seat,
-                        target_seat=seer_targets[0],
+                        target_seat=await self._select_seer_target(
+                            game_context,
+                            seer_seat=seer_seat,
+                            allowed_targets=seer_targets,
+                        ),
                     )
 
             witch_seat = self._first_alive_seat_by_role(game_context, Role.WITCH)

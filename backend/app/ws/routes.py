@@ -222,6 +222,36 @@ class WebSocketGameEngine(GameEngine):
             return target
         return await super()._select_wolf_target(context)
 
+    async def _select_seer_target(
+        self,
+        context: GameContext,
+        *,
+        seer_seat: int,
+        allowed_targets: list[int],
+    ) -> int:
+        player = context.players[seer_seat]
+        if not isinstance(player, HumanPlayer):
+            return await super()._select_seer_target(
+                context,
+                seer_seat=seer_seat,
+                allowed_targets=allowed_targets,
+            )
+
+        payload = await self._await_human_input(
+            seer_seat,
+            action_type="SEER_CHECK",
+            prompt="\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u67e5\u9a8c\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
+            allowed_targets=allowed_targets,
+        )
+        target = payload.get("target")
+        if isinstance(target, int) and target in set(allowed_targets):
+            return target
+        return await super()._select_seer_target(
+            context,
+            seer_seat=seer_seat,
+            allowed_targets=allowed_targets,
+        )
+
     async def run_loop(
         self,
         *,
