@@ -101,7 +101,11 @@ class GameEngine:
         poison_candidates: list[int],
     ) -> tuple[int | None, int | None]:
         save_target = save_candidates[0] if save_candidates and resources.has_antidote else None
-        poison_target = poison_candidates[0] if poison_candidates and resources.has_poison else None
+        poison_target = (
+            self._choose_witch_poison_target(context, witch_seat, resources)
+            if poison_candidates and resources.has_poison
+            else None
+        )
         if save_target is not None:
             poison_target = None
         return save_target, poison_target
