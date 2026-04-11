@@ -194,6 +194,34 @@ def test_websocket_game_engine_uses_default_llm_client_for_ai_speech() -> None:
     assert "听" in speech
 
 
+def test_websocket_game_engine_run_loop_emits_local_llm_speech() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(AIPlayer(seat_id=1, role=Role.WOLF, personality="强势带队"))
+    context.add_player(AIPlayer(seat_id=2, role=Role.VILLAGER, personality="沉默观察"))
+    context.add_player(AIPlayer(seat_id=3, role=Role.SEER, personality="谨慎分析"))
+    context.add_player(AIPlayer(seat_id=4, role=Role.WITCH, personality="稳健分析"))
+    context.add_player(AIPlayer(seat_id=5, role=Role.VILLAGER, personality="冷静拆点"))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def run() -> None:
+        attach_context_bridge(context, send_json)
+        engine = WebSocketGameEngine(send_json=send_json)
+        await engine.run_loop(context=context, max_rounds=1)
+
+    asyncio.run(run())
+
+    public_messages = [
+        payload["data"]["message"]
+        for payload in sent_payloads
+        if payload["type"] == "CHAT_UPDATE" and payload["data"]["visibility"] == "public"
+    ]
+
+    assert any("信息还不够，我先听后置位怎么聊。" in message for message in public_messages)
+
+
 def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
     sent_payloads: list[dict[str, object]] = []
     context = GameContext()
