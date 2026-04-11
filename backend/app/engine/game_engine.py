@@ -7,6 +7,7 @@ from app.engine.check_win import check_win
 from app.engine.day.dead_last_words import announce_deaths_and_last_words
 from app.engine.day.voting import resolve_voting
 from app.engine.init import initialize_game
+from app.engine.night.hunter_shooting import resolve_hunter_shooting
 from app.engine.night.seer_action import resolve_seer_action
 from app.engine.night.witch_action import WitchResources, resolve_witch_action
 from app.engine.night.wolf_action import resolve_wolf_action
@@ -38,6 +39,46 @@ class GameEngine:
         if not valid_targets:
             raise ValueError("no valid wolf target available")
         return valid_targets[0]
+
+    def _choose_hunter_target(self, context: GameContext, hunter_seat: int) -> int | None:
+        valid_targets = [
+            seat_id
+            for seat_id, player in sorted(context.players.items())
+            if player.is_alive and seat_id != hunter_seat
+        ]
+        if not valid_targets:
+            return None
+        return valid_targets[0]
+
+    def _handle_hunter_shot(
+        self,
+        context: GameContext,
+        *,
+        hunter_seat: int,
+        poisoned: bool = False,
+    ) -> bool:
+        context.phase = GamePhase.HUNTER_SHOOTING.value
+        target_seat = None if poisoned else self._choose_hunter_target(context, hunter_seat)
+
+        if not poisoned and target_seat is None:
+            context.add_public_message(f"{hunter_seat}号猎人死亡时场上已无可开枪目标。")
+            return False
+
+        result = resolve_hunter_shooting(
+            context,
+            hunter_seat=hunter_seat,
+            target_seat=target_seat,
+            poisoned=poisoned,
+        )
+        context.add_public_message(result.summary)
+
+        winner = check_win(context)
+        if winner is None:
+            return False
+
+        context.phase = GamePhase.GAME_OVER.value
+        context.add_public_message(winner["summary"])
+        return True
 
     async def _human_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号选择过麦。"
@@ -123,6 +164,9 @@ class GameEngine:
             game_context.phase = GamePhase.NIGHT_END.value
             for seat_id in list(game_context.killed_tonight):
                 game_context.players[seat_id].mark_dead()
+                if game_context.players[seat_id].role is Role.HUNTER:
+                    if self._handle_hunter_shot(game_context, hunter_seat=seat_id):
+                        return game_context
 
             game_context.phase = GamePhase.DAY_START.value
             announcement = announce_deaths_and_last_words(game_context)
@@ -147,6 +191,15 @@ class GameEngine:
             )
             game_context.phase = GamePhase.VOTE_RESULT.value
             game_context.add_public_message(voting_result.summary)
+            if (
+                voting_result.banished_seat is not None
+                and game_context.players[voting_result.banished_seat].role is Role.HUNTER
+            ):
+                if self._handle_hunter_shot(
+                    game_context,
+                    hunter_seat=voting_result.banished_seat,
+                ):
+                    return game_context
 
             winner = check_win(game_context)
             if winner is not None:

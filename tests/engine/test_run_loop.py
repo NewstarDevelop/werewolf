@@ -3,7 +3,7 @@ import random
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
-from app.domain.player import Player
+from app.domain.player import HumanPlayer, Player
 from app.engine.game_engine import GameEngine
 from app.engine.states.phase import GamePhase
 
@@ -56,3 +56,45 @@ def test_run_loop_applies_voting_result_to_alive_state() -> None:
     alive_after_vote = context.alive_seat_ids()
 
     assert len(alive_after_vote) <= 8
+
+
+def test_run_loop_resolves_hunter_shot_after_night_death() -> None:
+    context = GameContext()
+    context.add_player(Player(seat_id=1, role=Role.HUNTER))
+    context.add_player(Player(seat_id=2, role=Role.WOLF))
+    context.add_player(Player(seat_id=3, role=Role.VILLAGER))
+
+    engine = GameEngine()
+    final_context = asyncio.run(engine.run_loop(context=context, max_rounds=1))
+
+    assert final_context.phase == GamePhase.GAME_OVER.value
+    assert final_context.players[1].is_alive is False
+    assert final_context.players[2].is_alive is False
+    assert "1号猎人开枪带走了2号玩家。" in final_context.public_chat_history
+    assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
+
+
+def test_run_loop_resolves_hunter_shot_after_banish() -> None:
+    class HunterBanishEngine(GameEngine):
+        def _choose_wolf_target(self, context: GameContext) -> int:
+            return 4
+
+        def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+            return {1: 2, 2: 1, 3: 1}
+
+    context = GameContext()
+    context.add_player(Player(seat_id=1, role=Role.HUNTER))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.WOLF))
+    context.add_player(Player(seat_id=3, role=Role.VILLAGER))
+    context.add_player(Player(seat_id=4, role=Role.VILLAGER))
+
+    engine = HunterBanishEngine()
+    final_context = asyncio.run(engine.run_loop(context=context, max_rounds=1))
+
+    assert final_context.phase == GamePhase.GAME_OVER.value
+    assert final_context.players[1].is_alive is False
+    assert final_context.players[2].is_alive is False
+    assert final_context.players[4].is_alive is False
+    assert "1号玩家被放逐出局。" in final_context.public_chat_history
+    assert "1号猎人开枪带走了2号玩家。" in final_context.public_chat_history
+    assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
