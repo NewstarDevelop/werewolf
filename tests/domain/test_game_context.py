@@ -39,6 +39,21 @@ def test_game_context_can_clear_night_deaths() -> None:
     assert context.night_death_causes == {}
 
 
+def test_game_context_notifies_public_and_private_message_listeners() -> None:
+    context = build_context()
+    public_messages: list[str] = []
+    private_messages: list[tuple[int, str]] = []
+
+    context.on_public_message(public_messages.append)
+    context.on_private_message(lambda seat_id, message: private_messages.append((seat_id, message)))
+
+    context.add_public_message("游戏开始")
+    context.add_private_message(1, "你的身份是预言家")
+
+    assert public_messages == ["游戏开始"]
+    assert private_messages == [(1, "你的身份是预言家")]
+
+
 def test_view_mask_hides_unpublished_roles_from_non_wolves() -> None:
     context = build_context()
 
