@@ -231,6 +231,8 @@ class GameEngine:
                 game_context.add_public_message(winner["summary"])
                 return game_context
 
+            game_context.day_count += 1
+
         game_context.phase = GamePhase.GAME_OVER.value
         game_context.add_public_message("主流程骨架已跑通，等待夜晚与白天细分状态接入。")
         return game_context

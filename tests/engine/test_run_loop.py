@@ -135,3 +135,27 @@ def test_run_loop_blocks_hunter_shot_when_poisoned() -> None:
     )
     assert "1号猎人被毒死，无法开枪。" in final_context.public_chat_history
     assert final_context.public_chat_history[-1] == "平民已全部出局，狼人阵营获胜。"
+
+
+def test_run_loop_increments_day_count_between_rounds() -> None:
+    class MultiRoundEngine(GameEngine):
+        def _choose_wolf_target(self, context: GameContext) -> int:
+            return 4
+
+        def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+            alive_seats = context.alive_seat_ids()
+            if alive_seats == [1, 2, 3, 4]:
+                return {1: 2, 2: 1, 3: 2, 4: 1}
+            return {1: 2, 2: 1, 3: None}
+
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(Player(seat_id=2, role=Role.VILLAGER))
+    context.add_player(Player(seat_id=3, role=Role.WITCH))
+    context.add_player(Player(seat_id=4, role=Role.SEER))
+
+    engine = MultiRoundEngine()
+    final_context = asyncio.run(engine.run_loop(context=context, max_rounds=2))
+
+    assert final_context.day_count == 3
+    assert final_context.public_chat_history.count("天黑请闭眼。") == 2
