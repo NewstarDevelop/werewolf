@@ -41,6 +41,9 @@ class GameEngine:
             raise ValueError("no valid wolf target available")
         return valid_targets[0]
 
+    async def _select_wolf_target(self, context: GameContext) -> int:
+        return self._choose_wolf_target(context)
+
     def _choose_hunter_target(self, context: GameContext, hunter_seat: int) -> int | None:
         valid_targets = [
             seat_id
@@ -175,7 +178,7 @@ class GameEngine:
             game_context.phase = GamePhase.WOLF_ACTION.value
             resolve_wolf_action(
                 game_context,
-                human_target=self._choose_wolf_target(game_context),
+                human_target=await self._select_wolf_target(game_context),
             )
 
             seer_seat = self._first_alive_seat_by_role(game_context, Role.SEER)

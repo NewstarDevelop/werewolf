@@ -300,3 +300,41 @@ def test_websocket_game_engine_accepts_pass_for_human_vote() -> None:
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.SEER))
+    context.add_player(HumanPlayer(seat_id=3, role=Role.VILLAGER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            target_task = asyncio.create_task(engine._select_wolf_target(context))
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "WOLF_KILL", "target": 3})
+            result = await target_task
+            assert result == 3
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "WOLF_KILL",
+                "prompt": "\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u51fb\u6740\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
+                "allowed_targets": [2, 3],
+            },
+            "meta": {},
+        },
+    ]

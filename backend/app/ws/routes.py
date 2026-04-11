@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app.domain.enums import Role
 from app.domain.game_context import GameContext
 from app.domain.player import HumanPlayer
 from app.engine.check_win import check_win
@@ -190,6 +191,36 @@ class WebSocketGameEngine(GameEngine):
         if isinstance(target, int) and target in set(allowed_targets):
             return target
         return None
+
+    async def _select_wolf_target(self, context: GameContext) -> int:
+        human_player = next(
+            (
+                player
+                for player in context.players.values()
+                if isinstance(player, HumanPlayer)
+                and player.is_alive
+                and player.role is Role.WOLF
+            ),
+            None,
+        )
+        if human_player is None:
+            return await super()._select_wolf_target(context)
+
+        allowed_targets = [
+            seat_id
+            for seat_id, player in sorted(context.players.items())
+            if player.is_alive and player.role is not Role.WOLF
+        ]
+        payload = await self._await_human_input(
+            human_player.seat_id,
+            action_type="WOLF_KILL",
+            prompt="\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u51fb\u6740\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
+            allowed_targets=allowed_targets,
+        )
+        target = payload.get("target")
+        if isinstance(target, int) and target in set(allowed_targets):
+            return target
+        return await super()._select_wolf_target(context)
 
     async def run_loop(
         self,
