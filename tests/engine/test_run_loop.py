@@ -156,6 +156,8 @@ def test_run_loop_uses_default_witch_poison_after_antidote_is_spent() -> None:
     assert final_context.players[1].is_alive is False
     assert final_context.players[4].is_alive is False
     assert "天亮了。昨夜死亡的是 4号、1号。" in final_context.public_chat_history
+    assert not any("号发言：" in message for message in final_context.public_chat_history)
+    assert not any("放逐出局" in message for message in final_context.public_chat_history)
     assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
 
 

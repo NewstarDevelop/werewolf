@@ -207,6 +207,13 @@ class GameEngine:
                     poisoned=poisoned,
                 ):
                     return game_context
+
+            winner = check_win(game_context)
+            if winner is not None:
+                game_context.phase = GamePhase.GAME_OVER.value
+                game_context.add_public_message(winner["summary"])
+                return game_context
+
             if announcement.eligible_last_words:
                 game_context.phase = GamePhase.DEAD_LAST_WORDS.value
 
