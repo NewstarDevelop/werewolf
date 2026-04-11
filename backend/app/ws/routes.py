@@ -1,10 +1,12 @@
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.domain.game_context import GameContext
+from app.domain.player import HumanPlayer
 from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
 from app.protocols.c2s import ClientEnvelope
@@ -15,6 +17,8 @@ from app.protocols.s2c import (
     ChatUpdatePayload,
     GameOverEnvelope,
     GameOverPayload,
+    RequireInputEnvelope,
+    RequireInputPayload,
     SystemMessageEnvelope,
     SystemMessagePayload,
 )
@@ -63,6 +67,22 @@ def build_ai_thinking_message(seat_id: int, is_thinking: bool) -> dict[str, obje
     ).model_dump()
 
 
+def build_require_input_message(
+    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_ACTION"],
+    *,
+    prompt: str,
+    allowed_targets: list[int],
+) -> dict[str, object]:
+    return RequireInputEnvelope(
+        type="REQUIRE_INPUT",
+        data=RequireInputPayload(
+            action_type=action_type,
+            prompt=prompt,
+            allowed_targets=allowed_targets,
+        ),
+    ).model_dump()
+
+
 def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     winner = check_win(context)
     if winner is None:
@@ -96,9 +116,42 @@ class WebSocketGameEngine(GameEngine):
     def __init__(self, *, send_json: SendJson) -> None:
         super().__init__()
         self._send_json = send_json
+        self._active_context: GameContext | None = None
 
     async def _notify_thinking(self, seat_id: int, is_thinking: bool) -> None:
         await self._send_json(build_ai_thinking_message(seat_id, is_thinking))
+
+    async def _human_speaker(self, seat_id: int) -> str:
+        if self._active_context is None:
+            return await super()._human_speaker(seat_id)
+
+        player = self._active_context.players[seat_id]
+        if not isinstance(player, HumanPlayer):
+            return await super()._human_speaker(seat_id)
+
+        pending_input = player.begin_input()
+        await self._send_json(
+            build_require_input_message(
+                "SPEAK",
+                prompt=f"轮到你发言，请以 {seat_id} 号玩家身份发言。",
+                allowed_targets=[],
+            ),
+        )
+        payload = await pending_input
+        player.clear_input()
+        return str(payload.get("text", "过。")).strip() or "过。"
+
+    async def run_loop(
+        self,
+        *,
+        context: GameContext | None = None,
+        max_rounds: int = 1,
+    ) -> GameContext:
+        self._active_context = context
+        try:
+            return await super().run_loop(context=context, max_rounds=max_rounds)
+        finally:
+            self._active_context = None
 
 
 async def run_game_session(
@@ -116,6 +169,16 @@ async def run_game_session(
     game_over_payload = build_game_over_message(final_context)
     if game_over_payload is not None:
         await send_json(game_over_payload)
+
+
+def resolve_human_submit_action(
+    setup_result: GameSetupResult,
+    payload: dict[str, object],
+) -> bool:
+    player = setup_result.context.players.get(setup_result.human_seat_id)
+    if not isinstance(player, HumanPlayer):
+        return False
+    return player.resolve_input(payload)
 
 
 @router.websocket("/ws/game")
@@ -156,6 +219,10 @@ async def game_socket(websocket: WebSocket) -> None:
                 continue
 
             action = envelope.data.action_type
+            resolve_human_submit_action(
+                setup_result,
+                envelope.data.model_dump(exclude_none=True),
+            )
             await manager.send_json(
                 websocket,
                 build_system_message(f"ack:{action}"),

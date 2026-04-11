@@ -5,11 +5,13 @@ from fastapi.testclient import TestClient
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
+from app.domain.player import HumanPlayer
 from app.main import app
 from app.services.setup_game import setup_game
 from app.ws.routes import (
     WebSocketGameEngine,
     attach_context_bridge,
+    resolve_human_submit_action,
     run_game_session,
 )
 
@@ -172,3 +174,57 @@ def test_websocket_game_engine_emits_ai_thinking_payload() -> None:
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            task = asyncio.create_task(engine._human_speaker(1))
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "SPEAK", "text": "我是预言家。"})
+            result = await task
+            assert result == "我是预言家。"
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "SPEAK",
+                "prompt": "轮到你发言，请以 1 号玩家身份发言。",
+                "allowed_targets": [],
+            },
+            "meta": {},
+        },
+    ]
+
+
+def test_resolve_human_submit_action_unlocks_pending_input() -> None:
+    setup_result = setup_game(rng=random.Random(7))
+    player = setup_result.context.players[setup_result.human_seat_id]
+    assert isinstance(player, HumanPlayer)
+
+    async def run() -> None:
+        pending = player.begin_input()
+        resolved = resolve_human_submit_action(
+            setup_result,
+            {"action_type": "SPEAK", "text": "过。"},
+        )
+
+        assert resolved is True
+        assert await pending == {"action_type": "SPEAK", "text": "过。"}
+
+    asyncio.run(run())
