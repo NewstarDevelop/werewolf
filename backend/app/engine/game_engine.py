@@ -2,7 +2,7 @@ import random
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
-from app.domain.player import HumanPlayer
+from app.domain.player import AIPlayer, HumanPlayer
 from app.engine.day.day_speaking import run_day_speaking
 from app.engine.check_win import check_win
 from app.engine.day.dead_last_words import announce_deaths_and_last_words
@@ -13,11 +13,19 @@ from app.engine.night.seer_action import resolve_seer_action
 from app.engine.night.witch_action import WitchResources, resolve_witch_action
 from app.engine.night.wolf_action import resolve_wolf_action
 from app.engine.states.phase import GamePhase
+from app.llm.builders import build_speech_prompt
+from app.llm.fallback import FallbackLLMClient
 
 
 class GameEngine:
-    def __init__(self, *, rng: random.Random | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        rng: random.Random | None = None,
+        llm_client: FallbackLLMClient | None = None,
+    ) -> None:
         self._rng = rng
+        self._llm_client = llm_client
         self._witch_resources: dict[int, WitchResources] = {}
 
     def _ensure_witch_resources(self, context: GameContext) -> None:
@@ -165,6 +173,16 @@ class GameEngine:
     async def _ai_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号正在陈述自己的判断。"
 
+    async def _llm_speaker(self, context: GameContext, seat_id: int) -> str:
+        player = context.players[seat_id]
+        if self._llm_client is None or not isinstance(player, AIPlayer):
+            return await self._ai_speaker(seat_id)
+
+        response = self._llm_client.request_speech(
+            prompt=build_speech_prompt(context, seat_id=seat_id),
+        )
+        return response.speech_text
+
     async def _notify_thinking(self, _: int, __: bool) -> None:
         return None
 
@@ -308,7 +326,11 @@ class GameEngine:
                     game_context,
                     start_seat=alive_seats[0],
                     human_speaker=self._human_speaker,
-                    ai_speaker=self._ai_speaker,
+                    ai_speaker=(
+                        self._ai_speaker
+                        if self._llm_client is None
+                        else lambda seat_id: self._llm_speaker(game_context, seat_id)
+                    ),
                     notify_thinking=self._notify_thinking,
                 )
 
