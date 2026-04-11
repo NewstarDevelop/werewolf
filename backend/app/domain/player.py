@@ -22,6 +22,20 @@ class HumanPlayer(Player):
     ws_connection: WebSocket | None = None
     pending_input: asyncio.Future[dict[str, Any]] | None = None
 
+    def begin_input(self) -> asyncio.Future[dict[str, Any]]:
+        loop = asyncio.get_running_loop()
+        self.pending_input = loop.create_future()
+        return self.pending_input
+
+    def resolve_input(self, payload: dict[str, Any]) -> bool:
+        if self.pending_input is None or self.pending_input.done():
+            return False
+        self.pending_input.set_result(payload)
+        return True
+
+    def clear_input(self) -> None:
+        self.pending_input = None
+
     @property
     def is_human(self) -> bool:
         return True

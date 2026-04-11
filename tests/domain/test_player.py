@@ -24,6 +24,23 @@ def test_human_player_keeps_pending_input_slot() -> None:
         loop.close()
 
 
+def test_human_player_can_begin_resolve_and_clear_input() -> None:
+    async def run() -> None:
+        player = HumanPlayer(seat_id=2, role=Role.SEER)
+
+        pending = player.begin_input()
+        resolved = player.resolve_input({"action_type": "SPEAK", "text": "过"})
+
+        assert player.pending_input is pending
+        assert resolved is True
+        assert await pending == {"action_type": "SPEAK", "text": "过"}
+
+        player.clear_input()
+        assert player.pending_input is None
+
+    asyncio.run(run())
+
+
 def test_ai_player_records_private_memory() -> None:
     player = AIPlayer(seat_id=3, role=Role.WOLF, personality="aggressive")
 
