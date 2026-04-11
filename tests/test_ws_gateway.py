@@ -1,10 +1,13 @@
 import asyncio
+import random
 
 from fastapi.testclient import TestClient
 
+from app.domain.enums import Role
 from app.domain.game_context import GameContext
 from app.main import app
-from app.ws.routes import attach_context_bridge
+from app.services.setup_game import setup_game
+from app.ws.routes import attach_context_bridge, run_game_session
 
 
 def test_websocket_sends_welcome_message() -> None:
@@ -25,7 +28,11 @@ def test_websocket_sends_welcome_message() -> None:
     assert "身份是" in private_message["data"]["message"]
 
 
-def test_websocket_acknowledges_submit_action() -> None:
+def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
+    async def idle_session(*args, **kwargs) -> None:
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr("app.ws.routes.run_game_session", idle_session)
     client = TestClient(app)
 
     with client.websocket_connect("/ws/game") as websocket:
@@ -77,6 +84,51 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
                 "seat_id": 3,
                 "speaker": "系统",
                 "visibility": "private",
+            },
+            "meta": {},
+        },
+    ]
+
+
+def test_run_game_session_emits_game_over_payload() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    setup_result = setup_game(rng=random.Random(7))
+
+    class StubEngine:
+        async def run_loop(
+            self,
+            *,
+            context: GameContext | None = None,
+            max_rounds: int = 1,
+        ) -> GameContext:
+            assert context is not None
+            for player in context.players.values():
+                if player.role is Role.WOLF:
+                    player.mark_dead()
+            return context
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    asyncio.run(
+        run_game_session(
+            setup_result,
+            send_json,
+            engine=StubEngine(),  # type: ignore[arg-type]
+            max_rounds=1,
+        ),
+    )
+
+    assert sent_payloads == [
+        {
+            "type": "GAME_OVER",
+            "data": {
+                "winning_side": "GOOD",
+                "summary": "狼人已全部出局，好人阵营获胜。",
+                "revealed_roles": {
+                    seat_id: player.role.value
+                    for seat_id, player in sorted(setup_result.context.players.items())
+                },
             },
             "meta": {},
         },

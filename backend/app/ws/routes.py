@@ -5,14 +5,18 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.domain.game_context import GameContext
+from app.engine.check_win import check_win
+from app.engine.game_engine import GameEngine
 from app.protocols.c2s import ClientEnvelope
 from app.protocols.s2c import (
     ChatUpdateEnvelope,
     ChatUpdatePayload,
+    GameOverEnvelope,
+    GameOverPayload,
     SystemMessageEnvelope,
     SystemMessagePayload,
 )
-from app.services.setup_game import setup_game
+from app.services.setup_game import GameSetupResult, setup_game
 from app.ws.manager import ConnectionManager
 
 router = APIRouter()
@@ -50,6 +54,24 @@ def build_public_message(message: str) -> dict[str, object]:
     ).model_dump()
 
 
+def build_game_over_message(context: GameContext) -> dict[str, object] | None:
+    winner = check_win(context)
+    if winner is None:
+        return None
+
+    return GameOverEnvelope(
+        type="GAME_OVER",
+        data=GameOverPayload(
+            winning_side=winner["winning_side"],
+            summary=winner["summary"],
+            revealed_roles={
+                seat_id: player.role.value
+                for seat_id, player in sorted(context.players.items())
+            },
+        ),
+    ).model_dump()
+
+
 def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
     loop = asyncio.get_running_loop()
 
@@ -59,6 +81,23 @@ def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
     context.on_private_message(
         lambda seat_id, message: loop.create_task(send_json(build_private_message(message, seat_id))),
     )
+
+
+async def run_game_session(
+    setup_result: GameSetupResult,
+    send_json: SendJson,
+    *,
+    engine: GameEngine | None = None,
+    max_rounds: int = 20,
+) -> None:
+    active_engine = engine or GameEngine()
+    final_context = await active_engine.run_loop(
+        context=setup_result.context,
+        max_rounds=max_rounds,
+    )
+    game_over_payload = build_game_over_message(final_context)
+    if game_over_payload is not None:
+        await send_json(game_over_payload)
 
 
 @router.websocket("/ws/game")
@@ -82,6 +121,12 @@ async def game_socket(websocket: WebSocket) -> None:
             setup_result.human_seat_id,
         ),
     )
+    engine_task = asyncio.create_task(
+        run_game_session(
+            setup_result,
+            lambda payload: manager.send_json(websocket, payload),
+        ),
+    )
 
     try:
         while True:
@@ -99,3 +144,6 @@ async def game_socket(websocket: WebSocket) -> None:
             )
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+    finally:
+        if not engine_task.done():
+            engine_task.cancel()
