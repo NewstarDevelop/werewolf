@@ -21,7 +21,7 @@ def test_websocket_acknowledges_submit_action() -> None:
         websocket.send_json(
             {
                 "type": "SUBMIT_ACTION",
-                "data": {"action_type": "VOTE", "target": 3},
+                "data": {"action": "vote", "target": 3},
             }
         )
         message = websocket.receive_json()
