@@ -17,12 +17,13 @@ def build_context() -> GameContext:
 
 def test_witch_can_save_target_in_killed_tonight() -> None:
     context = build_context()
-    context.mark_killed_tonight(3)
+    context.mark_killed_tonight(3, cause="wolf")
     resources = WitchResources()
 
     updated = resolve_witch_action(context, witch_seat=1, resources=resources, save_target=3)
 
     assert context.killed_tonight == []
+    assert context.night_death_causes == {}
     assert updated.has_antidote is False
     assert updated.has_poison is True
 
@@ -34,13 +35,14 @@ def test_witch_can_poison_alive_target() -> None:
     updated = resolve_witch_action(context, witch_seat=1, resources=resources, poison_target=2)
 
     assert context.killed_tonight == [2]
+    assert context.death_causes_for(2) == {"poison"}
     assert updated.has_antidote is True
     assert updated.has_poison is False
 
 
 def test_witch_cannot_self_save_or_reuse_missing_items() -> None:
     context = build_context()
-    context.mark_killed_tonight(1)
+    context.mark_killed_tonight(1, cause="wolf")
 
     with pytest.raises(ValueError):
         resolve_witch_action(

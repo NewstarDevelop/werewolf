@@ -30,6 +30,7 @@ def resolve_witch_action(
         if save_target not in context.killed_tonight:
             raise ValueError("save target must already be in killed_tonight")
         context.killed_tonight.remove(save_target)
+        context.night_death_causes.pop(save_target, None)
         resources.has_antidote = False
 
     if poison_target is not None:
@@ -40,7 +41,7 @@ def resolve_witch_action(
         target = context.players[poison_target]
         if not target.is_alive:
             raise ValueError("poison target must be alive")
-        context.mark_killed_tonight(poison_target)
+        context.mark_killed_tonight(poison_target, cause="poison")
         resources.has_poison = False
 
     return resources

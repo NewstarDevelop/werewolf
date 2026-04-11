@@ -4,8 +4,8 @@ from app.engine.day.dead_last_words import announce_deaths_and_last_words
 
 def test_first_night_dead_players_get_last_words() -> None:
     context = GameContext(day_count=1)
-    context.mark_killed_tonight(3)
-    context.mark_killed_tonight(5)
+    context.mark_killed_tonight(3, cause="wolf")
+    context.mark_killed_tonight(5, cause="poison")
 
     announcement = announce_deaths_and_last_words(context)
 
@@ -16,7 +16,7 @@ def test_first_night_dead_players_get_last_words() -> None:
 
 def test_non_first_night_deaths_do_not_get_last_words() -> None:
     context = GameContext(day_count=2)
-    context.mark_killed_tonight(4)
+    context.mark_killed_tonight(4, cause="wolf")
 
     announcement = announce_deaths_and_last_words(context)
 

@@ -18,13 +18,25 @@ def test_game_context_tracks_messages_and_alive_players() -> None:
     context.add_public_message("天黑请闭眼")
     context.add_private_message(2, "你和3号是狼同伴")
     context.players[4].mark_dead()
-    context.mark_killed_tonight(4)
+    context.mark_killed_tonight(4, cause="wolf")
 
     assert context.public_chat_history == ["天黑请闭眼"]
     assert context.get_private_log(2) == ["你和3号是狼同伴"]
     assert context.players[2].private_memory == ["你和3号是狼同伴"]
     assert context.alive_seat_ids() == [1, 2, 3]
     assert context.killed_tonight == [4]
+    assert context.death_causes_for(4) == {"wolf"}
+
+
+def test_game_context_can_clear_night_deaths() -> None:
+    context = build_context()
+    context.mark_killed_tonight(2, cause="wolf")
+    context.mark_killed_tonight(2, cause="poison")
+
+    context.clear_night_deaths()
+
+    assert context.killed_tonight == []
+    assert context.night_death_causes == {}
 
 
 def test_view_mask_hides_unpublished_roles_from_non_wolves() -> None:

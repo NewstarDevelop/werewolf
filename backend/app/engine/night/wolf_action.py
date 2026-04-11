@@ -46,5 +46,5 @@ def resolve_wolf_action(
         target_seat = min(valid_targets)
         context.add_private_message(alpha_wolf.seat_id, f"Alpha 狼决定击杀 {target_seat} 号。")
 
-    context.mark_killed_tonight(target_seat)
+    context.mark_killed_tonight(target_seat, cause="wolf")
     return target_seat

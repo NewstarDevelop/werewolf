@@ -10,6 +10,7 @@ class GameContext:
     players: dict[int, Player] = field(default_factory=dict)
     public_chat_history: list[str] = field(default_factory=list)
     killed_tonight: list[int] = field(default_factory=list)
+    night_death_causes: dict[int, set[str]] = field(default_factory=dict)
     private_logs: dict[int, list[str]] = field(default_factory=dict)
 
     def add_player(self, player: Player) -> None:
@@ -34,9 +35,18 @@ class GameContext:
             if player.is_alive
         ]
 
-    def mark_killed_tonight(self, seat_id: int) -> None:
+    def mark_killed_tonight(self, seat_id: int, *, cause: str) -> None:
         if seat_id not in self.killed_tonight:
             self.killed_tonight.append(seat_id)
+        causes = self.night_death_causes.setdefault(seat_id, set())
+        causes.add(cause)
+
+    def clear_night_deaths(self) -> None:
+        self.killed_tonight.clear()
+        self.night_death_causes.clear()
+
+    def death_causes_for(self, seat_id: int) -> set[str]:
+        return set(self.night_death_causes.get(seat_id, set()))
 
     def get_private_log(self, seat_id: int) -> list[str]:
         return list(self.private_logs.get(seat_id, []))
