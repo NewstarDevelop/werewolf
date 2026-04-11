@@ -174,18 +174,26 @@ class GameEngine:
                 )
 
             game_context.phase = GamePhase.NIGHT_END.value
+            dead_hunters: list[tuple[int, bool]] = []
             for seat_id in list(game_context.killed_tonight):
                 game_context.players[seat_id].mark_dead()
                 if game_context.players[seat_id].role is Role.HUNTER:
-                    if self._handle_hunter_shot(
-                        game_context,
-                        hunter_seat=seat_id,
-                        poisoned="poison" in game_context.death_causes_for(seat_id),
-                    ):
-                        return game_context
+                    dead_hunters.append(
+                        (
+                            seat_id,
+                            "poison" in game_context.death_causes_for(seat_id),
+                        )
+                    )
 
             game_context.phase = GamePhase.DAY_START.value
             announcement = announce_deaths_and_last_words(game_context)
+            for hunter_seat, poisoned in dead_hunters:
+                if self._handle_hunter_shot(
+                    game_context,
+                    hunter_seat=hunter_seat,
+                    poisoned=poisoned,
+                ):
+                    return game_context
             if announcement.eligible_last_words:
                 game_context.phase = GamePhase.DEAD_LAST_WORDS.value
 

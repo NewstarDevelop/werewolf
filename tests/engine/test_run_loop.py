@@ -71,6 +71,9 @@ def test_run_loop_resolves_hunter_shot_after_night_death() -> None:
     assert final_context.phase == GamePhase.GAME_OVER.value
     assert final_context.players[1].is_alive is False
     assert final_context.players[2].is_alive is False
+    assert final_context.public_chat_history.index("天亮了。昨夜死亡的是 1号。") < final_context.public_chat_history.index(
+        "1号猎人开枪带走了2号玩家。"
+    )
     assert "1号猎人开枪带走了2号玩家。" in final_context.public_chat_history
     assert final_context.public_chat_history[-1] == "狼人已全部出局，好人阵营获胜。"
 
@@ -127,5 +130,8 @@ def test_run_loop_blocks_hunter_shot_when_poisoned() -> None:
     assert final_context.players[1].is_alive is False
     assert final_context.players[2].is_alive is True
     assert final_context.players[4].is_alive is False
+    assert final_context.public_chat_history.index("天亮了。昨夜死亡的是 4号、1号。") < final_context.public_chat_history.index(
+        "1号猎人被毒死，无法开枪。"
+    )
     assert "1号猎人被毒死，无法开枪。" in final_context.public_chat_history
     assert final_context.public_chat_history[-1] == "平民已全部出局，狼人阵营获胜。"
