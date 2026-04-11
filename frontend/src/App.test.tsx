@@ -119,6 +119,26 @@ describe("App", () => {
     });
   });
 
+  it("updates player alive state from public death logs", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "2号玩家被放逐出局。",
+        speaker: "系统",
+        visibility: "public",
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("墓碑");
+    });
+  });
+
   it("unlocks action panel on require input and relocks after submit", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);

@@ -67,6 +67,10 @@ function applySystemMessage(players: PlayerListItem[], message: string) {
   return nextPlayers;
 }
 
+function applyPublicChatMessage(players: PlayerListItem[], message: string) {
+  return applySystemMessage(players, message);
+}
+
 function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   if (payload.type === "SYSTEM_MSG") {
     return {
@@ -119,6 +123,9 @@ export function App() {
       }
       if (payload.type === "CHAT_UPDATE" && payload.data.visibility === "private") {
         setPlayers((current) => applyIdentityMessage(current, payload.data.message));
+      }
+      if (payload.type === "CHAT_UPDATE" && payload.data.visibility === "public") {
+        setPlayers((current) => applyPublicChatMessage(current, payload.data.message));
       }
       if (payload.type === "AI_THINKING") {
         setPlayers((current) =>
