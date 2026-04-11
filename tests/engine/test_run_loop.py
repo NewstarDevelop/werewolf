@@ -83,7 +83,7 @@ def test_run_loop_resolves_hunter_shot_after_banish() -> None:
         def _choose_wolf_target(self, context: GameContext) -> int:
             return 4
 
-        def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+        async def _build_votes(self, context: GameContext) -> dict[int, int | None]:
             return {1: 2, 2: 1, 3: 1}
 
     context = GameContext()
@@ -174,7 +174,7 @@ def test_run_loop_increments_day_count_between_rounds() -> None:
         ) -> int | None:
             return None
 
-        def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+        async def _build_votes(self, context: GameContext) -> dict[int, int | None]:
             alive_seats = context.alive_seat_ids()
             if alive_seats == [1, 2, 3, 4]:
                 return {1: 2, 2: 1, 3: 2, 4: 1}

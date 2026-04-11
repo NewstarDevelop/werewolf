@@ -2,6 +2,7 @@ import random
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
+from app.domain.player import HumanPlayer
 from app.engine.day.day_speaking import run_day_speaking
 from app.engine.check_win import check_win
 from app.engine.day.dead_last_words import announce_deaths_and_last_words
@@ -103,19 +104,46 @@ class GameEngine:
     async def _human_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号选择过麦。"
 
+    async def _human_vote(
+        self,
+        seat_id: int,
+        *,
+        allowed_targets: list[int],
+    ) -> int | None:
+        return allowed_targets[0] if allowed_targets else None
+
+    async def _ai_vote(
+        self,
+        seat_id: int,
+        *,
+        allowed_targets: list[int],
+    ) -> int | None:
+        return allowed_targets[0] if allowed_targets else None
+
     async def _ai_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号正在陈述自己的判断。"
 
     async def _notify_thinking(self, _: int, __: bool) -> None:
         return None
 
-    def _build_votes(self, context: GameContext) -> dict[int, int | None]:
+    async def _build_votes(self, context: GameContext) -> dict[int, int | None]:
         alive_seats = context.alive_seat_ids()
         votes: dict[int, int | None] = {}
 
         for seat_id in alive_seats:
             candidates = [candidate for candidate in alive_seats if candidate != seat_id]
-            votes[seat_id] = candidates[0] if candidates else None
+            player = context.players[seat_id]
+            if isinstance(player, HumanPlayer):
+                votes[seat_id] = await self._human_vote(
+                    seat_id,
+                    allowed_targets=candidates,
+                )
+                continue
+
+            votes[seat_id] = await self._ai_vote(
+                seat_id,
+                allowed_targets=candidates,
+            )
 
         return votes
 
@@ -231,7 +259,7 @@ class GameEngine:
             game_context.phase = GamePhase.VOTING.value
             voting_result = resolve_voting(
                 game_context,
-                votes_by_voter=self._build_votes(game_context),
+                votes_by_voter=await self._build_votes(game_context),
             )
             game_context.phase = GamePhase.VOTE_RESULT.value
             game_context.add_public_message(voting_result.summary)

@@ -43,7 +43,7 @@ def build_private_message(message: str, seat_id: int) -> dict[str, object]:
         data=ChatUpdatePayload(
             message=message,
             seat_id=seat_id,
-            speaker="系统",
+            speaker="\u7cfb\u7edf",
             visibility="private",
         ),
     ).model_dump()
@@ -54,7 +54,7 @@ def build_public_message(message: str) -> dict[str, object]:
         type="CHAT_UPDATE",
         data=ChatUpdatePayload(
             message=message,
-            speaker="系统",
+            speaker="\u7cfb\u7edf",
             visibility="public",
         ),
     ).model_dump()
@@ -121,6 +121,34 @@ class WebSocketGameEngine(GameEngine):
     async def _notify_thinking(self, seat_id: int, is_thinking: bool) -> None:
         await self._send_json(build_ai_thinking_message(seat_id, is_thinking))
 
+    async def _await_human_input(
+        self,
+        seat_id: int,
+        *,
+        action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_ACTION"],
+        prompt: str,
+        allowed_targets: list[int],
+    ) -> dict[str, object]:
+        if self._active_context is None:
+            return {}
+
+        player = self._active_context.players[seat_id]
+        if not isinstance(player, HumanPlayer):
+            return {}
+
+        pending_input = player.begin_input()
+        try:
+            await self._send_json(
+                build_require_input_message(
+                    action_type,
+                    prompt=prompt,
+                    allowed_targets=allowed_targets,
+                ),
+            )
+            return await pending_input
+        finally:
+            player.clear_input()
+
     async def _human_speaker(self, seat_id: int) -> str:
         if self._active_context is None:
             return await super()._human_speaker(seat_id)
@@ -129,17 +157,37 @@ class WebSocketGameEngine(GameEngine):
         if not isinstance(player, HumanPlayer):
             return await super()._human_speaker(seat_id)
 
-        pending_input = player.begin_input()
-        await self._send_json(
-            build_require_input_message(
-                "SPEAK",
-                prompt=f"轮到你发言，请以 {seat_id} 号玩家身份发言。",
-                allowed_targets=[],
-            ),
+        payload = await self._await_human_input(
+            seat_id,
+            action_type="SPEAK",
+            prompt=f"\u8f6e\u5230\u4f60\u53d1\u8a00\uff0c\u8bf7\u4ee5 {seat_id} \u53f7\u73a9\u5bb6\u8eab\u4efd\u53d1\u8a00\u3002",
+            allowed_targets=[],
         )
-        payload = await pending_input
-        player.clear_input()
-        return str(payload.get("text", "过。")).strip() or "过。"
+        return str(payload.get("text", "\u8fc7\u3002")).strip() or "\u8fc7\u3002"
+
+    async def _human_vote(
+        self,
+        seat_id: int,
+        *,
+        allowed_targets: list[int],
+    ) -> int | None:
+        if self._active_context is None:
+            return await super()._human_vote(seat_id, allowed_targets=allowed_targets)
+
+        player = self._active_context.players[seat_id]
+        if not isinstance(player, HumanPlayer):
+            return await super()._human_vote(seat_id, allowed_targets=allowed_targets)
+
+        payload = await self._await_human_input(
+            seat_id,
+            action_type="VOTE",
+            prompt="\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
+            allowed_targets=allowed_targets,
+        )
+        target = payload.get("target")
+        if isinstance(target, int) and target in set(allowed_targets):
+            return target
+        return None
 
     async def run_loop(
         self,

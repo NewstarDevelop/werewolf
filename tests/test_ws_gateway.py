@@ -28,10 +28,10 @@ def test_websocket_sends_welcome_message() -> None:
     assert message["data"]["message"] == "connected"
     assert public_message["type"] == "CHAT_UPDATE"
     assert public_message["data"]["visibility"] == "public"
-    assert public_message["data"]["message"] == "游戏开始，分配身份完毕。"
+    assert public_message["data"]["message"] == "\u6e38\u620f\u5f00\u59cb\uff0c\u5206\u914d\u8eab\u4efd\u5b8c\u6bd5\u3002"
     assert private_message["type"] == "CHAT_UPDATE"
     assert private_message["data"]["visibility"] == "private"
-    assert "身份是" in private_message["data"]["message"]
+    assert "\u8eab\u4efd\u662f" in private_message["data"]["message"]
 
 
 def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
@@ -66,8 +66,8 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
 
     async def run() -> None:
         attach_context_bridge(context, send_json)
-        context.add_public_message("天黑请闭眼。")
-        context.add_private_message(3, "你的身份是女巫。")
+        context.add_public_message("\u5929\u9ed1\u8bf7\u95ed\u773c\u3002")
+        context.add_private_message(3, "\u4f60\u7684\u8eab\u4efd\u662f\u5973\u5deb\u3002")
         await asyncio.sleep(0)
 
     asyncio.run(run())
@@ -76,9 +76,9 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
         {
             "type": "CHAT_UPDATE",
             "data": {
-                "message": "天黑请闭眼。",
+                "message": "\u5929\u9ed1\u8bf7\u95ed\u773c\u3002",
                 "seat_id": None,
-                "speaker": "系统",
+                "speaker": "\u7cfb\u7edf",
                 "visibility": "public",
             },
             "meta": {},
@@ -86,9 +86,9 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
         {
             "type": "CHAT_UPDATE",
             "data": {
-                "message": "你的身份是女巫。",
+                "message": "\u4f60\u7684\u8eab\u4efd\u662f\u5973\u5deb\u3002",
                 "seat_id": 3,
-                "speaker": "系统",
+                "speaker": "\u7cfb\u7edf",
                 "visibility": "private",
             },
             "meta": {},
@@ -130,7 +130,7 @@ def test_run_game_session_emits_game_over_payload() -> None:
             "type": "GAME_OVER",
             "data": {
                 "winning_side": "GOOD",
-                "summary": "狼人已全部出局，好人阵营获胜。",
+                "summary": "\u72fc\u4eba\u5df2\u5168\u90e8\u51fa\u5c40\uff0c\u597d\u4eba\u9635\u8425\u83b7\u80dc\u3002",
                 "revealed_roles": {
                     seat_id: player.role.value
                     for seat_id, player in sorted(setup_result.context.players.items())
@@ -191,9 +191,9 @@ def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
         try:
             task = asyncio.create_task(engine._human_speaker(1))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "SPEAK", "text": "我是预言家。"})
+            context.players[1].resolve_input({"action_type": "SPEAK", "text": "\u6211\u662f\u9884\u8a00\u5bb6\u3002"})
             result = await task
-            assert result == "我是预言家。"
+            assert result == "\u6211\u662f\u9884\u8a00\u5bb6\u3002"
         finally:
             engine._active_context = None
 
@@ -204,7 +204,7 @@ def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "SPEAK",
-                "prompt": "轮到你发言，请以 1 号玩家身份发言。",
+                "prompt": "\u8f6e\u5230\u4f60\u53d1\u8a00\uff0c\u8bf7\u4ee5 1 \u53f7\u73a9\u5bb6\u8eab\u4efd\u53d1\u8a00\u3002",
                 "allowed_targets": [],
             },
             "meta": {},
@@ -221,10 +221,46 @@ def test_resolve_human_submit_action_unlocks_pending_input() -> None:
         pending = player.begin_input()
         resolved = resolve_human_submit_action(
             setup_result,
-            {"action_type": "SPEAK", "text": "过。"},
+            {"action_type": "SPEAK", "text": "\u8fc7\u3002"},
         )
 
         assert resolved is True
-        assert await pending == {"action_type": "SPEAK", "text": "过。"}
+        assert await pending == {"action_type": "SPEAK", "text": "\u8fc7\u3002"}
 
     asyncio.run(run())
+
+
+def test_websocket_game_engine_requests_and_consumes_human_vote() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            task = asyncio.create_task(engine._human_vote(1, allowed_targets=[2, 3, 4]))
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "VOTE", "target": 3})
+            result = await task
+            assert result == 3
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "VOTE",
+                "prompt": "\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
+                "allowed_targets": [2, 3, 4],
+            },
+            "meta": {},
+        },
+    ]
