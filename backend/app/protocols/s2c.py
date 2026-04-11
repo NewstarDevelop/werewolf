@@ -21,7 +21,7 @@ class AIThinkingPayload(BaseModel):
 
 
 class RequireInputPayload(BaseModel):
-    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_ACTION"]
+    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"]
     prompt: str = Field(min_length=1)
     allowed_targets: list[int] = Field(default_factory=list)
 

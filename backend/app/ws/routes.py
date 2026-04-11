@@ -69,7 +69,7 @@ def build_ai_thinking_message(seat_id: int, is_thinking: bool) -> dict[str, obje
 
 
 def build_require_input_message(
-    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_ACTION"],
+    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
     *,
     prompt: str,
     allowed_targets: list[int],
@@ -126,7 +126,7 @@ class WebSocketGameEngine(GameEngine):
         self,
         seat_id: int,
         *,
-        action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_ACTION"],
+        action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
         prompt: str,
         allowed_targets: list[int],
     ) -> dict[str, object]:
@@ -300,6 +300,32 @@ class WebSocketGameEngine(GameEngine):
             save_candidates=save_candidates,
             poison_candidates=poison_candidates,
         )
+
+    async def _select_hunter_target(
+        self,
+        context: GameContext,
+        *,
+        hunter_seat: int,
+    ) -> int | None:
+        player = context.players[hunter_seat]
+        if not isinstance(player, HumanPlayer):
+            return await super()._select_hunter_target(context, hunter_seat=hunter_seat)
+
+        allowed_targets = [
+            seat_id
+            for seat_id, target in sorted(context.players.items())
+            if target.is_alive and seat_id != hunter_seat
+        ]
+        payload = await self._await_human_input(
+            hunter_seat,
+            action_type="HUNTER_SHOOT",
+            prompt="\u4f60\u53ef\u4ee5\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u5f00\u67aa\u3002",
+            allowed_targets=allowed_targets,
+        )
+        target = payload.get("target")
+        if isinstance(target, int) and target in set(allowed_targets):
+            return target
+        return await super()._select_hunter_target(context, hunter_seat=hunter_seat)
 
     async def run_loop(
         self,

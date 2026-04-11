@@ -66,6 +66,19 @@ def test_require_input_envelope_carries_targets() -> None:
     assert payload["data"]["allowed_targets"] == [2, 4, 6]
 
 
+def test_require_input_envelope_supports_hunter_shoot() -> None:
+    payload = RequireInputEnvelope(
+        type="REQUIRE_INPUT",
+        data=RequireInputPayload(
+            action_type="HUNTER_SHOOT",
+            prompt="请选择开枪目标",
+            allowed_targets=[2, 5],
+        ),
+    ).model_dump()
+
+    assert payload["data"]["action_type"] == "HUNTER_SHOOT"
+
+
 def test_game_over_envelope_reveals_roles() -> None:
     payload = GameOverEnvelope(
         type="GAME_OVER",

@@ -47,6 +47,25 @@ def test_pass_action_can_omit_target() -> None:
     assert payload.data == SubmitActionPayload(action_type="PASS")
 
 
+def test_hunter_shoot_requires_target() -> None:
+    payload = ClientEnvelope.model_validate(
+        {
+            "type": "SUBMIT_ACTION",
+            "data": {"action_type": "HUNTER_SHOOT", "target": 4},
+        }
+    )
+
+    assert payload.data == SubmitActionPayload(action_type="HUNTER_SHOOT", target=4)
+
+    with pytest.raises(ValidationError):
+        ClientEnvelope.model_validate(
+            {
+                "type": "SUBMIT_ACTION",
+                "data": {"action_type": "HUNTER_SHOOT"},
+            }
+        )
+
+
 def test_speak_action_rejects_empty_text() -> None:
     with pytest.raises(ValidationError):
         ClientEnvelope.model_validate(

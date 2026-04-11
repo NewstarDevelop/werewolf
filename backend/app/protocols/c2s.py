@@ -9,6 +9,7 @@ class SubmitActionPayload(BaseModel):
         "VOTE",
         "WOLF_KILL",
         "SEER_CHECK",
+        "HUNTER_SHOOT",
         "WITCH_SAVE",
         "WITCH_POISON",
         "PASS",
@@ -18,7 +19,7 @@ class SubmitActionPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_shape(self) -> "SubmitActionPayload":
-        targeted_actions = {"VOTE", "WOLF_KILL", "SEER_CHECK", "WITCH_POISON"}
+        targeted_actions = {"VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_POISON"}
         text_actions = {"SPEAK"}
 
         if self.action_type in targeted_actions and self.target is None:

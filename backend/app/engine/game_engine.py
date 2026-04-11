@@ -54,6 +54,14 @@ class GameEngine:
             return None
         return valid_targets[0]
 
+    async def _select_hunter_target(
+        self,
+        context: GameContext,
+        *,
+        hunter_seat: int,
+    ) -> int | None:
+        return self._choose_hunter_target(context, hunter_seat)
+
     def _choose_witch_poison_target(
         self,
         context: GameContext,
@@ -98,7 +106,7 @@ class GameEngine:
             poison_target = None
         return save_target, poison_target
 
-    def _handle_hunter_shot(
+    async def _handle_hunter_shot(
         self,
         context: GameContext,
         *,
@@ -106,7 +114,10 @@ class GameEngine:
         poisoned: bool = False,
     ) -> bool:
         context.phase = GamePhase.HUNTER_SHOOTING.value
-        target_seat = None if poisoned else self._choose_hunter_target(context, hunter_seat)
+        target_seat = None if poisoned else await self._select_hunter_target(
+            context,
+            hunter_seat=hunter_seat,
+        )
 
         if not poisoned and target_seat is None:
             context.add_public_message(f"{hunter_seat}号猎人死亡时场上已无可开枪目标。")
@@ -270,7 +281,7 @@ class GameEngine:
             game_context.phase = GamePhase.DAY_START.value
             announcement = announce_deaths_and_last_words(game_context)
             for hunter_seat, poisoned in dead_hunters:
-                if self._handle_hunter_shot(
+                if await self._handle_hunter_shot(
                     game_context,
                     hunter_seat=hunter_seat,
                     poisoned=poisoned,
@@ -308,7 +319,7 @@ class GameEngine:
                 voting_result.banished_seat is not None
                 and game_context.players[voting_result.banished_seat].role is Role.HUNTER
             ):
-                if self._handle_hunter_shot(
+                if await self._handle_hunter_shot(
                     game_context,
                     hunter_seat=voting_result.banished_seat,
                 ):

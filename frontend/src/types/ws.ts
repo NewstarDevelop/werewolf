@@ -27,7 +27,7 @@ export interface AIThinkingEnvelope {
 export interface RequireInputEnvelope {
   type: "REQUIRE_INPUT";
   data: {
-    action_type: "SPEAK" | "VOTE" | "WOLF_KILL" | "SEER_CHECK" | "WITCH_ACTION";
+    action_type: "SPEAK" | "VOTE" | "WOLF_KILL" | "SEER_CHECK" | "HUNTER_SHOOT" | "WITCH_ACTION";
     prompt: string;
     allowed_targets: number[];
   };
@@ -48,6 +48,7 @@ export interface SubmitActionPayload {
     | "VOTE"
     | "WOLF_KILL"
     | "SEER_CHECK"
+    | "HUNTER_SHOOT"
     | "WITCH_SAVE"
     | "WITCH_POISON"
     | "PASS";

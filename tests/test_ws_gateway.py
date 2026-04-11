@@ -430,3 +430,41 @@ def test_websocket_game_engine_requests_and_consumes_human_witch_action() -> Non
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_requests_and_consumes_human_hunter_target() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.HUNTER, is_alive=False))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.WOLF))
+    context.add_player(HumanPlayer(seat_id=3, role=Role.VILLAGER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            target_task = asyncio.create_task(engine._select_hunter_target(context, hunter_seat=1))
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "HUNTER_SHOOT", "target": 2})
+            result = await target_task
+            assert result == 2
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "HUNTER_SHOOT",
+                "prompt": "\u4f60\u53ef\u4ee5\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u5f00\u67aa\u3002",
+                "allowed_targets": [2, 3],
+            },
+            "meta": {},
+        },
+    ]
