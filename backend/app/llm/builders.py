@@ -29,6 +29,12 @@ def _context_section(view: dict[str, object], personality: str) -> str:
     )
 
 
+def _task_with_allowed_targets(task_prompt: str, allowed_targets: list[int] | None) -> str:
+    if allowed_targets is None:
+        return task_prompt
+    return f"{task_prompt}\n合法目标：{allowed_targets}"
+
+
 def build_speech_prompt(context: GameContext, *, seat_id: int) -> PromptEnvelope:
     player = context.players[seat_id]
     personality = player.personality if isinstance(player, AIPlayer) else "冷静判断"
@@ -40,23 +46,33 @@ def build_speech_prompt(context: GameContext, *, seat_id: int) -> PromptEnvelope
     )
 
 
-def build_vote_prompt(context: GameContext, *, seat_id: int) -> PromptEnvelope:
+def build_vote_prompt(
+    context: GameContext,
+    *,
+    seat_id: int,
+    allowed_targets: list[int] | None = None,
+) -> PromptEnvelope:
     player = context.players[seat_id]
     personality = player.personality if isinstance(player, AIPlayer) else "冷静判断"
     view = build_player_view(context, seat_id)
     return PromptEnvelope(
         system_prompt=f"{SYSTEM_GUARDRAILS}\n{_objective_for_role(player.role)}",
         context_prompt=_context_section(view, personality),
-        task_prompt=VOTE_TASK_TEMPLATE,
+        task_prompt=_task_with_allowed_targets(VOTE_TASK_TEMPLATE, allowed_targets),
     )
 
 
-def build_night_prompt(context: GameContext, *, seat_id: int) -> PromptEnvelope:
+def build_night_prompt(
+    context: GameContext,
+    *,
+    seat_id: int,
+    allowed_targets: list[int] | None = None,
+) -> PromptEnvelope:
     player = context.players[seat_id]
     personality = player.personality if isinstance(player, AIPlayer) else "冷静判断"
     view = build_player_view(context, seat_id)
     return PromptEnvelope(
         system_prompt=f"{SYSTEM_GUARDRAILS}\n{_objective_for_role(player.role)}",
         context_prompt=_context_section(view, personality),
-        task_prompt=NIGHT_TASK_TEMPLATE,
+        task_prompt=_task_with_allowed_targets(NIGHT_TASK_TEMPLATE, allowed_targets),
     )

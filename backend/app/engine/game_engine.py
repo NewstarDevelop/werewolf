@@ -82,7 +82,11 @@ class GameEngine:
             return self._choose_wolf_target(context)
 
         response = self._llm_client.request_targeted_action(
-            prompt=build_night_prompt(context, seat_id=alpha_wolf.seat_id),
+            prompt=build_night_prompt(
+                context,
+                seat_id=alpha_wolf.seat_id,
+                allowed_targets=valid_targets,
+            ),
             allowed_targets=valid_targets,
         )
         if response.target in set(valid_targets):
@@ -137,7 +141,11 @@ class GameEngine:
         player = context.players[seer_seat]
         if self._llm_client is not None and isinstance(player, AIPlayer):
             response = self._llm_client.request_targeted_action(
-                prompt=build_night_prompt(context, seat_id=seer_seat),
+                prompt=build_night_prompt(
+                    context,
+                    seat_id=seer_seat,
+                    allowed_targets=allowed_targets,
+                ),
                 allowed_targets=allowed_targets,
             )
             if response.target in set(allowed_targets):
@@ -156,7 +164,11 @@ class GameEngine:
         player = context.players[witch_seat]
         if self._llm_client is not None and isinstance(player, AIPlayer):
             response = self._llm_client.request_targeted_action(
-                prompt=build_night_prompt(context, seat_id=witch_seat),
+                prompt=build_night_prompt(
+                    context,
+                    seat_id=witch_seat,
+                    allowed_targets=poison_candidates,
+                ),
                 allowed_targets=poison_candidates,
             )
             if response.use_antidote and save_candidates and resources.has_antidote:
@@ -258,7 +270,11 @@ class GameEngine:
             return await self._ai_vote(seat_id, allowed_targets=allowed_targets)
 
         response = self._llm_client.request_vote(
-            prompt=build_vote_prompt(context, seat_id=seat_id),
+            prompt=build_vote_prompt(
+                context,
+                seat_id=seat_id,
+                allowed_targets=allowed_targets,
+            ),
             allowed_targets=allowed_targets,
         )
         return None if response.vote_target == 0 else response.vote_target

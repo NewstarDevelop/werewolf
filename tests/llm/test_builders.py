@@ -24,13 +24,15 @@ def test_build_speech_prompt_includes_role_goal_and_private_view() -> None:
 
 
 def test_build_vote_prompt_reuses_same_context_sections() -> None:
-    prompt = build_vote_prompt(build_context(), seat_id=2)
+    prompt = build_vote_prompt(build_context(), seat_id=2, allowed_targets=[3, 4])
 
     assert "投票阶段" in prompt.task_prompt
     assert "公开历史" in prompt.context_prompt
+    assert "[3, 4]" in prompt.task_prompt
 
 
 def test_build_night_prompt_keeps_night_task_wording() -> None:
-    prompt = build_night_prompt(build_context(), seat_id=2)
+    prompt = build_night_prompt(build_context(), seat_id=2, allowed_targets=[3, 4])
 
     assert "夜晚行动阶段" in prompt.task_prompt
+    assert "[3, 4]" in prompt.task_prompt
