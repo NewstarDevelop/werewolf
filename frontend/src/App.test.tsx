@@ -170,6 +170,30 @@ describe("App", () => {
     });
   });
 
+  it("updates multiple player seats from nightly death announcements", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "天亮了。昨夜死亡的是 4号、1号。",
+        speaker: "系统",
+        visibility: "public",
+      },
+    });
+
+    await waitFor(() => {
+      const deadSeats = Array.from(view.container.querySelectorAll(".player-card.is-dead .seat-chip")).map((node) =>
+        node.textContent,
+      );
+      expect(deadSeats).toContain("1");
+      expect(deadSeats).toContain("4");
+    });
+  });
+
   it("renders game over summary and revealed roles", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);

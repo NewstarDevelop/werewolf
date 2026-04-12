@@ -56,9 +56,15 @@ function applyIdentityMessage(players: PlayerListItem[], message: string) {
 
 function applySystemMessage(players: PlayerListItem[], message: string) {
   let nextPlayers = applyIdentityMessage(players, message);
-  const deathMatches = [...message.matchAll(/(\d+)号(?:玩家)?(?:被放逐出局|死亡)/g)];
-  if (deathMatches.length > 0) {
-    const deadSeats = new Set(deathMatches.map((match) => Number(match[1])));
+
+  const directDeathSeats = [...message.matchAll(/(\d+)号(?:玩家)?(?:被放逐出局|死亡)/g)].map((match) => Number(match[1]));
+  const nightlyDeathAnnouncement = message.match(/昨夜死亡的是\s*([^。]+)/);
+  const announcedNightSeats = nightlyDeathAnnouncement
+    ? [...nightlyDeathAnnouncement[1].matchAll(/(\d+)号/g)].map((match) => Number(match[1]))
+    : [];
+
+  const deadSeats = new Set([...directDeathSeats, ...announcedNightSeats]);
+  if (deadSeats.size > 0) {
     nextPlayers = nextPlayers.map((player) =>
       deadSeats.has(player.seatId) ? { ...player, isAlive: false, isThinking: false } : player,
     );
