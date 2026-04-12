@@ -124,7 +124,7 @@ class LocalRuleBasedProvider(LLMProvider):
         raise TypeError(f"unsupported response schema: {response_schema}")
 
 
-def build_default_llm_client() -> FallbackLLMClient:
+def build_local_llm_client() -> FallbackLLMClient:
     return FallbackLLMClient(
         client=JSONModeClient(provider=LocalRuleBasedProvider()),
     )

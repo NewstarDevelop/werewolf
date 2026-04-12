@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
@@ -10,7 +11,7 @@ from app.domain.game_context import GameContext
 from app.domain.player import HumanPlayer
 from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
-from app.llm.local_provider import build_default_llm_client
+from app.llm.factory import build_default_llm_client
 from app.protocols.c2s import ClientEnvelope
 from app.protocols.s2c import (
     AIThinkingEnvelope,
@@ -29,7 +30,11 @@ from app.ws.manager import ConnectionManager
 
 router = APIRouter()
 manager = ConnectionManager()
+logger = logging.getLogger(__name__)
 SendJson = Callable[[dict[str, object]], Awaitable[None]]
+CloseConnection = Callable[[], Awaitable[None]]
+GAME_OVER_CLOSE_CODE = 4000
+GAME_OVER_CLOSE_REASON = "game_over"
 
 
 def build_system_message(message: str) -> dict[str, object]:
@@ -112,6 +117,15 @@ def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
     context.on_private_message(
         lambda seat_id, message: loop.create_task(send_json(build_private_message(message, seat_id))),
     )
+
+
+def log_game_session_task_outcome(task: asyncio.Task[None]) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.info("game session task cancelled")
+    except Exception:
+        logger.exception("game session task failed")
 
 
 class WebSocketGameEngine(GameEngine):
@@ -345,6 +359,7 @@ async def run_game_session(
     setup_result: GameSetupResult,
     send_json: SendJson,
     *,
+    close_connection: CloseConnection | None = None,
     engine: GameEngine | None = None,
     max_rounds: int = 20,
 ) -> None:
@@ -353,9 +368,12 @@ async def run_game_session(
         context=setup_result.context,
         max_rounds=max_rounds,
     )
+    logger.info("game session completed with phase=%s", final_context.phase)
     game_over_payload = build_game_over_message(final_context)
     if game_over_payload is not None:
         await send_json(game_over_payload)
+        if close_connection is not None:
+            await close_connection()
 
 
 def resolve_human_submit_action(
@@ -373,6 +391,11 @@ async def game_socket(websocket: WebSocket) -> None:
     setup_result = setup_game()
 
     await manager.connect(websocket)
+    logger.info(
+        "websocket connected human_seat=%s active_connections=%s",
+        setup_result.human_seat_id,
+        manager.active_connections,
+    )
     attach_context_bridge(
         setup_result.context,
         lambda payload: manager.send_json(websocket, payload),
@@ -393,8 +416,13 @@ async def game_socket(websocket: WebSocket) -> None:
         run_game_session(
             setup_result,
             lambda payload: manager.send_json(websocket, payload),
+            close_connection=lambda: websocket.close(
+                code=GAME_OVER_CLOSE_CODE,
+                reason=GAME_OVER_CLOSE_REASON,
+            ),
         ),
     )
+    engine_task.add_done_callback(log_game_session_task_outcome)
 
     try:
         while True:
@@ -402,6 +430,7 @@ async def game_socket(websocket: WebSocket) -> None:
             try:
                 envelope = ClientEnvelope.model_validate(raw_message)
             except ValidationError:
+                logger.warning("invalid websocket payload received")
                 await manager.send_json(websocket, build_system_message("invalid payload"))
                 continue
 
@@ -415,7 +444,9 @@ async def game_socket(websocket: WebSocket) -> None:
                 build_system_message(f"ack:{action}"),
             )
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        logger.info("websocket disconnected by client")
     finally:
+        manager.disconnect(websocket)
+        logger.info("websocket cleanup finished active_connections=%s", manager.active_connections)
         if not engine_task.done():
             engine_task.cancel()

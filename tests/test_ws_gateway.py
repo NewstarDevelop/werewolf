@@ -1,7 +1,9 @@
 import asyncio
+import logging
 import random
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
@@ -12,6 +14,8 @@ from app.engine.night.witch_action import WitchResources
 from app.ws.routes import (
     WebSocketGameEngine,
     attach_context_bridge,
+    GAME_OVER_CLOSE_CODE,
+    log_game_session_task_outcome,
     resolve_human_submit_action,
     run_game_session,
 )
@@ -58,6 +62,61 @@ def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
     assert message["data"]["message"] == "ack:VOTE"
 
 
+def test_websocket_logs_invalid_payload_warning(monkeypatch, caplog) -> None:
+    async def idle_session(*args, **kwargs) -> None:
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr("app.ws.routes.run_game_session", idle_session)
+    caplog.set_level(logging.WARNING, logger="app.ws.routes")
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.send_json({"type": "BROKEN"})
+        message = websocket.receive_json()
+
+    assert message["type"] == "SYSTEM_MSG"
+    assert message["data"]["message"] == "invalid payload"
+    assert "invalid websocket payload received" in caplog.text
+
+
+def test_websocket_closes_after_game_over(monkeypatch) -> None:
+    async def terminal_session(setup_result, send_json, *, close_connection=None, **kwargs) -> None:
+        await send_json(
+            {
+                "type": "GAME_OVER",
+                "data": {
+                    "winning_side": "GOOD",
+                    "summary": "好人阵营获胜。",
+                    "revealed_roles": {},
+                },
+                "meta": {},
+            }
+        )
+        assert close_connection is not None
+        await close_connection()
+
+    monkeypatch.setattr("app.ws.routes.run_game_session", terminal_session)
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+
+        game_over = websocket.receive_json()
+        assert game_over["type"] == "GAME_OVER"
+
+        try:
+            websocket.receive_json()
+        except WebSocketDisconnect as exc:
+            assert exc.code == GAME_OVER_CLOSE_CODE
+        else:
+            raise AssertionError("expected websocket to close after GAME_OVER")
+
+
 def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
     forwarded_payloads: list[dict[str, object]] = []
     context = GameContext()
@@ -97,8 +156,25 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
     ]
 
 
+def test_log_game_session_task_outcome_records_failures(caplog) -> None:
+    caplog.set_level(logging.ERROR, logger="app.ws.routes")
+
+    async def boom() -> None:
+        raise RuntimeError("boom")
+
+    async def run() -> None:
+        task = asyncio.create_task(boom())
+        task.add_done_callback(log_game_session_task_outcome)
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert "game session task failed" in caplog.text
+
+
 def test_run_game_session_emits_game_over_payload() -> None:
     sent_payloads: list[dict[str, object]] = []
+    closed = False
     setup_result = setup_game(rng=random.Random(7))
 
     class StubEngine:
@@ -117,10 +193,15 @@ def test_run_game_session_emits_game_over_payload() -> None:
     async def send_json(payload: dict[str, object]) -> None:
         sent_payloads.append(payload)
 
+    async def close_connection() -> None:
+        nonlocal closed
+        closed = True
+
     asyncio.run(
         run_game_session(
             setup_result,
             send_json,
+            close_connection=close_connection,
             engine=StubEngine(),  # type: ignore[arg-type]
             max_rounds=1,
         ),
@@ -140,6 +221,7 @@ def test_run_game_session_emits_game_over_payload() -> None:
             "meta": {},
         },
     ]
+    assert closed is True
 
 
 def test_websocket_game_engine_emits_ai_thinking_payload() -> None:

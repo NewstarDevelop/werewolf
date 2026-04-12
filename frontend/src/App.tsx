@@ -3,7 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
-import { createGameSocketUrl, getReconnectDelayMs, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
+import {
+  createGameSocketUrl,
+  GAME_OVER_CLOSE_CODE,
+  getReconnectDelayMs,
+  type ConnectionPhase,
+  type ServerEnvelope,
+} from "./ws/client";
 import type { GameOverEnvelope, RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
 const statusText: Record<ConnectionPhase, string> = {
@@ -131,6 +137,15 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   return null;
 }
 
+function findLatestOutcome(entries: ChatEntry[]) {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index]?.speaker === "结算") {
+      return entries[index];
+    }
+  }
+  return null;
+}
+
 export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
   const [entries, setEntries] = useState<ChatEntry[]>([]);
@@ -139,14 +154,28 @@ export function App() {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const shouldReconnectRef = useRef(true);
   const latestMessage = entries.length > 0 ? entries[entries.length - 1].message : "等待服务端推送";
+  const humanPlayer = players.find((player) => player.isHuman) ?? null;
+  const latestOutcome = findLatestOutcome(entries);
+  const spotlightText = pendingAction
+    ? "轮到你决策"
+    : latestOutcome
+      ? "终局揭示"
+      : phase === "open"
+        ? "AI 推理进行中"
+        : "等待会话建立";
 
   useEffect(() => {
     let disposed = false;
+    shouldReconnectRef.current = true;
+    setEntries([]);
+    setPlayers(createInitialPlayers());
+    setPendingAction(null);
+    setPhase("connecting");
+
     const socket = new WebSocket(createGameSocketUrl(window.location));
     socketRef.current = socket;
-
-    setPhase("connecting");
 
     function scheduleReconnect() {
       if (disposed || reconnectTimerRef.current !== null) {
@@ -190,6 +219,7 @@ export function App() {
         setPendingAction(payload.data);
       }
       if (payload.type === "GAME_OVER") {
+        shouldReconnectRef.current = false;
         setPlayers((current) => applyGameOver(current, payload.data));
         setPendingAction(null);
       }
@@ -199,7 +229,7 @@ export function App() {
       setPhase("error");
     });
 
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       if (disposed) {
         return;
       }
@@ -209,6 +239,9 @@ export function App() {
       }
       setPhase("closed");
       setPendingAction(null);
+      if (event?.code === GAME_OVER_CLOSE_CODE || !shouldReconnectRef.current) {
+        return;
+      }
       scheduleReconnect();
     });
 
@@ -242,26 +275,67 @@ export function App() {
 
   return (
     <main className="app-shell" data-connection-phase={phase}>
-      <section className="hero">
-        <p className="eyebrow">9 人局 AI 狼人杀</p>
-        <h1>工程骨架已启动</h1>
-        <p className="summary">
-          当前阶段先完成前后端骨架、通信入口与基础回归验证，再逐步接入状态机和 UI 组件。
-        </p>
-        <dl className="status-board">
-          <div>
-            <dt>连接状态</dt>
-            <dd>{statusText[phase]}</dd>
+      <div className="app-frame">
+        <header className="status-shell">
+          <div className="hero-copy">
+            <p className="eyebrow">Stage Of Intrigue</p>
+            <h1>狼人杀对局面板</h1>
+            <p className="summary">
+              这里会持续同步你的身份、对局日志和可执行操作；如果会话重建，界面会自动清空上一局的残留状态。
+            </p>
           </div>
-          <div>
-            <dt>最近系统消息</dt>
-            <dd>{latestMessage}</dd>
-          </div>
-        </dl>
-        <PlayerList players={players} />
-        <ChatHistory entries={entries} />
-        <ActionPanel request={pendingAction} onSubmit={handleSubmitAction} />
-      </section>
+          <dl className="status-board">
+            <div className="status-card">
+              <dt>连接状态</dt>
+              <dd>{statusText[phase]}</dd>
+            </div>
+            <div className="status-card">
+              <dt>最近系统消息</dt>
+              <dd className="status-message">{latestMessage}</dd>
+            </div>
+            <div className="status-card status-card--accent">
+              <dt>当前节奏</dt>
+              <dd>{spotlightText}</dd>
+            </div>
+          </dl>
+        </header>
+
+        <div className="app-grid">
+          <aside className="board-column">
+            <section className="identity-card" aria-label="你的身份摘要">
+              <p className="identity-kicker">你的席位</p>
+              <strong>{humanPlayer ? `${humanPlayer.seatId}号玩家` : "等待同步"}</strong>
+              <p>{humanPlayer?.roleLabel ?? "身份待同步"}</p>
+              <span className={`identity-state ${humanPlayer?.isAlive === false ? "is-dead" : "is-alive"}`}>
+                {humanPlayer?.isAlive === false ? "已出局" : "仍在局内"}
+              </span>
+            </section>
+            <PlayerList players={players} />
+          </aside>
+
+          <section className="log-column">
+            <section
+              className={`result-banner ${latestOutcome ? "" : "is-muted"}`}
+              aria-label={latestOutcome ? "终局提示" : "战局提示"}
+            >
+              <p className="result-banner__kicker">{latestOutcome ? "Curtain Call" : "Live Narrative"}</p>
+              <strong>{latestOutcome ? latestOutcome.message : spotlightText}</strong>
+              <span>
+                {latestOutcome
+                  ? "身份已经揭示，连接将停留在终局态。"
+                  : pendingAction
+                    ? "行动通道已经解锁，请在右侧面板完成本轮指令。"
+                    : "系统会持续把最新播报、私信和公开发言写入中央信息流。"}
+              </span>
+            </section>
+            <ChatHistory entries={entries} />
+          </section>
+
+          <aside className="action-column">
+            <ActionPanel key={connectionAttempt} request={pendingAction} onSubmit={handleSubmitAction} />
+          </aside>
+        </div>
+      </div>
     </main>
   );
 }

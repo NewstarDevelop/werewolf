@@ -2,12 +2,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { RECONNECT_DELAY_MS, createGameSocketUrl } from "./ws/client";
+import { GAME_OVER_CLOSE_CODE, RECONNECT_DELAY_MS, createGameSocketUrl } from "./ws/client";
+
+type MockSocketEvent = MessageEvent | CloseEvent;
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
 
-  listeners = new Map<string, Array<(event?: MessageEvent) => void>>();
+  listeners = new Map<string, Array<(event?: MockSocketEvent) => void>>();
   sentPayloads: string[] = [];
   isClosed = false;
 
@@ -15,7 +17,7 @@ class MockWebSocket {
     MockWebSocket.instances.push(this);
   }
 
-  addEventListener(type: string, handler: (event?: MessageEvent) => void) {
+  addEventListener(type: string, handler: (event?: MockSocketEvent) => void) {
     const handlers = this.listeners.get(type) ?? [];
     handlers.push(handler);
     this.listeners.set(type, handlers);
@@ -36,7 +38,11 @@ class MockWebSocket {
 
   emit(type: string, data?: unknown) {
     const handlers = this.listeners.get(type) ?? [];
-    const event = data === undefined ? undefined : ({ data: JSON.stringify(data) } as MessageEvent);
+    const event = data === undefined
+      ? undefined
+      : type === "close"
+        ? (data as CloseEvent)
+        : ({ data: JSON.stringify(data) } as MessageEvent);
     handlers.forEach((handler) => handler(event));
   }
 }
@@ -52,7 +58,7 @@ describe("App", () => {
 
     const view = render(<App />);
 
-    expect(view.getByRole("heading", { name: "工程骨架已启动" })).toBeInTheDocument();
+    expect(view.getByRole("heading", { name: "狼人杀对局面板" })).toBeInTheDocument();
     expect(view.getByLabelText("玩家状态列表").children).toHaveLength(9);
     expect(MockWebSocket.instances[0]?.url).toContain("/ws/game");
   });
@@ -114,6 +120,77 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
 
       expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not reconnect after a terminal game over close", async () => {
+    MockWebSocket.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("WebSocket", MockWebSocket);
+
+      render(<App />);
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      act(() => {
+        MockWebSocket.instances[0]?.emit("message", {
+          type: "GAME_OVER",
+          data: {
+            winning_side: "GOOD",
+            summary: "game over",
+            revealed_roles: {
+              1: "SEER",
+            },
+          },
+        });
+        MockWebSocket.instances[0]?.emit("close", { code: GAME_OVER_CLOSE_CODE } as CloseEvent);
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears prior session state before reconnecting", async () => {
+    MockWebSocket.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("WebSocket", MockWebSocket);
+
+      const view = render(<App />);
+
+      act(() => {
+        MockWebSocket.instances[0]?.emit("message", {
+          type: "SYSTEM_MSG",
+          data: { message: "old marker" },
+        });
+        MockWebSocket.instances[0]?.emit("message", {
+          type: "AI_THINKING",
+          data: { seat_id: 3, is_thinking: true },
+        });
+      });
+
+      expect(screen.getAllByText("old marker")).toHaveLength(2);
+      expect(view.container.querySelector(".player-card.is-thinking")).not.toBeNull();
+
+      act(() => {
+        MockWebSocket.instances[0]?.emit("close");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(screen.queryAllByText("old marker")).toHaveLength(0);
+      expect(view.container.querySelector(".player-card.is-thinking")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

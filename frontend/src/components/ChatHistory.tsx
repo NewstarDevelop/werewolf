@@ -27,18 +27,21 @@ export function ChatHistory({ entries }: ChatHistoryProps) {
   return (
     <section className="chat-panel" aria-labelledby="chat-panel-title">
       <div className="panel-header">
-        <p className="panel-kicker">Log Feed</p>
         <div>
+          <p className="panel-kicker">Narrative</p>
           <h2 id="chat-panel-title">对局日志</h2>
           <p className="panel-copy">区分系统播报、私人信息和玩家发言，保持底部追踪。</p>
         </div>
       </div>
       <ol className="chat-feed" aria-label="对局日志列表">
-        {entries.map((entry) => (
+        {entries.map((entry, index) => (
           <li key={entry.id} className={`chat-row is-${entry.kind}`}>
             <div className="chat-meta">
-              <span className="chat-tag">{tagText[entry.kind]}</span>
-              <strong>{entry.speaker ?? "系统播报"}</strong>
+              <div className="chat-badges">
+                <span className="chat-tag">{tagText[entry.kind]}</span>
+                <strong className="chat-speaker">{entry.speaker ?? "系统播报"}</strong>
+              </div>
+              <span className="chat-index">#{index + 1}</span>
             </div>
             <p>{entry.message}</p>
           </li>

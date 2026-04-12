@@ -1,4 +1,4 @@
-from app.llm.local_provider import LocalRuleBasedProvider, build_default_llm_client
+from app.llm.local_provider import LocalRuleBasedProvider, build_local_llm_client
 from app.llm.schemas import PromptEnvelope, SpeechResponse, TargetedActionResponse, VoteResponse
 
 
@@ -66,8 +66,8 @@ def test_local_provider_prefers_antidote_when_night_has_death() -> None:
     assert payload["use_poison"] is False
 
 
-def test_build_default_llm_client_returns_callable_fallback_client() -> None:
-    client = build_default_llm_client()
+def test_build_local_llm_client_returns_callable_fallback_client() -> None:
+    client = build_local_llm_client()
 
     response = client.request_vote(
         prompt=build_prompt(),
