@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
-import { createGameSocketUrl, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
+import { createGameSocketUrl, getReconnectDelayMs, type ConnectionPhase, type ServerEnvelope } from "./ws/client";
 import type { GameOverEnvelope, RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
 const statusText: Record<ConnectionPhase, string> = {
@@ -136,14 +136,31 @@ export function App() {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
   const [pendingAction, setPendingAction] = useState<RequireInputEnvelope["data"] | null>(null);
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
   const latestMessage = entries.length > 0 ? entries[entries.length - 1].message : "等待服务端推送";
 
   useEffect(() => {
+    let disposed = false;
     const socket = new WebSocket(createGameSocketUrl(window.location));
     socketRef.current = socket;
 
     setPhase("connecting");
+
+    function scheduleReconnect() {
+      if (disposed || reconnectTimerRef.current !== null) {
+        return;
+      }
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        if (disposed) {
+          return;
+        }
+        setConnectionAttempt((current) => current + 1);
+      }, getReconnectDelayMs());
+    }
 
     socket.addEventListener("open", () => {
       setPhase("open");
@@ -183,15 +200,30 @@ export function App() {
     });
 
     socket.addEventListener("close", () => {
+      if (disposed) {
+        return;
+      }
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
       setPhase("closed");
       setPendingAction(null);
+      scheduleReconnect();
     });
 
     return () => {
+      disposed = true;
       socket.close();
-      socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
-  }, []);
+  }, [connectionAttempt]);
 
   function handleSubmitAction(payload: SubmitActionPayload) {
     const socket = socketRef.current;
