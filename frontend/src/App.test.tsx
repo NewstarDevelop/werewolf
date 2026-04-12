@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -114,6 +114,40 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
 
       expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("updates the connection phase across reconnect attempts", async () => {
+    MockWebSocket.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("WebSocket", MockWebSocket);
+
+      const view = render(<App />);
+      expect(view.container.querySelector("[data-connection-phase=\"connecting\"]")).not.toBeNull();
+
+      act(() => {
+        MockWebSocket.instances[0]?.emit("open");
+      });
+      expect(view.container.querySelector("[data-connection-phase=\"open\"]")).not.toBeNull();
+
+      act(() => {
+        MockWebSocket.instances[0]?.emit("close");
+      });
+      expect(view.container.querySelector("[data-connection-phase=\"closed\"]")).not.toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+      });
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(view.container.querySelector("[data-connection-phase=\"connecting\"]")).not.toBeNull();
+
+      act(() => {
+        MockWebSocket.instances[1]?.emit("open");
+      });
+      expect(view.container.querySelector("[data-connection-phase=\"open\"]")).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }

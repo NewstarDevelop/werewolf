@@ -241,7 +241,7 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-connection-phase={phase}>
       <section className="hero">
         <p className="eyebrow">9 人局 AI 狼人杀</p>
         <h1>工程骨架已启动</h1>
