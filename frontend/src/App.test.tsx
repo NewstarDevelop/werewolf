@@ -243,6 +243,38 @@ describe("App", () => {
     });
   });
 
+  it("clears thinking state when the game is over", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+    const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    socket?.emit("message", {
+      type: "AI_THINKING",
+      data: { seat_id: 3, is_thinking: true },
+    });
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".player-card.is-thinking")).not.toBeNull();
+    });
+
+    socket?.emit("message", {
+      type: "GAME_OVER",
+      data: {
+        winning_side: "GOOD",
+        summary: "好人阵营获胜。",
+        revealed_roles: {
+          3: "WOLF",
+        },
+      },
+    });
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".player-card.is-thinking")).toBeNull();
+    });
+  });
+
   it("unlocks action panel on require input and relocks after submit", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);

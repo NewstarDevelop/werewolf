@@ -82,6 +82,7 @@ function applyPublicChatMessage(players: PlayerListItem[], message: string) {
 function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
   return players.map((player) => ({
     ...player,
+    isThinking: false,
     roleLabel: payload.revealed_roles[player.seatId]
       ? (roleText[payload.revealed_roles[player.seatId]] ?? payload.revealed_roles[player.seatId])
       : player.roleLabel,
