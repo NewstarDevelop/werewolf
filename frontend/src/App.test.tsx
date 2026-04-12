@@ -9,6 +9,7 @@ class MockWebSocket {
 
   listeners = new Map<string, Array<(event?: MessageEvent) => void>>();
   sentPayloads: string[] = [];
+  isClosed = false;
 
   constructor(public readonly url: string) {
     MockWebSocket.instances.push(this);
@@ -21,6 +22,11 @@ class MockWebSocket {
   }
 
   close() {
+    if (this.isClosed) {
+      return undefined;
+    }
+    this.isClosed = true;
+    this.emit("close");
     return undefined;
   }
 
@@ -90,6 +96,24 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
 
       expect(MockWebSocket.instances).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not reconnect after the app unmounts", async () => {
+    MockWebSocket.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("WebSocket", MockWebSocket);
+
+      const view = render(<App />);
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      view.unmount();
+      await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+
+      expect(MockWebSocket.instances).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
