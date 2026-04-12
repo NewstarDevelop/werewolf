@@ -270,4 +270,31 @@ describe("App", () => {
     expect(socket?.sentPayloads[0]).toContain("\"target\":4");
     expect(within(view.container).getByText("等待中")).toBeInTheDocument();
   });
+  it("submits hunter shoot actions through the app websocket bridge", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+    const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    socket?.emit("message", {
+      type: "REQUIRE_INPUT",
+      data: {
+        action_type: "HUNTER_SHOOT",
+        prompt: "请选择开枪目标",
+        allowed_targets: [2, 5],
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByText("请选择开枪目标")).toBeInTheDocument();
+    });
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+
+    expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"HUNTER_SHOOT\"");
+    expect(socket?.sentPayloads[0]).toContain("\"target\":5");
+    expect(view.container.querySelector(".action-idle")).not.toBeNull();
+  });
 });
