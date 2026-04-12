@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { createGameSocketUrl } from "./ws/client";
+import { RECONNECT_DELAY_MS, createGameSocketUrl } from "./ws/client";
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -74,6 +74,25 @@ describe("App", () => {
     );
 
     expect(url).toBe("ws://localhost:8000/ws/game");
+  });
+
+  it("reconnects after the websocket closes", async () => {
+    MockWebSocket.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("WebSocket", MockWebSocket);
+
+      render(<App />);
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      MockWebSocket.instances[0]?.emit("close");
+      await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+
+      expect(MockWebSocket.instances).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders structured chat entries from websocket messages", async () => {
