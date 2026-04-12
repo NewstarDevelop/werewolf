@@ -90,13 +90,23 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   }
 
   if (payload.type === "CHAT_UPDATE") {
+    const publicSpeechMatch = payload.data.visibility === "public"
+      ? payload.data.message.match(/^(\d+)号发言[:：]/)
+      : null;
+
     return {
       id: `chat-${crypto.randomUUID()}`,
-      kind: payload.data.visibility === "private" ? "private" : "speech",
+      kind: payload.data.visibility === "private"
+        ? "private"
+        : publicSpeechMatch
+          ? "speech"
+          : "system",
       message: payload.data.message,
       speaker: payload.data.visibility === "private"
         ? payload.data.speaker ?? "你的视角"
-        : payload.data.speaker ?? (payload.data.seat_id ? `${payload.data.seat_id}号玩家` : "玩家发言"),
+        : publicSpeechMatch
+          ? `${publicSpeechMatch[1]}号玩家`
+          : payload.data.speaker ?? "系统播报",
     };
   }
 

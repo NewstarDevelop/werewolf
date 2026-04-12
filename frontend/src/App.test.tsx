@@ -98,6 +98,37 @@ describe("App", () => {
     });
   });
 
+  it("classifies public chat updates as system broadcasts or speeches", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+    const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    socket?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "天黑请闭眼。",
+        speaker: "系统",
+        visibility: "public",
+      },
+    });
+    socket?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "3号发言：我先听后置位。",
+        speaker: "系统",
+        visibility: "public",
+      },
+    });
+
+    await waitFor(() => {
+      const rows = Array.from(view.container.querySelectorAll(".chat-row"));
+      expect(rows.some((row) => row.classList.contains("is-system") && row.textContent?.includes("天黑请闭眼。"))).toBe(true);
+      expect(rows.some((row) => row.classList.contains("is-speech") && row.textContent?.includes("3号玩家") && row.textContent?.includes("3号发言：我先听后置位。"))).toBe(true);
+    });
+  });
+
   it("syncs the human seat and role from private identity messages", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
