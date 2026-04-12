@@ -194,6 +194,29 @@ describe("App", () => {
     });
   });
 
+  it("updates player alive state from hunter shot logs", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "1号猎人开枪带走了2号玩家。",
+        speaker: "系统",
+        visibility: "public",
+      },
+    });
+
+    await waitFor(() => {
+      const deadSeats = Array.from(view.container.querySelectorAll(".player-card.is-dead .seat-chip")).map((node) =>
+        node.textContent,
+      );
+      expect(deadSeats).toContain("2");
+    });
+  });
+
   it("renders game over summary and revealed roles", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);

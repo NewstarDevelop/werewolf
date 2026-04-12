@@ -62,8 +62,10 @@ function applySystemMessage(players: PlayerListItem[], message: string) {
   const announcedNightSeats = nightlyDeathAnnouncement
     ? [...nightlyDeathAnnouncement[1].matchAll(/(\d+)号/g)].map((match) => Number(match[1]))
     : [];
+  const hunterShotSeat = message.match(/猎人开枪带走了\s*(\d+)号玩家/);
+  const hunterShotDeaths = hunterShotSeat ? [Number(hunterShotSeat[1])] : [];
 
-  const deadSeats = new Set([...directDeathSeats, ...announcedNightSeats]);
+  const deadSeats = new Set([...directDeathSeats, ...announcedNightSeats, ...hunterShotDeaths]);
   if (deadSeats.size > 0) {
     nextPlayers = nextPlayers.map((player) =>
       deadSeats.has(player.seatId) ? { ...player, isAlive: false, isThinking: false } : player,
