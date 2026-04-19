@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from app.llm.client import JSONModeClient
+from app.llm.client import JSONModeClient, ProviderRequestError
 from app.llm.fallback import FallbackLLMClient
 from app.llm.schemas import PromptEnvelope
 
@@ -45,9 +45,28 @@ def test_timeout_then_retry_returns_successful_speech() -> None:
 
     response = client.request_speech(prompt=build_prompt())
 
-    assert response.speech_text.startswith("我先")
+    assert response.speech_text.startswith("我先保留")
     assert len(provider.prompts) == 2
-    assert "响应超时" in provider.prompts[1].task_prompt
+    assert provider.prompts[1].task_prompt == provider.prompts[0].task_prompt
+
+
+def test_retryable_provider_error_retries_without_mutating_prompt() -> None:
+    provider = ScriptedProvider(
+        [
+            ProviderRequestError("server error", status_code=500, retryable=True),
+            {
+                "inner_thought": "第二次请求成功。",
+                "speech_text": "我先继续听后置位怎么聊。",
+            },
+        ]
+    )
+    client = FallbackLLMClient(client=JSONModeClient(provider=provider))
+
+    response = client.request_speech(prompt=build_prompt())
+
+    assert response.speech_text == "我先继续听后置位怎么聊。"
+    assert len(provider.prompts) == 2
+    assert provider.prompts[1].task_prompt == provider.prompts[0].task_prompt
 
 
 def test_invalid_json_falls_back_to_default_speech() -> None:
@@ -92,7 +111,7 @@ def test_illegal_targeted_action_falls_back_to_no_action() -> None:
     provider = ScriptedProvider(
         [
             {
-                "inner_thought": "我想毒 9 号。",
+                "inner_thought": "我要毒 9 号。",
                 "target": 9,
                 "use_poison": True,
             },

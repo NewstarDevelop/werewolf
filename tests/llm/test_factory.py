@@ -8,6 +8,10 @@ def clear_openai_env(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("STITCH_API_KEY", raising=False)
+    monkeypatch.delenv("STITCH_MODEL", raising=False)
+    monkeypatch.delenv("STITCH_BASE_URL", raising=False)
+    monkeypatch.delenv("STITCH_TIMEOUT_SECONDS", raising=False)
 
 
 def test_build_llm_provider_from_env_defaults_to_local_provider(monkeypatch) -> None:

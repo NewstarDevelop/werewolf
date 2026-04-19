@@ -125,7 +125,7 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
         forwarded_payloads.append(payload)
 
     async def run() -> None:
-        attach_context_bridge(context, send_json)
+        attach_context_bridge(context, send_json, viewer_seat_id=3)
         context.add_public_message("\u5929\u9ed1\u8bf7\u95ed\u773c\u3002")
         context.add_private_message(3, "\u4f60\u7684\u8eab\u4efd\u662f\u5973\u5deb\u3002")
         await asyncio.sleep(0)
@@ -154,6 +154,23 @@ def test_attach_context_bridge_forwards_public_and_private_messages() -> None:
             "meta": {},
         },
     ]
+
+
+def test_attach_context_bridge_filters_private_messages_for_other_seats() -> None:
+    forwarded_payloads: list[dict[str, object]] = []
+    context = GameContext()
+
+    async def send_json(payload: dict[str, object]) -> None:
+        forwarded_payloads.append(payload)
+
+    async def run() -> None:
+        attach_context_bridge(context, send_json, viewer_seat_id=1)
+        context.add_private_message(3, "\u72fc\u4eba\u5df2\u9009\u62e9\u76ee\u6807\u3002")
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert forwarded_payloads == []
 
 
 def test_log_game_session_task_outcome_records_failures(caplog) -> None:
@@ -289,7 +306,7 @@ def test_websocket_game_engine_run_loop_emits_local_llm_speech() -> None:
         sent_payloads.append(payload)
 
     async def run() -> None:
-        attach_context_bridge(context, send_json)
+        attach_context_bridge(context, send_json, viewer_seat_id=1)
         engine = WebSocketGameEngine(send_json=send_json)
         await engine.run_loop(context=context, max_rounds=1)
 

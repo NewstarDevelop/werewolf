@@ -19,6 +19,21 @@ class JSONModeError(ValueError):
     """Raised when a provider response cannot be consumed as strict JSON."""
 
 
+class ProviderRequestError(JSONModeError):
+    """Raised when a provider request fails before a valid payload is returned."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool = True,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retryable = retryable
+
+
 class LLMProvider(Protocol):
     def complete(
         self,

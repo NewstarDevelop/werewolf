@@ -108,14 +108,23 @@ def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     ).model_dump()
 
 
-def attach_context_bridge(context: GameContext, send_json: SendJson) -> None:
+def attach_context_bridge(
+    context: GameContext,
+    send_json: SendJson,
+    *,
+    viewer_seat_id: int,
+) -> None:
     loop = asyncio.get_running_loop()
 
     context.on_public_message(
         lambda message: loop.create_task(send_json(build_public_message(message))),
     )
     context.on_private_message(
-        lambda seat_id, message: loop.create_task(send_json(build_private_message(message, seat_id))),
+        lambda seat_id, message: (
+            loop.create_task(send_json(build_private_message(message, seat_id)))
+            if seat_id == viewer_seat_id
+            else None
+        ),
     )
 
 
@@ -399,6 +408,7 @@ async def game_socket(websocket: WebSocket) -> None:
     attach_context_bridge(
         setup_result.context,
         lambda payload: manager.send_json(websocket, payload),
+        viewer_seat_id=setup_result.human_seat_id,
     )
     await manager.send_json(websocket, build_system_message("connected"))
     await manager.send_json(

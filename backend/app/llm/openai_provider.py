@@ -3,16 +3,22 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+import logging
 
 import httpx
 from pydantic import BaseModel
 
-from app.llm.client import JSONModeError, LLMProvider
+from app.llm.client import JSONModeError, LLMProvider, ProviderRequestError
 from app.llm.schemas import PromptEnvelope
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 30.0
 _JSON_BLOCK_PATTERN = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+_API_KEY_ENV_VARS = ("OPENAI_API_KEY", "STITCH_API_KEY")
+_MODEL_ENV_VARS = ("OPENAI_MODEL", "STITCH_MODEL")
+_BASE_URL_ENV_VARS = ("OPENAI_BASE_URL", "STITCH_BASE_URL")
+_TIMEOUT_ENV_VARS = ("OPENAI_TIMEOUT_SECONDS", "STITCH_TIMEOUT_SECONDS")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,6 +50,8 @@ class OpenAICompatibleProvider(LLMProvider):
         request_body = {
             "model": self.settings.model,
             "messages": _build_messages(prompt=prompt, response_schema=response_schema),
+            "response_format": {"type": "json_object"},
+            "stream": False,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.api_key}",
@@ -55,20 +63,37 @@ class OpenAICompatibleProvider(LLMProvider):
                 timeout=self.settings.timeout_seconds,
                 transport=self.transport,
             ) as client:
-                response = client.post(
-                    self.settings.chat_completions_url,
+                response = _post_chat_completion_with_compatibility_fallback(
+                    client,
+                    url=self.settings.chat_completions_url,
                     headers=headers,
-                    json=request_body,
+                    request_body=request_body,
                 )
-                response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise TimeoutError("llm provider request timed out") from exc
+        except httpx.HTTPStatusError as exc:
+            body_preview = exc.response.text[:500]
+            logger.warning(
+                "llm provider http error status=%s body_preview=%r",
+                exc.response.status_code,
+                body_preview,
+            )
+            raise ProviderRequestError(
+                "llm provider request failed",
+                status_code=exc.response.status_code,
+                retryable=_is_retryable_status_code(exc.response.status_code),
+            ) from exc
         except httpx.HTTPError as exc:
-            raise JSONModeError("llm provider request failed") from exc
+            logger.warning("llm provider transport error type=%s message=%s", type(exc).__name__, exc)
+            raise ProviderRequestError("llm provider request failed") from exc
 
         try:
             payload = response.json()
         except json.JSONDecodeError as exc:
+            logger.warning(
+                "llm provider returned non-json response body preview=%r",
+                response.text[:500],
+            )
             raise JSONModeError("llm provider response is not valid JSON") from exc
 
         content = _extract_message_content(payload)
@@ -76,19 +101,19 @@ class OpenAICompatibleProvider(LLMProvider):
 
 
 def load_openai_compatible_settings_from_env() -> OpenAICompatibleSettings | None:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    model = os.getenv("OPENAI_MODEL", "").strip()
-    base_url = os.getenv("OPENAI_BASE_URL", "").strip()
-    timeout_value = os.getenv("OPENAI_TIMEOUT_SECONDS", "").strip()
+    api_key = _read_env_value(*_API_KEY_ENV_VARS)
+    model = _read_env_value(*_MODEL_ENV_VARS)
+    base_url = _read_env_value(*_BASE_URL_ENV_VARS)
+    timeout_value = _read_env_value(*_TIMEOUT_ENV_VARS)
 
     if not any((api_key, model, base_url, timeout_value)):
         return None
 
     missing_variables: list[str] = []
     if not api_key:
-        missing_variables.append("OPENAI_API_KEY")
+        missing_variables.append(_format_env_aliases(*_API_KEY_ENV_VARS))
     if not model:
-        missing_variables.append("OPENAI_MODEL")
+        missing_variables.append(_format_env_aliases(*_MODEL_ENV_VARS))
     if missing_variables:
         missing_names = ", ".join(missing_variables)
         raise ValueError(f"missing required environment variables: {missing_names}")
@@ -98,9 +123,13 @@ def load_openai_compatible_settings_from_env() -> OpenAICompatibleSettings | Non
         try:
             timeout_seconds = float(timeout_value)
         except ValueError as exc:
-            raise ValueError("OPENAI_TIMEOUT_SECONDS must be a number") from exc
+            raise ValueError(
+                f"{_format_env_aliases(*_TIMEOUT_ENV_VARS)} must be a number",
+            ) from exc
         if timeout_seconds <= 0:
-            raise ValueError("OPENAI_TIMEOUT_SECONDS must be greater than 0")
+            raise ValueError(
+                f"{_format_env_aliases(*_TIMEOUT_ENV_VARS)} must be greater than 0",
+            )
 
     return OpenAICompatibleSettings(
         api_key=api_key,
@@ -108,6 +137,18 @@ def load_openai_compatible_settings_from_env() -> OpenAICompatibleSettings | Non
         base_url=base_url or DEFAULT_OPENAI_BASE_URL,
         timeout_seconds=timeout_seconds,
     )
+
+
+def _read_env_value(*names: str) -> str:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _format_env_aliases(*names: str) -> str:
+    return " or ".join(names)
 
 
 def _build_messages(
@@ -196,4 +237,75 @@ def _extract_json_payload(content: str) -> dict[str, object]:
         if isinstance(payload, dict):
             return payload
 
+    logger.warning(
+        "llm provider message content is not valid json preview=%r",
+        content[:500],
+    )
     raise JSONModeError("llm provider content is not a valid JSON object")
+
+
+def _post_chat_completion_with_compatibility_fallback(
+    client: httpx.Client,
+    *,
+    url: str,
+    headers: Mapping[str, str],
+    request_body: dict[str, object],
+) -> httpx.Response:
+    try:
+        response = client.post(url, headers=headers, json=request_body)
+        response.raise_for_status()
+        return response
+    except httpx.HTTPStatusError as exc:
+        if not _should_retry_without_response_format(exc.response, request_body):
+            raise
+
+        retry_body = dict(request_body)
+        retry_body.pop("response_format", None)
+        logger.warning(
+            "openai-compatible provider rejected response_format, retrying without it status=%s",
+            exc.response.status_code,
+        )
+        retry_response = client.post(url, headers=headers, json=retry_body)
+        retry_response.raise_for_status()
+        return retry_response
+
+
+def _should_retry_without_response_format(
+    response: httpx.Response,
+    request_body: Mapping[str, object],
+) -> bool:
+    if "response_format" not in request_body:
+        return False
+    if response.status_code not in {400, 404, 422}:
+        return False
+
+    response_text = ""
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        response_text = response.text
+    else:
+        if isinstance(payload, dict):
+            error_payload = payload.get("error")
+            if isinstance(error_payload, dict):
+                response_text = str(error_payload.get("message", ""))
+            else:
+                response_text = json.dumps(payload, ensure_ascii=False)
+        else:
+            response_text = json.dumps(payload, ensure_ascii=False)
+
+    normalized_text = response_text.lower()
+    return (
+        "response_format" in normalized_text
+        or "json_object" in normalized_text
+        or "json mode" in normalized_text
+    ) and (
+        "unsupported" in normalized_text
+        or "unknown" in normalized_text
+        or "invalid" in normalized_text
+        or "not support" in normalized_text
+    )
+
+
+def _is_retryable_status_code(status_code: int) -> bool:
+    return status_code in {408, 409, 425, 429, 500, 502, 503, 504}
