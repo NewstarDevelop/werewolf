@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { getIdleCopy, submitActionCopy } from "./copy";
 import { GAME_OVER_CLOSE_CODE, RECONNECT_DELAY_MS, createGameSocketUrl } from "./ws/client";
 
 type MockSocketEvent = MessageEvent | CloseEvent;
@@ -75,7 +76,7 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("3号状态")).toHaveTextContent("思考中");
+      expect(within(view.container).getByLabelText("3号状态")).toHaveTextContent("推演中");
     });
   });
 
@@ -177,7 +178,7 @@ describe("App", () => {
         });
       });
 
-      expect(screen.getAllByText("old marker")).toHaveLength(2);
+      expect(screen.getAllByText("old marker")).toHaveLength(1);
       expect(view.container.querySelector(".player-card.is-thinking")).not.toBeNull();
 
       act(() => {
@@ -248,7 +249,7 @@ describe("App", () => {
     await waitFor(() => {
       const logList = within(view.container).getByLabelText("对局日志列表");
       expect(within(logList).getByText("你的查验结果是：5号是狼人。")).toBeInTheDocument();
-      expect(within(logList).getByText("私信")).toBeInTheDocument();
+      expect(within(logList).getByText("私见")).toBeInTheDocument();
     });
   });
 
@@ -300,7 +301,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 预言家");
-      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("AI 玩家");
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("局外人");
     });
   });
 
@@ -450,11 +451,15 @@ describe("App", () => {
     });
 
     fireEvent.click(within(view.container).getByRole("button", { name: "4号" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+    fireEvent.click(
+      within(view.container).getByRole("button", {
+        name: submitActionCopy.VOTE.submitLabel,
+      }),
+    );
 
     expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"VOTE\"");
     expect(socket?.sentPayloads[0]).toContain("\"target\":4");
-    expect(within(view.container).getByText("等待中")).toBeInTheDocument();
+    expect(within(view.container).getByText(getIdleCopy().heading)).toBeInTheDocument();
   });
   it("submits hunter shoot actions through the app websocket bridge", async () => {
     MockWebSocket.instances = [];
@@ -477,7 +482,18 @@ describe("App", () => {
     });
 
     fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "确认提交" }));
+    // HUNTER_SHOOT requires two-step confirm.
+    fireEvent.click(
+      within(view.container).getByRole("button", {
+        name: submitActionCopy.HUNTER_SHOOT.submitLabel,
+      }),
+    );
+    expect(socket?.sentPayloads).toHaveLength(0);
+    fireEvent.click(
+      within(view.container).getByRole("button", {
+        name: `再按一次 · ${submitActionCopy.HUNTER_SHOOT.submitLabel}`,
+      }),
+    );
 
     expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"HUNTER_SHOOT\"");
     expect(socket?.sentPayloads[0]).toContain("\"target\":5");

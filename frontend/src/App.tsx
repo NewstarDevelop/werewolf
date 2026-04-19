@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
 import { PlayerList, type PlayerListItem } from "./components/PlayerList";
+import { RoleGuide } from "./components/RoleGuide";
+import {
+  connectionPhaseCopy,
+  formatSeat,
+  identityStateCopy,
+  narratorSpeaker,
+  toRoleLabel,
+} from "./copy";
 import {
   createGameSocketUrl,
   GAME_OVER_CLOSE_CODE,
@@ -12,28 +20,12 @@ import {
 } from "./ws/client";
 import type { GameOverEnvelope, RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
-const statusText: Record<ConnectionPhase, string> = {
-  idle: "尚未连接",
-  connecting: "连接中",
-  open: "已连接",
-  closed: "已断开",
-  error: "连接异常",
-};
-
-const roleText: Record<string, string> = {
-  VILLAGER: "平民",
-  WOLF: "狼人",
-  SEER: "预言家",
-  WITCH: "女巫",
-  HUNTER: "猎人",
-};
-
 function createInitialPlayers(): PlayerListItem[] {
   return Array.from({ length: 9 }, (_, index) => ({
     seatId: index + 1,
     isAlive: true,
     isHuman: index === 0,
-    roleLabel: index === 0 ? "身份待同步" : undefined,
+    roleLabel: index === 0 ? identityStateCopy.unknownRole : undefined,
     isThinking: false,
   }));
 }
@@ -52,12 +44,17 @@ function applyIdentityMessage(players: PlayerListItem[], message: string) {
   }
 
   const humanSeat = Number(identityMatch[1]);
-  const humanRole = roleText[identityMatch[2]] ?? identityMatch[2];
-  return players.map((player) => ({
-    ...player,
-    isHuman: player.seatId === humanSeat,
-    roleLabel: player.seatId === humanSeat ? humanRole : undefined,
-  }));
+  const humanRoleCode = identityMatch[2];
+  const humanRole = toRoleLabel(humanRoleCode) ?? humanRoleCode;
+  return players.map((player) => {
+    const isHuman = player.seatId === humanSeat;
+    return {
+      ...player,
+      isHuman,
+      roleLabel: isHuman ? humanRole : undefined,
+      roleCode: isHuman ? humanRoleCode : undefined,
+    };
+  });
 }
 
 function applySystemMessage(players: PlayerListItem[], message: string) {
@@ -86,13 +83,17 @@ function applyPublicChatMessage(players: PlayerListItem[], message: string) {
 }
 
 function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
-  return players.map((player) => ({
-    ...player,
-    isThinking: false,
-    roleLabel: payload.revealed_roles[player.seatId]
-      ? (roleText[payload.revealed_roles[player.seatId]] ?? payload.revealed_roles[player.seatId])
-      : player.roleLabel,
-  }));
+  return players.map((player) => {
+    const revealedCode = payload.revealed_roles[player.seatId];
+    return {
+      ...player,
+      isThinking: false,
+      roleCode: revealedCode ?? player.roleCode,
+      roleLabel: revealedCode
+        ? (toRoleLabel(revealedCode) ?? revealedCode)
+        : player.roleLabel,
+    };
+  });
 }
 
 function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
@@ -120,8 +121,8 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
       speaker: payload.data.visibility === "private"
         ? payload.data.speaker ?? "你的视角"
         : publicSpeechMatch
-          ? `${publicSpeechMatch[1]}号玩家`
-          : payload.data.speaker ?? "系统播报",
+          ? formatSeat(Number(publicSpeechMatch[1]))
+          : payload.data.speaker ?? narratorSpeaker,
     };
   }
 
@@ -130,7 +131,7 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
       id: `game-over-${crypto.randomUUID()}`,
       kind: "system",
       message: payload.data.summary,
-      speaker: "结算",
+      speaker: narratorSpeaker,
     };
   }
 
@@ -139,7 +140,7 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
 
 function findLatestOutcome(entries: ChatEntry[]) {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (entries[index]?.speaker === "结算") {
+    if (entries[index]?.id.startsWith("game-over-")) {
       return entries[index];
     }
   }
@@ -152,19 +153,39 @@ export function App() {
   const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
   const [pendingAction, setPendingAction] = useState<RequireInputEnvelope["data"] | null>(null);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
+  const [isTerminal, setIsTerminal] = useState(false);
+  const [reconnectPending, setReconnectPending] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
-  const latestMessage = entries.length > 0 ? entries[entries.length - 1].message : "等待服务端推送";
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
-    ? "轮到你决策"
+    ? "轮到你落子"
     : latestOutcome
-      ? "终局揭示"
+      ? "帷幕落下"
       : phase === "open"
-        ? "AI 推理进行中"
-        : "等待会话建立";
+        ? "桌上正在推演"
+        : "等候入席";
+
+  const connectionLabel = isTerminal
+    ? "本局已散场"
+    : reconnectPending
+      ? "连接已断，正在接续"
+      : connectionPhaseCopy[phase];
+
+  const canManualReconnect = !isTerminal
+    && (phase === "closed" || phase === "error");
+
+  const handleManualReconnect = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    setReconnectPending(false);
+    shouldReconnectRef.current = true;
+    setConnectionAttempt((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -172,6 +193,8 @@ export function App() {
     setEntries([]);
     setPlayers(createInitialPlayers());
     setPendingAction(null);
+    setIsTerminal(false);
+    setReconnectPending(false);
     setPhase("connecting");
 
     const socket = new WebSocket(createGameSocketUrl(window.location));
@@ -182,6 +205,7 @@ export function App() {
         return;
       }
 
+      setReconnectPending(true);
       reconnectTimerRef.current = window.setTimeout(() => {
         reconnectTimerRef.current = null;
         if (disposed) {
@@ -193,10 +217,18 @@ export function App() {
 
     socket.addEventListener("open", () => {
       setPhase("open");
+      setReconnectPending(false);
     });
 
     socket.addEventListener("message", (event) => {
-      const payload = JSON.parse(event.data) as ServerEnvelope;
+      let payload: ServerEnvelope;
+      try {
+        payload = JSON.parse(event.data) as ServerEnvelope;
+      } catch (error) {
+        console.warn("Received malformed message from server; ignoring.", error);
+        return;
+      }
+
       const chatEntry = buildChatEntry(payload);
       if (chatEntry) {
         setEntries((current) => [...current, chatEntry]);
@@ -220,6 +252,7 @@ export function App() {
       }
       if (payload.type === "GAME_OVER") {
         shouldReconnectRef.current = false;
+        setIsTerminal(true);
         setPlayers((current) => applyGameOver(current, payload.data));
         setPendingAction(null);
       }
@@ -239,7 +272,11 @@ export function App() {
       }
       setPhase("closed");
       setPendingAction(null);
-      if (event?.code === GAME_OVER_CLOSE_CODE || !shouldReconnectRef.current) {
+      if (event?.code === GAME_OVER_CLOSE_CODE) {
+        setIsTerminal(true);
+        return;
+      }
+      if (!shouldReconnectRef.current) {
         return;
       }
       scheduleReconnect();
@@ -276,39 +313,38 @@ export function App() {
   return (
     <main className="app-shell" data-connection-phase={phase}>
       <div className="app-frame">
-        <header className="status-shell">
-          <div className="hero-copy">
-            <p className="eyebrow">Stage Of Intrigue</p>
-            <h1>狼人杀对局面板</h1>
-            <p className="summary">
-              这里会持续同步你的身份、对局日志和可执行操作；如果会话重建，界面会自动清空上一局的残留状态。
-            </p>
-          </div>
-          <dl className="status-board">
-            <div className="status-card">
-              <dt>连接状态</dt>
-              <dd>{statusText[phase]}</dd>
-            </div>
-            <div className="status-card">
-              <dt>最近系统消息</dt>
-              <dd className="status-message">{latestMessage}</dd>
-            </div>
-            <div className="status-card status-card--accent">
-              <dt>当前节奏</dt>
-              <dd>{spotlightText}</dd>
-            </div>
-          </dl>
+        <header className="app-header">
+          <h1>狼人杀对局面板</h1>
+          <p className="app-status" role="status" aria-live="polite">
+            <span
+              className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
+            >
+              {connectionLabel}
+            </span>
+            <span className="app-status__sep" aria-hidden="true">·</span>
+            <span className="app-status__spotlight">{spotlightText}</span>
+            {canManualReconnect ? (
+              <button
+                type="button"
+                className="app-status__retry"
+                onClick={handleManualReconnect}
+              >
+                立即重连
+              </button>
+            ) : null}
+          </p>
         </header>
 
         <div className="app-grid">
           <aside className="board-column">
             <section className="identity-card" aria-label="你的身份摘要">
               <p className="identity-kicker">你的席位</p>
-              <strong>{humanPlayer ? `${humanPlayer.seatId}号玩家` : "等待同步"}</strong>
-              <p>{humanPlayer?.roleLabel ?? "身份待同步"}</p>
+              <strong>{humanPlayer ? formatSeat(humanPlayer.seatId) : identityStateCopy.unknownSeat}</strong>
+              <p>{humanPlayer?.roleLabel ?? identityStateCopy.unknownRole}</p>
               <span className={`identity-state ${humanPlayer?.isAlive === false ? "is-dead" : "is-alive"}`}>
-                {humanPlayer?.isAlive === false ? "已出局" : "仍在局内"}
+                {humanPlayer?.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
               </span>
+              <RoleGuide roleCode={humanPlayer?.roleCode} />
             </section>
             <PlayerList players={players} />
           </aside>
@@ -318,14 +354,13 @@ export function App() {
               className={`result-banner ${latestOutcome ? "" : "is-muted"}`}
               aria-label={latestOutcome ? "终局提示" : "战局提示"}
             >
-              <p className="result-banner__kicker">{latestOutcome ? "Curtain Call" : "Live Narrative"}</p>
               <strong>{latestOutcome ? latestOutcome.message : spotlightText}</strong>
               <span>
                 {latestOutcome
-                  ? "身份已经揭示，连接将停留在终局态。"
+                  ? "一局终章，身份尽数揭示。"
                   : pendingAction
-                    ? "行动通道已经解锁，请在右侧面板完成本轮指令。"
-                    : "系统会持续把最新播报、私信和公开发言写入中央信息流。"}
+                    ? "轮到你了，在右侧落下你的决定。"
+                    : "桌上仍在推演，消息会持续涌入中央。"}
               </span>
             </section>
             <ChatHistory entries={entries} />

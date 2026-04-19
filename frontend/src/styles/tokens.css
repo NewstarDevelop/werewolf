@@ -1,0 +1,278 @@
+/* ==========================================================================
+   Design Tokens — Werewolf (墨色 · 克制 · 松动)
+   Source of truth for all colors, spacing, typography, motion.
+   Driven by .impeccable.md Design Context. Do not inline raw values.
+   ========================================================================== */
+
+:root {
+  color-scheme: light dark;
+
+  /* --------------------------------------------------------------------------
+     Color — Light theme (宣纸 × 松烟墨)
+     -------------------------------------------------------------------------- */
+
+  /* Surface — 纸面层级 */
+  --color-surface-page: oklch(97% 0.008 85);        /* 宣纸白，页面底 */
+  --color-surface-raised: oklch(95% 0.012 85);      /* 浮层 */
+  --color-surface-subtle: oklch(92% 0.014 85);      /* 弱对比区 */
+  --color-surface-sunken: oklch(89% 0.016 85);      /* 凹陷/输入框 */
+
+  /* Ink — 墨色字阶 */
+  --color-ink-primary: oklch(22% 0.02 250);         /* 松烟墨，主文本 */
+  --color-ink-secondary: oklch(40% 0.02 250);       /* 淡墨，副文本 */
+  --color-ink-tertiary: oklch(55% 0.022 250);       /* 雾墨，时间戳/辅助 */
+  --color-ink-muted: oklch(68% 0.015 250);          /* 水墨，dividers/装饰 */
+  --color-ink-inverse: oklch(96% 0.01 85);          /* 反色（深底用）*/
+
+  /* Accent — 朱砂印 (destructive / 死亡 / 夜晚高危) */
+  --color-vermilion: oklch(52% 0.18 25);
+  --color-vermilion-soft: oklch(88% 0.05 25);
+  --color-vermilion-ink: oklch(40% 0.16 25);        /* 朱砂配文 */
+
+  /* Accent — 琥珀金 (自己 / 查验 / 温度高光) */
+  --color-amber: oklch(62% 0.1 75);
+  --color-amber-soft: oklch(92% 0.04 85);
+  --color-amber-ink: oklch(48% 0.11 75);
+
+  /* Accent — 松青 (存活 / 正向) */
+  --color-pine: oklch(45% 0.07 170);
+  --color-pine-soft: oklch(90% 0.03 170);
+
+  /* Border — 墨线 */
+  --color-border-subtle: oklch(22% 0.02 250 / 0.08);
+  --color-border-base: oklch(22% 0.02 250 / 0.14);
+  --color-border-strong: oklch(22% 0.02 250 / 0.28);
+  --color-border-focus: oklch(52% 0.18 25 / 0.5);
+
+  /* Semantic state */
+  --color-state-alive: var(--color-pine);
+  --color-state-alive-surface: var(--color-pine-soft);
+  --color-state-dead: var(--color-vermilion-ink);
+  --color-state-dead-surface: var(--color-vermilion-soft);
+  --color-state-thinking: var(--color-amber-ink);
+  --color-state-thinking-surface: var(--color-amber-soft);
+
+  /* Decorative — 纸纹底纹 (subtle) */
+  --paper-texture:
+    radial-gradient(ellipse at 20% 20%, oklch(86% 0.02 75 / 0.18), transparent 45%),
+    radial-gradient(ellipse at 80% 8%, oklch(22% 0.02 250 / 0.04), transparent 40%);
+
+  /* --------------------------------------------------------------------------
+     Spacing — 4pt base scale
+     -------------------------------------------------------------------------- */
+  --space-0: 0;
+  --space-1: 0.25rem;   /*  4px */
+  --space-2: 0.5rem;    /*  8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-7: 1.75rem;   /* 28px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+  --space-20: 5rem;     /* 80px */
+
+  /* --------------------------------------------------------------------------
+     Radius — 印章感：硬朗为主
+     -------------------------------------------------------------------------- */
+  --radius-xs: 0.125rem;  /*  2px — 纯硬朗 */
+  --radius-sm: 0.25rem;   /*  4px */
+  --radius-md: 0.5rem;    /*  8px */
+  --radius-lg: 0.75rem;   /* 12px */
+  --radius-xl: 1rem;      /* 16px — 面板最大半径 */
+  --radius-pill: 9999px;
+
+  /* --------------------------------------------------------------------------
+     Shadow — 墨色扩散（非彩色投影）
+     -------------------------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px oklch(22% 0.02 250 / 0.05);
+  --shadow-sm: 0 2px 6px oklch(22% 0.02 250 / 0.06);
+  --shadow-md: 0 6px 16px oklch(22% 0.02 250 / 0.08);
+  --shadow-lg: 0 14px 32px oklch(22% 0.02 250 / 0.1);
+  --shadow-focus: 0 0 0 3px var(--color-border-focus);
+
+  /* --------------------------------------------------------------------------
+     Typography
+     -------------------------------------------------------------------------- */
+  --font-family-serif:
+    "LXGW WenKai", "Source Han Serif SC", "Noto Serif SC", "Songti SC",
+    "SimSun", Georgia, serif;
+  --font-family-sans:
+    "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-wenkai:
+    "LXGW WenKai", "LXGW WenKai Screen", "Source Han Serif SC",
+    "Noto Serif SC", serif;
+  --font-family-numeric:
+    "Source Han Sans SC", ui-monospace, "SF Mono", Consolas, monospace;
+
+  /* Fluid scale — 文稿节奏 */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-md: 1.125rem;    /* 18px */
+  --font-size-lg: 1.375rem;    /* 22px */
+  --font-size-xl: 1.75rem;     /* 28px */
+  --font-size-2xl: 2.25rem;    /* 36px */
+  --font-size-3xl: clamp(2.5rem, 5.5vw, 4rem);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.2;
+  --line-height-base: 1.55;
+  --line-height-relaxed: 1.8;
+
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-base: 0;
+  --letter-spacing-wide: 0.04em;
+
+  /* --------------------------------------------------------------------------
+     Motion — 落笔、纸落桌面
+     -------------------------------------------------------------------------- */
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --duration-ceremony: 900ms;    /* 死亡揭示、日夜切换 */
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1);
+
+  --motion-transform: transform var(--duration-base) var(--ease-out-quart);
+  --motion-opacity: opacity var(--duration-base) var(--ease-out-quart);
+  --motion-colors:
+    background-color var(--duration-fast) var(--ease-out-quart),
+    border-color var(--duration-fast) var(--ease-out-quart),
+    color var(--duration-fast) var(--ease-out-quart);
+
+  /* --------------------------------------------------------------------------
+     Layout
+     -------------------------------------------------------------------------- */
+  --layout-max-width: 1280px;
+  --layout-gutter: var(--space-6);
+  --layout-gutter-compact: var(--space-4);
+
+  /* --------------------------------------------------------------------------
+     Z-index
+     -------------------------------------------------------------------------- */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-overlay: 30;
+  --z-dialog: 50;
+  --z-toast: 70;
+}
+
+/* ==========================================================================
+   Dark theme — 泼墨深蓝（夜幕）
+   Active when:
+   - user prefers dark color scheme (and no explicit data-theme="light")
+   - or body/html has [data-theme="dark"]
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface-page: oklch(18% 0.04 250);
+    --color-surface-raised: oklch(22% 0.038 250);
+    --color-surface-subtle: oklch(26% 0.035 250);
+    --color-surface-sunken: oklch(15% 0.045 250);
+
+    --color-ink-primary: oklch(94% 0.015 85);       /* 月白 */
+    --color-ink-secondary: oklch(78% 0.018 85);
+    --color-ink-tertiary: oklch(62% 0.02 85);
+    --color-ink-muted: oklch(48% 0.022 250);
+    --color-ink-inverse: oklch(22% 0.02 250);
+
+    --color-vermilion: oklch(66% 0.2 25);
+    --color-vermilion-soft: oklch(32% 0.09 25);
+    --color-vermilion-ink: oklch(75% 0.18 25);
+
+    --color-amber: oklch(72% 0.13 75);
+    --color-amber-soft: oklch(34% 0.07 75);
+    --color-amber-ink: oklch(80% 0.12 75);
+
+    --color-pine: oklch(62% 0.08 170);
+    --color-pine-soft: oklch(30% 0.05 170);
+
+    --color-border-subtle: oklch(94% 0.015 85 / 0.08);
+    --color-border-base: oklch(94% 0.015 85 / 0.14);
+    --color-border-strong: oklch(94% 0.015 85 / 0.26);
+    --color-border-focus: oklch(72% 0.2 25 / 0.6);
+
+    --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.25);
+    --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.3);
+    --shadow-md: 0 8px 22px oklch(0% 0 0 / 0.35);
+    --shadow-lg: 0 18px 40px oklch(0% 0 0 / 0.45);
+    --shadow-focus: 0 0 0 3px var(--color-border-focus);
+
+    --paper-texture:
+      radial-gradient(ellipse at 18% 18%, oklch(28% 0.05 250 / 0.6), transparent 48%),
+      radial-gradient(ellipse at 82% 6%, oklch(40% 0.08 280 / 0.25), transparent 42%);
+  }
+}
+
+[data-theme="dark"] {
+  --color-surface-page: oklch(18% 0.04 250);
+  --color-surface-raised: oklch(22% 0.038 250);
+  --color-surface-subtle: oklch(26% 0.035 250);
+  --color-surface-sunken: oklch(15% 0.045 250);
+
+  --color-ink-primary: oklch(94% 0.015 85);
+  --color-ink-secondary: oklch(78% 0.018 85);
+  --color-ink-tertiary: oklch(62% 0.02 85);
+  --color-ink-muted: oklch(48% 0.022 250);
+  --color-ink-inverse: oklch(22% 0.02 250);
+
+  --color-vermilion: oklch(66% 0.2 25);
+  --color-vermilion-soft: oklch(32% 0.09 25);
+  --color-vermilion-ink: oklch(75% 0.18 25);
+
+  --color-amber: oklch(72% 0.13 75);
+  --color-amber-soft: oklch(34% 0.07 75);
+  --color-amber-ink: oklch(80% 0.12 75);
+
+  --color-pine: oklch(62% 0.08 170);
+  --color-pine-soft: oklch(30% 0.05 170);
+
+  --color-border-subtle: oklch(94% 0.015 85 / 0.08);
+  --color-border-base: oklch(94% 0.015 85 / 0.14);
+  --color-border-strong: oklch(94% 0.015 85 / 0.26);
+  --color-border-focus: oklch(72% 0.2 25 / 0.6);
+
+  --shadow-xs: 0 1px 2px oklch(0% 0 0 / 0.25);
+  --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.3);
+  --shadow-md: 0 8px 22px oklch(0% 0 0 / 0.35);
+  --shadow-lg: 0 18px 40px oklch(0% 0 0 / 0.45);
+  --shadow-focus: 0 0 0 3px var(--color-border-focus);
+
+  --paper-texture:
+    radial-gradient(ellipse at 18% 18%, oklch(28% 0.05 250 / 0.6), transparent 48%),
+    radial-gradient(ellipse at 82% 6%, oklch(40% 0.08 280 / 0.25), transparent 42%);
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion — 遵守系统偏好
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+    --duration-ceremony: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

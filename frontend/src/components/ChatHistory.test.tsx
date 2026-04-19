@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatHistory, type ChatEntry } from "./ChatHistory";
+import { chatTagCopy } from "../copy";
 
 describe("ChatHistory", () => {
   beforeEach(() => {
@@ -17,9 +18,9 @@ describe("ChatHistory", () => {
 
     render(<ChatHistory entries={entries} />);
 
-    expect(screen.getByText("系统")).toBeInTheDocument();
-    expect(screen.getByText("私信")).toBeInTheDocument();
-    expect(screen.getByText("发言")).toBeInTheDocument();
+    expect(screen.getByText(chatTagCopy.system)).toBeInTheDocument();
+    expect(screen.getByText(chatTagCopy.private)).toBeInTheDocument();
+    expect(screen.getByText(chatTagCopy.speech)).toBeInTheDocument();
     expect(screen.getByText("2号玩家")).toBeInTheDocument();
   });
 
