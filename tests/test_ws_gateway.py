@@ -14,6 +14,10 @@ from app.engine.night.witch_action import WitchResources
 from app.ws.routes import (
     WebSocketGameEngine,
     attach_context_bridge,
+    build_death_revealed_message,
+    build_phase_changed_message,
+    build_player_state_patch_message,
+    build_vote_resolved_message,
     GAME_OVER_CLOSE_CODE,
     log_game_session_task_outcome,
     resolve_human_submit_action,
@@ -28,6 +32,8 @@ def test_websocket_sends_welcome_message() -> None:
         message = websocket.receive_json()
         public_message = websocket.receive_json()
         private_message = websocket.receive_json()
+        player_patch = websocket.receive_json()
+        phase_changed = websocket.receive_json()
 
     assert message["type"] == "SYSTEM_MSG"
     assert message["data"]["message"] == "connected"
@@ -37,6 +43,19 @@ def test_websocket_sends_welcome_message() -> None:
     assert private_message["type"] == "CHAT_UPDATE"
     assert private_message["data"]["visibility"] == "private"
     assert "\u8eab\u4efd\u662f" in private_message["data"]["message"]
+    assert player_patch["type"] == "PLAYER_STATE_PATCH"
+    assert player_patch["data"]["players"][0]["is_human"] is True
+    assert player_patch["data"]["players"][0]["role_code"] in {
+        role.value for role in Role
+    }
+    assert phase_changed == {
+        "type": "PHASE_CHANGED",
+        "data": {
+            "phase": "INIT",
+            "day_count": 1,
+        },
+        "meta": {},
+    }
 
 
 def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
@@ -47,6 +66,8 @@ def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
     client = TestClient(app)
 
     with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
@@ -71,6 +92,8 @@ def test_websocket_logs_invalid_payload_warning(monkeypatch, caplog) -> None:
     client = TestClient(app)
 
     with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
@@ -102,6 +125,8 @@ def test_websocket_closes_after_game_over(monkeypatch) -> None:
     client = TestClient(app)
 
     with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
         websocket.receive_json()
@@ -273,6 +298,179 @@ def test_websocket_game_engine_emits_ai_thinking_payload() -> None:
             },
             "meta": {},
         },
+    ]
+
+
+def test_build_player_state_patch_message_hides_roles_by_default() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WITCH, is_alive=False))
+
+    payload = build_player_state_patch_message(context, [1])
+
+    assert payload == {
+        "type": "PLAYER_STATE_PATCH",
+        "data": {
+            "players": [
+                {
+                    "seat_id": 1,
+                    "is_alive": False,
+                    "is_human": True,
+                    "role_code": None,
+                    "is_thinking": False,
+                }
+            ],
+        },
+        "meta": {},
+    }
+
+
+def test_build_player_state_patch_message_can_reveal_roles() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WITCH))
+
+    payload = build_player_state_patch_message(context, [1], reveal_roles=True)
+
+    assert payload["data"]["players"][0]["role_code"] == "WITCH"
+
+
+def test_build_phase_changed_message_uses_context_phase_and_day() -> None:
+    context = GameContext(phase="DAY_SPEAKING", day_count=2)
+
+    payload = build_phase_changed_message(context)
+
+    assert payload == {
+        "type": "PHASE_CHANGED",
+        "data": {
+            "phase": "DAY_SPEAKING",
+            "day_count": 2,
+        },
+        "meta": {},
+    }
+
+
+def test_websocket_game_engine_emits_phase_changed_payload() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext(phase="NIGHT_START", day_count=1)
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def run() -> None:
+        engine = WebSocketGameEngine(send_json=send_json)
+        await engine._notify_phase_changed(context)
+
+    asyncio.run(run())
+
+    assert sent_payloads == [
+        {
+            "type": "PHASE_CHANGED",
+            "data": {
+                "phase": "NIGHT_START",
+                "day_count": 1,
+            },
+            "meta": {},
+        }
+    ]
+
+
+def test_build_death_revealed_message_uses_context_day() -> None:
+    context = GameContext(day_count=1)
+
+    payload = build_death_revealed_message(
+        context,
+        dead_seats=[3, 5],
+        eligible_last_words=[3],
+    )
+
+    assert payload == {
+        "type": "DEATH_REVEALED",
+        "data": {
+            "dead_seats": [3, 5],
+            "eligible_last_words": [3],
+            "day_count": 1,
+        },
+        "meta": {},
+    }
+
+
+def test_websocket_game_engine_emits_death_revealed_payload() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext(day_count=2)
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def run() -> None:
+        engine = WebSocketGameEngine(send_json=send_json)
+        await engine._notify_death_revealed(
+            context,
+            dead_seats=[4],
+            eligible_last_words=[],
+        )
+
+    asyncio.run(run())
+
+    assert sent_payloads == [
+        {
+            "type": "DEATH_REVEALED",
+            "data": {
+                "dead_seats": [4],
+                "eligible_last_words": [],
+                "day_count": 2,
+            },
+            "meta": {},
+        }
+    ]
+
+
+def test_build_vote_resolved_message_carries_tally() -> None:
+    payload = build_vote_resolved_message(
+        votes={2: 3, 5: 1},
+        abstentions=[4],
+        banished_seat=2,
+        summary="2号玩家被放逐出局。",
+    )
+
+    assert payload == {
+        "type": "VOTE_RESOLVED",
+        "data": {
+            "votes": {2: 3, 5: 1},
+            "abstentions": [4],
+            "banished_seat": 2,
+            "summary": "2号玩家被放逐出局。",
+        },
+        "meta": {},
+    }
+
+
+def test_websocket_game_engine_emits_vote_resolved_payload() -> None:
+    sent_payloads: list[dict[str, object]] = []
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def run() -> None:
+        engine = WebSocketGameEngine(send_json=send_json)
+        await engine._notify_vote_resolved(
+            votes={3: 2},
+            abstentions=[],
+            banished_seat=3,
+            summary="3号玩家被放逐出局。",
+        )
+
+    asyncio.run(run())
+
+    assert sent_payloads == [
+        {
+            "type": "VOTE_RESOLVED",
+            "data": {
+                "votes": {3: 2},
+                "abstentions": [],
+                "banished_seat": 3,
+                "summary": "3号玩家被放逐出局。",
+            },
+            "meta": {},
+        }
     ]
 
 

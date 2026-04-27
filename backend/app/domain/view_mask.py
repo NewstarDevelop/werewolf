@@ -32,11 +32,15 @@ def build_player_view(context: GameContext, viewer_seat: int) -> dict[str, Any]:
             }
         )
 
+    reveal_killed_tonight = viewer.role is Role.WITCH
+
     return {
         "day_count": context.day_count,
         "phase": context.phase,
         "players": players_view,
         "public_chat_history": list(context.public_chat_history),
-        "killed_tonight": list(context.killed_tonight),
+        "killed_tonight": (
+            list(context.killed_tonight) if reveal_killed_tonight else []
+        ),
         "private_log": context.get_private_log(viewer_seat),
     }
