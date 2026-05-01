@@ -4,7 +4,7 @@
  * Never expose backend code constants (WOLF_KILL / REQUIRE_INPUT / ...) to
  * the UI. Route every action_type through `actionTypeCopy`.
  *
- * Tone guide (from .impeccable.md):
+ * Tone guide:
  *   - 墨色 克制 松动: 短、克制、文人桌游感
  *   - 动词优先：用户是为了"做"，不是为了"读说明"
  *   - 仪式感：destructive 动作的 submitLabel 要有分量（下刀/下毒/开枪）

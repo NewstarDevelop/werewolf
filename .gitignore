@@ -3,23 +3,28 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.env
+.env.*
+!.env.example
 
 node_modules/
 dist/
 coverage/
 *.tsbuildinfo
 
-autoresearch-hook-context.json
-autoresearch-state.json
+AGENTS.md
+CLAUDE.md
+.impeccable.md
+plan.md
+docs/第一次本地测试问题.md
+
+autoresearch-*.json
+autoresearch-*.log
 research-results.tsv
 autoresearch-lessons.md
-autoresearch-launch.json
-autoresearch-runtime.json
-autoresearch-runtime.log
 
-.claude/*.lock
-.spec-workflow/templates/
-.spec-workflow/user-templates/README.md
+.claude/
+.spec-workflow/
 
 .DS_Store
 Thumbs.db

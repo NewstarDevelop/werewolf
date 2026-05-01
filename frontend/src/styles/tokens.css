@@ -1,7 +1,7 @@
 /* ==========================================================================
    Design Tokens — Werewolf (墨色 · 克制 · 松动)
    Source of truth for all colors, spacing, typography, motion.
-   Driven by .impeccable.md Design Context. Do not inline raw values.
+   Keep raw values centralized here; components should consume tokens.
    ========================================================================== */
 
 :root {
