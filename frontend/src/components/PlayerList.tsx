@@ -5,7 +5,6 @@ export interface PlayerListItem {
   isAlive: boolean;
   isHuman: boolean;
   roleLabel?: string;
-  /** Backend role code (e.g. "SEER"). Only set for the human or after reveal. */
   roleCode?: string;
   isThinking: boolean;
 }
@@ -19,49 +18,47 @@ export function PlayerList({ players }: PlayerListProps) {
   const thinkingCount = players.filter((player) => player.isThinking).length;
 
   return (
-    <section className="player-panel" aria-labelledby="player-panel-title">
-      <header className="panel-header">
-        <h2 id="player-panel-title">玩家列表</h2>
-        <p className="panel-stats" aria-live="polite">
-          {aliveCount} 人在局
-          {thinkingCount > 0 ? ` · ${thinkingCount} 人推演中` : ""}
-        </p>
-      </header>
-      <ol className="player-grid" aria-label="玩家状态列表">
-        {players.map((player) => (
-          <li
-            key={player.seatId}
-            className={[
-              "player-card",
-              player.isHuman ? "is-human" : "",
-              player.isAlive ? "is-alive" : "is-dead",
-              player.isThinking ? "is-thinking" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            aria-label={formatSeat(player.seatId)}
-          >
-            <div className="player-orbit">
+    <section className="desk" aria-label="桌面座位">
+      <ol className="player-ring" aria-label="玩家状态列表">
+        {players.map((player) => {
+          const statusText = player.isAlive
+            ? player.isThinking
+              ? "仍在局内 · 推演中"
+              : "仍在局内"
+            : "墓碑";
+
+          return (
+            <li
+              key={player.seatId}
+              className={[
+                "player-card",
+                "seat",
+                player.isHuman ? "is-human" : "",
+                player.isAlive ? "is-alive" : "is-dead",
+                player.isThinking ? "is-thinking" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-label={formatSeat(player.seatId)}
+            >
               <div className="seat-chip">{player.seatId}</div>
-              {player.isHuman ? <span className="player-badge">你</span> : null}
-            </div>
-            <div className="player-copy">
-              <strong>{formatSeat(player.seatId)}</strong>
-              <span className="player-role">
+              <span className="seat-name">{formatSeat(player.seatId)}</span>
+              <span className="seat-role">
                 {player.isHuman
                   ? `真人 · ${player.roleLabel ?? identityStateCopy.unknownRole}`
                   : player.roleLabel ?? "局外人"}
               </span>
-            </div>
-            <div className="player-tags" aria-label={`${player.seatId}号状态`}>
-              <span className={`state-pill ${player.isAlive ? "is-alive" : "is-dead"}`}>
-                {player.isAlive ? "存活" : "墓碑"}
+              <span className="seat-status" aria-label={`${player.seatId}号状态`}>
+                {statusText}
               </span>
-              {player.isThinking ? <span className="thinking-pill">推演中</span> : null}
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
+      <p className="desk-stats" aria-live="polite">
+        {aliveCount} 人在局
+        {thinkingCount > 0 ? ` · ${thinkingCount} 人推演中` : ""}
+      </p>
     </section>
   );
 }

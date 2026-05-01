@@ -3,6 +3,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import urlparse
 import logging
 
 import httpx
@@ -118,6 +119,9 @@ def load_openai_compatible_settings_from_env() -> OpenAICompatibleSettings | Non
         missing_names = ", ".join(missing_variables)
         raise ValueError(f"missing required environment variables: {missing_names}")
 
+    resolved_base_url = base_url or DEFAULT_OPENAI_BASE_URL
+    _validate_base_url(resolved_base_url)
+
     timeout_seconds = DEFAULT_OPENAI_TIMEOUT_SECONDS
     if timeout_value:
         try:
@@ -134,7 +138,7 @@ def load_openai_compatible_settings_from_env() -> OpenAICompatibleSettings | Non
     return OpenAICompatibleSettings(
         api_key=api_key,
         model=model,
-        base_url=base_url or DEFAULT_OPENAI_BASE_URL,
+        base_url=resolved_base_url,
         timeout_seconds=timeout_seconds,
     )
 
@@ -149,6 +153,24 @@ def _read_env_value(*names: str) -> str:
 
 def _format_env_aliases(*names: str) -> str:
     return " or ".join(names)
+
+
+def _validate_base_url(url: str) -> None:
+    """Prevent SSRF by rejecting internal/localhost/private-network endpoints."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(
+            f"LLM base URL must use https or http, got {parsed.scheme!r}"
+        )
+    hostname = (parsed.hostname or "").lower()
+    if hostname in ("localhost", "127.0.0.1", "::1"):
+        raise ValueError("LLM base URL must not point to localhost")
+    if hostname.startswith("10.") or hostname.startswith("192.168."):
+        raise ValueError("LLM base URL must not point to a private network")
+    if hostname.startswith("172."):
+        parts = hostname.split(".")
+        if len(parts) >= 2 and 16 <= int(parts[1]) <= 31:
+            raise ValueError("LLM base URL must not point to a private network")
 
 
 def _build_messages(

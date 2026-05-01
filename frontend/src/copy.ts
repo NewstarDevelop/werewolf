@@ -236,6 +236,11 @@ export function formatSeat(seatId: number): string {
   return `${seatId}号玩家`;
 }
 
+/** 多个席位并列时的人话格式。 */
+export function formatSeatList(seatIds: number[]): string {
+  return seatIds.map((seatId) => formatSeat(seatId)).join("、");
+}
+
 /** 身份卡存活状态。 */
 export const identityStateCopy = {
   alive: "仍在局内",
