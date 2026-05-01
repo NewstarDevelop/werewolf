@@ -205,6 +205,25 @@ export const connectionPhaseCopy: Record<ConnectionPhase, string> = {
   error: "连接有误",
 };
 
+/** 游戏阶段的人话，避免后端阶段常量泄漏到 UI。 */
+export const gamePhaseCopy: Record<string, string> = {
+  INIT: "发牌",
+  CHECK_WIN: "验局",
+  NIGHT_START: "入夜",
+  WOLF_ACTION: "狼夜",
+  SEER_ACTION: "查验",
+  WITCH_ACTION: "持药",
+  NIGHT_END: "夜结",
+  DAY_START: "天明",
+  DEAD_LAST_WORDS: "遗言",
+  HUNTER_SHOOTING: "猎枪",
+  DAY_SPEAKING: "发言",
+  VOTING: "投票",
+  VOTE_RESULT: "开票",
+  BANISH_LAST_WORDS: "放逐遗言",
+  GAME_OVER: "终局",
+};
+
 /** 聊天气泡侧的小标签。 */
 export const chatTagCopy: Record<"system" | "private" | "speech", string> = {
   system: "系统",

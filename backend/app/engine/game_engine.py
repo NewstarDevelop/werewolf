@@ -33,6 +33,10 @@ class GameEngine:
             if player.role is Role.WITCH:
                 self._witch_resources.setdefault(seat_id, WitchResources())
 
+    async def _set_phase(self, context: GameContext, phase: GamePhase) -> None:
+        context.phase = phase.value
+        await self._notify_phase_changed(context)
+
     def _first_alive_seat_by_role(self, context: GameContext, role: Role) -> int | None:
         for seat_id, player in sorted(context.players.items()):
             if player.is_alive and player.role is role:
@@ -197,7 +201,7 @@ class GameEngine:
         hunter_seat: int,
         poisoned: bool = False,
     ) -> bool:
-        context.phase = GamePhase.HUNTER_SHOOTING.value
+        await self._set_phase(context, GamePhase.HUNTER_SHOOTING)
         target_seat = None if poisoned else await self._select_hunter_target(
             context,
             hunter_seat=hunter_seat,
@@ -214,14 +218,33 @@ class GameEngine:
             poisoned=poisoned,
         )
         context.add_public_message(result.summary)
+        if result.shot_seat is not None:
+            await self._notify_player_state(context, [result.shot_seat])
 
         winner = check_win(context)
         if winner is None:
             return False
 
-        context.phase = GamePhase.GAME_OVER.value
+        await self._set_phase(context, GamePhase.GAME_OVER)
         context.add_public_message(winner["summary"])
         return True
+
+    async def _run_last_words(
+        self,
+        context: GameContext,
+        seat_ids: list[int],
+    ) -> None:
+        for seat_id in seat_ids:
+            player = context.players.get(seat_id)
+            if player is None:
+                continue
+            if isinstance(player, HumanPlayer):
+                speech = await self._human_speaker(seat_id)
+            elif self._llm_client is not None and isinstance(player, AIPlayer):
+                speech = await self._llm_speaker(context, seat_id)
+            else:
+                speech = await self._ai_speaker(seat_id)
+            context.add_public_message(f"{seat_id}号遗言：{speech}")
 
     async def _human_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号选择过麦。"
@@ -256,6 +279,35 @@ class GameEngine:
         return response.speech_text
 
     async def _notify_thinking(self, _: int, __: bool) -> None:
+        return None
+
+    async def _notify_player_state(
+        self,
+        _: GameContext,
+        __: list[int],
+    ) -> None:
+        return None
+
+    async def _notify_phase_changed(self, _: GameContext) -> None:
+        return None
+
+    async def _notify_death_revealed(
+        self,
+        _: GameContext,
+        *,
+        dead_seats: list[int],
+        eligible_last_words: list[int],
+    ) -> None:
+        return None
+
+    async def _notify_vote_resolved(
+        self,
+        *,
+        votes: dict[int, int],
+        abstentions: list[int],
+        banished_seat: int | None,
+        summary: str,
+    ) -> None:
         return None
 
     async def _llm_vote(
@@ -321,19 +373,19 @@ class GameEngine:
             game_context = init_result.context
         self._ensure_witch_resources(game_context)
 
-        game_context.phase = GamePhase.CHECK_WIN.value
+        await self._set_phase(game_context, GamePhase.CHECK_WIN)
         winner = check_win(game_context)
         if winner is not None:
-            game_context.phase = GamePhase.GAME_OVER.value
+            await self._set_phase(game_context, GamePhase.GAME_OVER)
             game_context.add_public_message(winner["summary"])
             return game_context
 
         for _ in range(max_rounds):
-            game_context.phase = GamePhase.NIGHT_START.value
+            await self._set_phase(game_context, GamePhase.NIGHT_START)
             game_context.clear_night_deaths()
             game_context.add_public_message("天黑请闭眼。")
 
-            game_context.phase = GamePhase.WOLF_ACTION.value
+            await self._set_phase(game_context, GamePhase.WOLF_ACTION)
             wolf_target = await self._select_wolf_target(game_context)
             resolve_wolf_action(
                 game_context,
@@ -343,7 +395,7 @@ class GameEngine:
 
             seer_seat = self._first_alive_seat_by_role(game_context, Role.SEER)
             if seer_seat is not None:
-                game_context.phase = GamePhase.SEER_ACTION.value
+                await self._set_phase(game_context, GamePhase.SEER_ACTION)
                 seer_targets = [
                     seat_id
                     for seat_id in game_context.alive_seat_ids()
@@ -362,7 +414,7 @@ class GameEngine:
 
             witch_seat = self._first_alive_seat_by_role(game_context, Role.WITCH)
             if witch_seat is not None:
-                game_context.phase = GamePhase.WITCH_ACTION.value
+                await self._set_phase(game_context, GamePhase.WITCH_ACTION)
                 resources = self._witch_resources[witch_seat]
                 save_candidates = [
                     seat_id
@@ -391,10 +443,12 @@ class GameEngine:
                     poison_target=poison_target,
                 )
 
-            game_context.phase = GamePhase.NIGHT_END.value
+            await self._set_phase(game_context, GamePhase.NIGHT_END)
             dead_hunters: list[tuple[int, bool]] = []
+            night_dead_seats: list[int] = []
             for seat_id in list(game_context.killed_tonight):
                 game_context.players[seat_id].mark_dead()
+                night_dead_seats.append(seat_id)
                 if game_context.players[seat_id].role is Role.HUNTER:
                     dead_hunters.append(
                         (
@@ -402,9 +456,15 @@ class GameEngine:
                             "poison" in game_context.death_causes_for(seat_id),
                         )
                     )
+            await self._notify_player_state(game_context, night_dead_seats)
 
-            game_context.phase = GamePhase.DAY_START.value
+            await self._set_phase(game_context, GamePhase.DAY_START)
             announcement = announce_deaths_and_last_words(game_context)
+            await self._notify_death_revealed(
+                game_context,
+                dead_seats=list(game_context.killed_tonight),
+                eligible_last_words=announcement.eligible_last_words,
+            )
             for hunter_seat, poisoned in dead_hunters:
                 if await self._handle_hunter_shot(
                     game_context,
@@ -415,14 +475,22 @@ class GameEngine:
 
             winner = check_win(game_context)
             if winner is not None:
-                game_context.phase = GamePhase.GAME_OVER.value
+                await self._set_phase(game_context, GamePhase.GAME_OVER)
                 game_context.add_public_message(winner["summary"])
                 return game_context
 
             if announcement.eligible_last_words:
-                game_context.phase = GamePhase.DEAD_LAST_WORDS.value
+                await self._set_phase(game_context, GamePhase.DEAD_LAST_WORDS)
+                last_word_seats = [
+                    seat_id
+                    for seat_id in announcement.eligible_last_words
+                    if seat_id in game_context.players
+                    and not game_context.players[seat_id].is_alive
+                ]
+                if last_word_seats:
+                    await self._run_last_words(game_context, last_word_seats)
 
-            game_context.phase = GamePhase.DAY_SPEAKING.value
+            await self._set_phase(game_context, GamePhase.DAY_SPEAKING)
             alive_seats = game_context.alive_seat_ids()
             if alive_seats:
                 await run_day_speaking(
@@ -437,31 +505,48 @@ class GameEngine:
                     notify_thinking=self._notify_thinking,
                 )
 
-            game_context.phase = GamePhase.VOTING.value
+            await self._set_phase(game_context, GamePhase.VOTING)
             voting_result = resolve_voting(
                 game_context,
                 votes_by_voter=await self._build_votes(game_context),
             )
-            game_context.phase = GamePhase.VOTE_RESULT.value
+            await self._set_phase(game_context, GamePhase.VOTE_RESULT)
             game_context.add_public_message(voting_result.summary)
+            banished_seat = voting_result.banished_seat
+            await self._notify_vote_resolved(
+                votes=voting_result.votes,
+                abstentions=voting_result.abstentions,
+                banished_seat=banished_seat,
+                summary=voting_result.summary,
+            )
+            if banished_seat is not None:
+                await self._notify_player_state(game_context, [banished_seat])
             if (
-                voting_result.banished_seat is not None
-                and game_context.players[voting_result.banished_seat].role is Role.HUNTER
+                banished_seat is not None
+                and game_context.players[banished_seat].role is Role.HUNTER
             ):
                 if await self._handle_hunter_shot(
                     game_context,
-                    hunter_seat=voting_result.banished_seat,
+                    hunter_seat=banished_seat,
                 ):
                     return game_context
 
+            if (
+                banished_seat is not None
+                and banished_seat in game_context.players
+                and not game_context.players[banished_seat].is_alive
+            ):
+                await self._set_phase(game_context, GamePhase.BANISH_LAST_WORDS)
+                await self._run_last_words(game_context, [banished_seat])
+
             winner = check_win(game_context)
             if winner is not None:
-                game_context.phase = GamePhase.GAME_OVER.value
+                await self._set_phase(game_context, GamePhase.GAME_OVER)
                 game_context.add_public_message(winner["summary"])
                 return game_context
 
             game_context.day_count += 1
 
-        game_context.phase = GamePhase.GAME_OVER.value
+        await self._set_phase(game_context, GamePhase.GAME_OVER)
         game_context.add_public_message("主流程骨架已跑通，等待夜晚与白天细分状态接入。")
         return game_context

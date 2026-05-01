@@ -77,3 +77,25 @@ def test_view_mask_reveals_wolf_teammates_only_to_wolves() -> None:
     assert player_view["players"][1]["known_role"] == "WOLF"
     assert player_view["players"][2]["known_role"] == "WOLF"
     assert player_view["players"][3]["known_role"] is None
+
+
+def test_view_mask_hides_killed_tonight_from_non_witch_viewers() -> None:
+    context = build_context()
+    context.add_player(AIPlayer(seat_id=5, role=Role.WITCH, personality="careful"))
+    context.mark_killed_tonight(4, cause="wolf")
+
+    for non_witch_seat in (1, 2, 3, 4):
+        view = build_player_view(context, viewer_seat=non_witch_seat)
+        assert view["killed_tonight"] == [], (
+            f"seat {non_witch_seat} must not see killed_tonight"
+        )
+
+
+def test_view_mask_reveals_killed_tonight_to_witch_only() -> None:
+    context = build_context()
+    context.add_player(AIPlayer(seat_id=5, role=Role.WITCH, personality="careful"))
+    context.mark_killed_tonight(4, cause="wolf")
+
+    view = build_player_view(context, viewer_seat=5)
+
+    assert view["killed_tonight"] == [4]
