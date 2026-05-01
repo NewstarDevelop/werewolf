@@ -193,3 +193,17 @@ def test_game_over_envelope_reveals_roles() -> None:
 
     assert payload["data"]["winning_side"] == "GOOD"
     assert payload["data"]["revealed_roles"] == {1: "SEER", 2: "WOLF"}
+
+
+def test_game_over_envelope_allows_draw_safety_stop() -> None:
+    payload = GameOverEnvelope(
+        type="GAME_OVER",
+        data=GameOverPayload(
+            winning_side="DRAW",
+            summary="夜尽未分胜负，本局暂止。",
+            revealed_roles={1: "WOLF", 2: "VILLAGER"},
+        ),
+    ).model_dump()
+
+    assert payload["data"]["winning_side"] == "DRAW"
+    assert payload["data"]["summary"] == "夜尽未分胜负，本局暂止。"

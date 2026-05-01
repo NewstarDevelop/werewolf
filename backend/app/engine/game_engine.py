@@ -51,7 +51,7 @@ class GameEngine:
         ]
         if not valid_targets:
             raise ValueError("no valid wolf target available")
-        return valid_targets[0]
+        return self._rng.choice(valid_targets) if self._rng else valid_targets[0]
 
     async def _select_wolf_target(self, context: GameContext) -> int:
         human_wolf = next(
@@ -105,7 +105,7 @@ class GameEngine:
         ]
         if not valid_targets:
             return None
-        return valid_targets[0]
+        return self._rng.choice(valid_targets) if self._rng else valid_targets[0]
 
     async def _select_hunter_target(
         self,
@@ -133,7 +133,7 @@ class GameEngine:
         ]
         if not valid_targets:
             return None
-        return valid_targets[0]
+        return self._rng.choice(valid_targets) if self._rng else valid_targets[0]
 
     async def _select_seer_target(
         self,
@@ -154,7 +154,7 @@ class GameEngine:
             )
             if response.target in set(allowed_targets):
                 return response.target
-        return allowed_targets[0]
+        return self._rng.choice(allowed_targets) if self._rng else allowed_targets[0]
 
     async def _select_witch_action(
         self,
@@ -548,5 +548,5 @@ class GameEngine:
             game_context.day_count += 1
 
         await self._set_phase(game_context, GamePhase.GAME_OVER)
-        game_context.add_public_message("主流程骨架已跑通，等待夜晚与白天细分状态接入。")
+        game_context.add_public_message("夜尽未分胜负，本局暂止。")
         return game_context

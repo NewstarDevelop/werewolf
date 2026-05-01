@@ -57,7 +57,7 @@ class RequireInputPayload(BaseModel):
 
 
 class GameOverPayload(BaseModel):
-    winning_side: Literal["GOOD", "WOLF"]
+    winning_side: Literal["GOOD", "WOLF", "DRAW"]
     summary: str = Field(min_length=1)
     revealed_roles: dict[int, str] = Field(default_factory=dict)
 

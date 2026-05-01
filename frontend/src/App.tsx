@@ -2,11 +2,13 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ActionPanel } from "./components/ActionPanel";
 import { ChatHistory } from "./components/ChatHistory";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PlayerList } from "./components/PlayerList";
 import { RoleGuide } from "./components/RoleGuide";
 import {
   connectionPhaseCopy,
   formatSeat,
+  formatSeatList,
   gamePhaseCopy,
   identityStateCopy,
 } from "./copy";
@@ -25,15 +27,10 @@ import {
   type ServerEnvelope,
 } from "./ws/client";
 
-interface BattleSignal {
-  title: string;
-  detail: string;
-  tone: "muted" | "danger" | "terminal";
-}
-
-function formatSeatList(seatIds: number[]): string {
-  return seatIds.map((seatId) => formatSeat(seatId)).join("、");
-}
+const VALID_ENVELOPE_TYPES = new Set([
+  "SYSTEM_MSG", "CHAT_UPDATE", "AI_THINKING", "PLAYER_STATE_PATCH",
+  "PHASE_CHANGED", "DEATH_REVEALED", "VOTE_RESOLVED", "REQUIRE_INPUT", "GAME_OVER",
+]);
 
 function formatPhaseTitle(dayCount: number, phase: string | null): string {
   if (!phase) {
@@ -41,6 +38,12 @@ function formatPhaseTitle(dayCount: number, phase: string | null): string {
   }
   const phaseLabel = gamePhaseCopy[phase] ?? "局中";
   return `第 ${dayCount} 日 · ${phaseLabel}`;
+}
+
+interface BattleSignal {
+  title: string;
+  detail: string;
+  tone: "muted" | "danger" | "terminal";
 }
 
 export function App() {
@@ -90,7 +93,7 @@ export function App() {
     : pendingAction
       ? {
           title: "轮到你落子",
-          detail: "轮到你了，在右侧落下你的决定。",
+          detail: "轮到你了，下方落下你的决定。",
           tone: "danger",
         }
       : lastVoteResult
@@ -114,7 +117,7 @@ export function App() {
           : {
               title: currentPhase ? formatPhaseTitle(dayCount, currentPhase) : spotlightText,
               detail: currentPhase
-                ? "桌上仍在推演，消息会持续涌入中央。"
+                ? "桌上仍在推演，消息会持续涌入。"
                 : "等候第一条局内消息落下。",
               tone: "muted",
             };
@@ -160,14 +163,26 @@ export function App() {
     });
 
     socket.addEventListener("message", (event) => {
-      let payload: ServerEnvelope;
+      let raw: unknown;
       try {
-        payload = JSON.parse(event.data) as ServerEnvelope;
-      } catch (error) {
-        console.warn("Received malformed message from server; ignoring.", error);
+        raw = JSON.parse(event.data);
+      } catch {
+        console.warn("Received non-JSON message from server; ignoring.");
         return;
       }
 
+      if (
+        !raw
+        || typeof raw !== "object"
+        || !("type" in raw)
+        || typeof (raw as Record<string, unknown>).type !== "string"
+        || !VALID_ENVELOPE_TYPES.has((raw as Record<string, unknown>).type as string)
+      ) {
+        console.warn("Received unknown envelope type from server; ignoring.", raw);
+        return;
+      }
+
+      const payload = raw as ServerEnvelope;
       dispatchGameState({ type: "server-envelope", envelope: payload });
       if (payload.type === "GAME_OVER") {
         shouldReconnectRef.current = false;
@@ -234,75 +249,78 @@ export function App() {
   }
 
   return (
-    <main
-      className="app-shell"
-      data-connection-phase={phase}
-      data-game-phase={currentPhase ?? "UNKNOWN"}
-    >
-      <div className="app-frame">
-        <header className="app-header">
-          <h1>狼人杀对局面板</h1>
-          <div className="app-header__actions">
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={handleToggleTheme}
-              aria-label={theme === "light" ? "切换至暗色主题" : "切换至亮色主题"}
-              title={theme === "light" ? "暗" : "亮"}
-            >
-              {theme === "light" ? "暗" : "亮"}
-            </button>
-          </div>
-          <p className="app-status" role="status" aria-live="polite">
-            <span
-              className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
-            >
-              {connectionLabel}
-            </span>
-            <span className="app-status__sep" aria-hidden="true">·</span>
-            <span className="app-status__spotlight">{spotlightText}</span>
-            {canManualReconnect ? (
+    <ErrorBoundary>
+      <main
+        className="app-shell"
+        data-connection-phase={phase}
+        data-game-phase={currentPhase ?? "UNKNOWN"}
+      >
+        <div className="app-frame">
+          <header className="app-header">
+            <h1>狼人杀对局面板</h1>
+            <div className="app-header__actions">
+              {humanPlayer ? (
+                <span className="identity-badge">
+                  <span className="identity-badge__seat">
+                    {formatSeat(humanPlayer.seatId)}
+                  </span>
+                  <span className="identity-badge__role">
+                    {humanPlayer.roleLabel ?? identityStateCopy.unknownRole}
+                  </span>
+                  <span className="identity-badge__state">
+                    {humanPlayer.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
+                  </span>
+                  <RoleGuide roleCode={humanPlayer.roleCode} />
+                </span>
+              ) : null}
               <button
                 type="button"
-                className="app-status__retry"
-                onClick={handleManualReconnect}
+                className="theme-toggle"
+                onClick={handleToggleTheme}
+                aria-label={theme === "light" ? "切换至暗色主题" : "切换至亮色主题"}
               >
-                立即重连
+                {theme === "light" ? "暗" : "亮"}
               </button>
-            ) : null}
-          </p>
-        </header>
-
-        <div className="app-grid">
-          <aside className="board-column">
-            <section className="identity-card" aria-label="你的身份摘要">
-              <p className="identity-kicker">你的席位</p>
-              <strong>{humanPlayer ? formatSeat(humanPlayer.seatId) : identityStateCopy.unknownSeat}</strong>
-              <p>{humanPlayer?.roleLabel ?? identityStateCopy.unknownRole}</p>
-              <span className={`identity-state ${humanPlayer?.isAlive === false ? "is-dead" : "is-alive"}`}>
-                {humanPlayer?.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
+            </div>
+            <p className="app-status" role="status" aria-live="polite">
+              <span
+                className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
+              >
+                {connectionLabel}
               </span>
-              <RoleGuide roleCode={humanPlayer?.roleCode} />
-            </section>
-            <PlayerList players={players} />
-          </aside>
+              <span className="app-status__sep" aria-hidden="true">·</span>
+              <span className="app-status__spotlight">{spotlightText}</span>
+              {canManualReconnect ? (
+                <button
+                  type="button"
+                  className="app-status__retry"
+                  onClick={handleManualReconnect}
+                >
+                  立即重连
+                </button>
+              ) : null}
+            </p>
+          </header>
 
-          <section className="log-column">
-            <section
-              className={`result-banner is-${battleSignal.tone}`}
-              aria-label={latestOutcome ? "终局提示" : "战局提示"}
-            >
-              <strong>{battleSignal.title}</strong>
-              <span>{battleSignal.detail}</span>
-            </section>
-            <ChatHistory entries={entries} />
+          <section
+            className={`battle-signal is-${battleSignal.tone}`}
+            aria-label={latestOutcome ? "终局提示" : "战局提示"}
+          >
+            <strong>{battleSignal.title}</strong>
+            <span>{battleSignal.detail}</span>
           </section>
 
-          <aside className="action-column">
-            <ActionPanel key={connectionAttempt} request={pendingAction} onSubmit={handleSubmitAction} />
-          </aside>
+          <PlayerList players={players} />
+
+          <ChatHistory entries={entries} />
+
+          <ActionPanel
+            key={connectionAttempt}
+            request={pendingAction}
+            onSubmit={handleSubmitAction}
+          />
         </div>
-      </div>
-    </main>
+      </main>
+    </ErrorBoundary>
   );
 }

@@ -17,5 +17,9 @@ autoresearch-launch.json
 autoresearch-runtime.json
 autoresearch-runtime.log
 
+.claude/*.lock
+.spec-workflow/templates/
+.spec-workflow/user-templates/README.md
+
 .DS_Store
 Thumbs.db

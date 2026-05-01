@@ -172,14 +172,21 @@ def build_require_input_message(
 
 def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     winner = check_win(context)
-    if winner is None:
+    if winner is None and context.phase != "GAME_OVER":
         return None
+
+    winning_side = winner["winning_side"] if winner is not None else "DRAW"
+    summary = winner["summary"] if winner is not None else (
+        context.public_chat_history[-1]
+        if context.public_chat_history
+        else "夜尽未分胜负，本局暂止。"
+    )
 
     return GameOverEnvelope(
         type="GAME_OVER",
         data=GameOverPayload(
-            winning_side=winner["winning_side"],
-            summary=winner["summary"],
+            winning_side=winning_side,
+            summary=summary,
             revealed_roles={
                 seat_id: player.role.value
                 for seat_id, player in sorted(context.players.items())
