@@ -548,5 +548,5 @@ class GameEngine:
             game_context.day_count += 1
 
         await self._set_phase(game_context, GamePhase.GAME_OVER)
-        game_context.add_public_message("主流程骨架已跑通，等待夜晚与白天细分状态接入。")
+        game_context.add_public_message("夜尽未分胜负，本局暂止。")
         return game_context

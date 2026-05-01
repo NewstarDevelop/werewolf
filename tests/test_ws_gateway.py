@@ -11,10 +11,12 @@ from app.domain.player import AIPlayer, HumanPlayer
 from app.main import app
 from app.services.setup_game import setup_game
 from app.engine.night.witch_action import WitchResources
+from app.engine.states.phase import GamePhase
 from app.ws.routes import (
     WebSocketGameEngine,
     attach_context_bridge,
     build_death_revealed_message,
+    build_game_over_message,
     build_phase_changed_message,
     build_player_state_patch_message,
     build_vote_resolved_message,
@@ -263,6 +265,69 @@ def test_run_game_session_emits_game_over_payload() -> None:
             "meta": {},
         },
     ]
+    assert closed is True
+
+
+def test_build_game_over_message_handles_safety_stop_draw() -> None:
+    context = GameContext(phase=GamePhase.GAME_OVER.value)
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(AIPlayer(seat_id=2, role=Role.VILLAGER, personality="steady"))
+    context.add_player(AIPlayer(seat_id=3, role=Role.SEER, personality="quiet"))
+    context.add_public_message("夜尽未分胜负，本局暂止。")
+
+    payload = build_game_over_message(context)
+
+    assert payload == {
+        "type": "GAME_OVER",
+        "data": {
+            "winning_side": "DRAW",
+            "summary": "夜尽未分胜负，本局暂止。",
+            "revealed_roles": {
+                1: "WOLF",
+                2: "VILLAGER",
+                3: "SEER",
+            },
+        },
+        "meta": {},
+    }
+
+
+def test_run_game_session_emits_draw_payload_on_safety_stop() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    closed = False
+    setup_result = setup_game(rng=random.Random(7))
+
+    class DrawEngine:
+        async def run_loop(
+            self,
+            *,
+            context: GameContext | None = None,
+            max_rounds: int = 1,
+        ) -> GameContext:
+            assert context is not None
+            context.phase = GamePhase.GAME_OVER.value
+            context.add_public_message("夜尽未分胜负，本局暂止。")
+            return context
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    async def close_connection() -> None:
+        nonlocal closed
+        closed = True
+
+    asyncio.run(
+        run_game_session(
+            setup_result,
+            send_json,
+            close_connection=close_connection,
+            engine=DrawEngine(),  # type: ignore[arg-type]
+            max_rounds=1,
+        ),
+    )
+
+    assert sent_payloads[0]["data"]["winning_side"] == "DRAW"
+    assert sent_payloads[0]["data"]["summary"] == "夜尽未分胜负，本局暂止。"
     assert closed is True
 
 

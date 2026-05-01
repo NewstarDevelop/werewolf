@@ -76,7 +76,7 @@ export interface RequireInputEnvelope {
 export interface GameOverEnvelope {
   type: "GAME_OVER";
   data: {
-    winning_side: "GOOD" | "WOLF";
+    winning_side: "GOOD" | "WOLF" | "DRAW";
     summary: string;
     revealed_roles: Record<number, string>;
   };
