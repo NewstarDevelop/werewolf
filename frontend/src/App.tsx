@@ -7,6 +7,7 @@ import { RoleGuide } from "./components/RoleGuide";
 import {
   connectionPhaseCopy,
   formatSeat,
+  gamePhaseCopy,
   identityStateCopy,
 } from "./copy";
 import {
@@ -14,6 +15,8 @@ import {
   findLatestOutcome,
   gameReducer,
 } from "./state/gameState";
+import { type Theme, applyTheme, persistTheme, resolveInitialTheme, toggleTheme } from "./theme";
+import type { SubmitActionPayload } from "./types/ws";
 import {
   createGameSocketUrl,
   GAME_OVER_CLOSE_CODE,
@@ -21,17 +24,44 @@ import {
   type ConnectionPhase,
   type ServerEnvelope,
 } from "./ws/client";
-import type { SubmitActionPayload } from "./types/ws";
+
+interface BattleSignal {
+  title: string;
+  detail: string;
+  tone: "muted" | "danger" | "terminal";
+}
+
+function formatSeatList(seatIds: number[]): string {
+  return seatIds.map((seatId) => formatSeat(seatId)).join("、");
+}
+
+function formatPhaseTitle(dayCount: number, phase: string | null): string {
+  if (!phase) {
+    return "战局未定";
+  }
+  const phaseLabel = gamePhaseCopy[phase] ?? "局中";
+  return `第 ${dayCount} 日 · ${phaseLabel}`;
+}
 
 export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
   const [gameState, dispatchGameState] = useReducer(gameReducer, undefined, createInitialGameState);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [reconnectPending, setReconnectPending] = useState(false);
+  const [theme, setTheme] = useState<Theme>(resolveInitialTheme);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
-  const { entries, players, pendingAction, isTerminal, currentPhase } = gameState;
+  const {
+    entries,
+    players,
+    pendingAction,
+    isTerminal,
+    currentPhase,
+    dayCount,
+    lastDeathReveal,
+    lastVoteResult,
+  } = gameState;
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
@@ -50,6 +80,44 @@ export function App() {
 
   const canManualReconnect = !isTerminal
     && (phase === "closed" || phase === "error");
+
+  const battleSignal: BattleSignal = latestOutcome
+    ? {
+        title: latestOutcome.message,
+        detail: "一局终章，身份尽数揭示。",
+        tone: "terminal",
+      }
+    : pendingAction
+      ? {
+          title: "轮到你落子",
+          detail: "轮到你了，在右侧落下你的决定。",
+          tone: "danger",
+        }
+      : lastVoteResult
+        ? {
+            title: lastVoteResult.banishedSeat === null ? "票归无声" : "票落成局",
+            detail: `刚刚开票：${lastVoteResult.summary}`,
+            tone: lastVoteResult.banishedSeat === null ? "muted" : "danger",
+          }
+        : lastDeathReveal
+          ? {
+              title: lastDeathReveal.deadSeats.length > 0 ? "昨夜有名" : "平安夜",
+              detail: lastDeathReveal.deadSeats.length > 0
+                ? `${formatSeatList(lastDeathReveal.deadSeats)} 已成墓碑${
+                    lastDeathReveal.eligibleLastWords.length > 0
+                      ? `，${formatSeatList(lastDeathReveal.eligibleLastWords)} 尚有遗言。`
+                      : "。"
+                  }`
+                : "天亮之后，桌上无人倒下。",
+              tone: lastDeathReveal.deadSeats.length > 0 ? "danger" : "muted",
+            }
+          : {
+              title: currentPhase ? formatPhaseTitle(dayCount, currentPhase) : spotlightText,
+              detail: currentPhase
+                ? "桌上仍在推演，消息会持续涌入中央。"
+                : "等候第一条局内消息落下。",
+              tone: "muted",
+            };
 
   const handleManualReconnect = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -158,6 +226,13 @@ export function App() {
     dispatchGameState({ type: "clear-pending-action" });
   }
 
+  function handleToggleTheme() {
+    const next = toggleTheme(theme);
+    applyTheme(next);
+    persistTheme(next);
+    setTheme(next);
+  }
+
   return (
     <main
       className="app-shell"
@@ -167,6 +242,17 @@ export function App() {
       <div className="app-frame">
         <header className="app-header">
           <h1>狼人杀对局面板</h1>
+          <div className="app-header__actions">
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={handleToggleTheme}
+              aria-label={theme === "light" ? "切换至暗色主题" : "切换至亮色主题"}
+              title={theme === "light" ? "暗" : "亮"}
+            >
+              {theme === "light" ? "暗" : "亮"}
+            </button>
+          </div>
           <p className="app-status" role="status" aria-live="polite">
             <span
               className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
@@ -203,17 +289,11 @@ export function App() {
 
           <section className="log-column">
             <section
-              className={`result-banner ${latestOutcome ? "" : "is-muted"}`}
+              className={`result-banner is-${battleSignal.tone}`}
               aria-label={latestOutcome ? "终局提示" : "战局提示"}
             >
-              <strong>{latestOutcome ? latestOutcome.message : spotlightText}</strong>
-              <span>
-                {latestOutcome
-                  ? "一局终章，身份尽数揭示。"
-                  : pendingAction
-                    ? "轮到你了，在右侧落下你的决定。"
-                    : "桌上仍在推演，消息会持续涌入中央。"}
-              </span>
+              <strong>{battleSignal.title}</strong>
+              <span>{battleSignal.detail}</span>
             </section>
             <ChatHistory entries={entries} />
           </section>

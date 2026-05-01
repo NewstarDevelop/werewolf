@@ -88,6 +88,32 @@ body::before {
   padding: 0 var(--space-2);
 }
 
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.theme-toggle {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-page);
+  color: var(--color-ink-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  transition: var(--motion-colors);
+  line-height: var(--line-height-base);
+}
+
+.theme-toggle:hover {
+  color: var(--color-amber-ink);
+  border-color: var(--color-amber);
+  background: var(--color-amber-soft);
+}
+
 h1 {
   margin: 0;
   font-family: var(--font-family-serif);
@@ -242,15 +268,25 @@ h1 {
   border-style: dashed;
 }
 
-/* 非 muted（已进入终局）时加帷幕仪式感 */
-.result-banner:not(.is-muted) {
+.result-banner.is-danger {
+  background: var(--color-surface-page);
+  border-color: var(--color-vermilion);
+  box-shadow: var(--shadow-md);
+}
+
+.result-banner.is-danger strong {
+  color: var(--color-vermilion-ink);
+}
+
+/* 终局时加帷幕仪式感 */
+.result-banner.is-terminal {
   background: var(--color-surface-page);
   border-color: var(--color-ink-primary);
   box-shadow: var(--shadow-md);
   animation: curtain-drop 900ms var(--ease-out-expo);
 }
 
-.result-banner:not(.is-muted)::before {
+.result-banner.is-terminal::before {
   content: "帷";
   position: absolute;
   top: var(--space-3);
