@@ -18,12 +18,21 @@ from app.protocols.s2c import (
     AIThinkingPayload,
     ChatUpdateEnvelope,
     ChatUpdatePayload,
+    DeathRevealedEnvelope,
+    DeathRevealedPayload,
     GameOverEnvelope,
     GameOverPayload,
+    PhaseChangedEnvelope,
+    PhaseChangedPayload,
+    PlayerStatePatch,
+    PlayerStatePatchEnvelope,
+    PlayerStatePatchPayload,
     RequireInputEnvelope,
     RequireInputPayload,
     SystemMessageEnvelope,
     SystemMessagePayload,
+    VoteResolvedEnvelope,
+    VoteResolvedPayload,
 )
 from app.services.setup_game import GameSetupResult, setup_game
 from app.ws.manager import ConnectionManager
@@ -74,6 +83,77 @@ def build_ai_thinking_message(seat_id: int, is_thinking: bool) -> dict[str, obje
     ).model_dump()
 
 
+def build_player_state_patch_message(
+    context: GameContext,
+    seat_ids: list[int],
+    *,
+    reveal_roles: bool = False,
+) -> dict[str, object]:
+    return PlayerStatePatchEnvelope(
+        type="PLAYER_STATE_PATCH",
+        data=PlayerStatePatchPayload(
+            players=[
+                PlayerStatePatch(
+                    seat_id=seat_id,
+                    is_alive=context.players[seat_id].is_alive,
+                    is_human=isinstance(context.players[seat_id], HumanPlayer),
+                    role_code=(
+                        context.players[seat_id].role.value
+                        if reveal_roles
+                        else None
+                    ),
+                    is_thinking=False,
+                )
+                for seat_id in seat_ids
+            ],
+        ),
+    ).model_dump()
+
+
+def build_phase_changed_message(context: GameContext) -> dict[str, object]:
+    return PhaseChangedEnvelope(
+        type="PHASE_CHANGED",
+        data=PhaseChangedPayload(
+            phase=context.phase,
+            day_count=context.day_count,
+        ),
+    ).model_dump()
+
+
+def build_death_revealed_message(
+    context: GameContext,
+    *,
+    dead_seats: list[int],
+    eligible_last_words: list[int],
+) -> dict[str, object]:
+    return DeathRevealedEnvelope(
+        type="DEATH_REVEALED",
+        data=DeathRevealedPayload(
+            dead_seats=dead_seats,
+            eligible_last_words=eligible_last_words,
+            day_count=context.day_count,
+        ),
+    ).model_dump()
+
+
+def build_vote_resolved_message(
+    *,
+    votes: dict[int, int],
+    abstentions: list[int],
+    banished_seat: int | None,
+    summary: str,
+) -> dict[str, object]:
+    return VoteResolvedEnvelope(
+        type="VOTE_RESOLVED",
+        data=VoteResolvedPayload(
+            votes=votes,
+            abstentions=abstentions,
+            banished_seat=banished_seat,
+            summary=summary,
+        ),
+    ).model_dump()
+
+
 def build_require_input_message(
     action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
     *,
@@ -92,14 +172,21 @@ def build_require_input_message(
 
 def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     winner = check_win(context)
-    if winner is None:
+    if winner is None and context.phase != "GAME_OVER":
         return None
+
+    winning_side = winner["winning_side"] if winner is not None else "DRAW"
+    summary = winner["summary"] if winner is not None else (
+        context.public_chat_history[-1]
+        if context.public_chat_history
+        else "夜尽未分胜负，本局暂止。"
+    )
 
     return GameOverEnvelope(
         type="GAME_OVER",
         data=GameOverPayload(
-            winning_side=winner["winning_side"],
-            summary=winner["summary"],
+            winning_side=winning_side,
+            summary=summary,
             revealed_roles={
                 seat_id: player.role.value
                 for seat_id, player in sorted(context.players.items())
@@ -145,6 +232,50 @@ class WebSocketGameEngine(GameEngine):
 
     async def _notify_thinking(self, seat_id: int, is_thinking: bool) -> None:
         await self._send_json(build_ai_thinking_message(seat_id, is_thinking))
+
+    async def _notify_player_state(
+        self,
+        context: GameContext,
+        seat_ids: list[int],
+    ) -> None:
+        if not seat_ids:
+            return
+        await self._send_json(build_player_state_patch_message(context, seat_ids))
+
+    async def _notify_phase_changed(self, context: GameContext) -> None:
+        await self._send_json(build_phase_changed_message(context))
+
+    async def _notify_death_revealed(
+        self,
+        context: GameContext,
+        *,
+        dead_seats: list[int],
+        eligible_last_words: list[int],
+    ) -> None:
+        await self._send_json(
+            build_death_revealed_message(
+                context,
+                dead_seats=dead_seats,
+                eligible_last_words=eligible_last_words,
+            )
+        )
+
+    async def _notify_vote_resolved(
+        self,
+        *,
+        votes: dict[int, int],
+        abstentions: list[int],
+        banished_seat: int | None,
+        summary: str,
+    ) -> None:
+        await self._send_json(
+            build_vote_resolved_message(
+                votes=votes,
+                abstentions=abstentions,
+                banished_seat=banished_seat,
+                summary=summary,
+            )
+        )
 
     async def _await_human_input(
         self,
@@ -422,6 +553,15 @@ async def game_socket(websocket: WebSocket) -> None:
             setup_result.human_seat_id,
         ),
     )
+    await manager.send_json(
+        websocket,
+        build_player_state_patch_message(
+            setup_result.context,
+            [setup_result.human_seat_id],
+            reveal_roles=True,
+        ),
+    )
+    await manager.send_json(websocket, build_phase_changed_message(setup_result.context))
     engine_task = asyncio.create_task(
         run_game_session(
             setup_result,

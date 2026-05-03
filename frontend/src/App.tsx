@@ -1,16 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ActionPanel } from "./components/ActionPanel";
-import { ChatHistory, type ChatEntry } from "./components/ChatHistory";
-import { PlayerList, type PlayerListItem } from "./components/PlayerList";
+import { ChatHistory } from "./components/ChatHistory";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { PlayerList } from "./components/PlayerList";
 import { RoleGuide } from "./components/RoleGuide";
 import {
   connectionPhaseCopy,
   formatSeat,
+  formatSeatList,
+  gamePhaseCopy,
   identityStateCopy,
-  narratorSpeaker,
-  toRoleLabel,
 } from "./copy";
+import {
+  createInitialGameState,
+  findLatestOutcome,
+  gameReducer,
+} from "./state/gameState";
+import { type Theme, applyTheme, persistTheme, resolveInitialTheme, toggleTheme } from "./theme";
+import type { SubmitActionPayload } from "./types/ws";
 import {
   createGameSocketUrl,
   GAME_OVER_CLOSE_CODE,
@@ -18,146 +26,45 @@ import {
   type ConnectionPhase,
   type ServerEnvelope,
 } from "./ws/client";
-import type { GameOverEnvelope, RequireInputEnvelope, SubmitActionPayload } from "./types/ws";
 
-function createInitialPlayers(): PlayerListItem[] {
-  return Array.from({ length: 9 }, (_, index) => ({
-    seatId: index + 1,
-    isAlive: true,
-    isHuman: index === 0,
-    roleLabel: index === 0 ? identityStateCopy.unknownRole : undefined,
-    isThinking: false,
-  }));
-}
+const VALID_ENVELOPE_TYPES = new Set([
+  "SYSTEM_MSG", "CHAT_UPDATE", "AI_THINKING", "PLAYER_STATE_PATCH",
+  "PHASE_CHANGED", "DEATH_REVEALED", "VOTE_RESOLVED", "REQUIRE_INPUT", "GAME_OVER",
+]);
 
-function applyThinkingState(players: PlayerListItem[], seatId: number, isThinking: boolean) {
-  return players.map((player) =>
-    player.seatId === seatId ? { ...player, isThinking } : player,
-  );
-}
-
-function applyIdentityMessage(players: PlayerListItem[], message: string) {
-  const identityMatch = message.match(/你的座位号是\s*(\d+)\s*号，身份是\s*([A-Z_]+)\s*。?/);
-
-  if (!identityMatch) {
-    return players;
+function formatPhaseTitle(dayCount: number, phase: string | null): string {
+  if (!phase) {
+    return "战局未定";
   }
-
-  const humanSeat = Number(identityMatch[1]);
-  const humanRoleCode = identityMatch[2];
-  const humanRole = toRoleLabel(humanRoleCode) ?? humanRoleCode;
-  return players.map((player) => {
-    const isHuman = player.seatId === humanSeat;
-    return {
-      ...player,
-      isHuman,
-      roleLabel: isHuman ? humanRole : undefined,
-      roleCode: isHuman ? humanRoleCode : undefined,
-    };
-  });
+  const phaseLabel = gamePhaseCopy[phase] ?? "局中";
+  return `第 ${dayCount} 日 · ${phaseLabel}`;
 }
 
-function applySystemMessage(players: PlayerListItem[], message: string) {
-  let nextPlayers = applyIdentityMessage(players, message);
-
-  const directDeathSeats = [...message.matchAll(/(\d+)号(?:玩家)?(?:被放逐出局|死亡)/g)].map((match) => Number(match[1]));
-  const nightlyDeathAnnouncement = message.match(/昨夜死亡的是\s*([^。]+)/);
-  const announcedNightSeats = nightlyDeathAnnouncement
-    ? [...nightlyDeathAnnouncement[1].matchAll(/(\d+)号/g)].map((match) => Number(match[1]))
-    : [];
-  const hunterShotSeat = message.match(/猎人开枪带走了\s*(\d+)号玩家/);
-  const hunterShotDeaths = hunterShotSeat ? [Number(hunterShotSeat[1])] : [];
-
-  const deadSeats = new Set([...directDeathSeats, ...announcedNightSeats, ...hunterShotDeaths]);
-  if (deadSeats.size > 0) {
-    nextPlayers = nextPlayers.map((player) =>
-      deadSeats.has(player.seatId) ? { ...player, isAlive: false, isThinking: false } : player,
-    );
-  }
-
-  return nextPlayers;
-}
-
-function applyPublicChatMessage(players: PlayerListItem[], message: string) {
-  return applySystemMessage(players, message);
-}
-
-function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
-  return players.map((player) => {
-    const revealedCode = payload.revealed_roles[player.seatId];
-    return {
-      ...player,
-      isThinking: false,
-      roleCode: revealedCode ?? player.roleCode,
-      roleLabel: revealedCode
-        ? (toRoleLabel(revealedCode) ?? revealedCode)
-        : player.roleLabel,
-    };
-  });
-}
-
-function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
-  if (payload.type === "SYSTEM_MSG") {
-    return {
-      id: `system-${crypto.randomUUID()}`,
-      kind: "system",
-      message: payload.data.message,
-    };
-  }
-
-  if (payload.type === "CHAT_UPDATE") {
-    const publicSpeechMatch = payload.data.visibility === "public"
-      ? payload.data.message.match(/^(\d+)号发言[:：]/)
-      : null;
-
-    return {
-      id: `chat-${crypto.randomUUID()}`,
-      kind: payload.data.visibility === "private"
-        ? "private"
-        : publicSpeechMatch
-          ? "speech"
-          : "system",
-      message: payload.data.message,
-      speaker: payload.data.visibility === "private"
-        ? payload.data.speaker ?? "你的视角"
-        : publicSpeechMatch
-          ? formatSeat(Number(publicSpeechMatch[1]))
-          : payload.data.speaker ?? narratorSpeaker,
-    };
-  }
-
-  if (payload.type === "GAME_OVER") {
-    return {
-      id: `game-over-${crypto.randomUUID()}`,
-      kind: "system",
-      message: payload.data.summary,
-      speaker: narratorSpeaker,
-    };
-  }
-
-  return null;
-}
-
-function findLatestOutcome(entries: ChatEntry[]) {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (entries[index]?.id.startsWith("game-over-")) {
-      return entries[index];
-    }
-  }
-  return null;
+interface BattleSignal {
+  title: string;
+  detail: string;
+  tone: "muted" | "danger" | "terminal";
 }
 
 export function App() {
   const [phase, setPhase] = useState<ConnectionPhase>("idle");
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [players, setPlayers] = useState<PlayerListItem[]>(() => createInitialPlayers());
-  const [pendingAction, setPendingAction] = useState<RequireInputEnvelope["data"] | null>(null);
+  const [gameState, dispatchGameState] = useReducer(gameReducer, undefined, createInitialGameState);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
-  const [isTerminal, setIsTerminal] = useState(false);
   const [reconnectPending, setReconnectPending] = useState(false);
+  const [theme, setTheme] = useState<Theme>(resolveInitialTheme);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
+  const {
+    entries,
+    players,
+    pendingAction,
+    isTerminal,
+    currentPhase,
+    dayCount,
+    lastDeathReveal,
+    lastVoteResult,
+  } = gameState;
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
@@ -177,6 +84,44 @@ export function App() {
   const canManualReconnect = !isTerminal
     && (phase === "closed" || phase === "error");
 
+  const battleSignal: BattleSignal = latestOutcome
+    ? {
+        title: latestOutcome.message,
+        detail: "一局终章，身份尽数揭示。",
+        tone: "terminal",
+      }
+    : pendingAction
+      ? {
+          title: "轮到你落子",
+          detail: "轮到你了，下方落下你的决定。",
+          tone: "danger",
+        }
+      : lastVoteResult
+        ? {
+            title: lastVoteResult.banishedSeat === null ? "票归无声" : "票落成局",
+            detail: `刚刚开票：${lastVoteResult.summary}`,
+            tone: lastVoteResult.banishedSeat === null ? "muted" : "danger",
+          }
+        : lastDeathReveal
+          ? {
+              title: lastDeathReveal.deadSeats.length > 0 ? "昨夜有名" : "平安夜",
+              detail: lastDeathReveal.deadSeats.length > 0
+                ? `${formatSeatList(lastDeathReveal.deadSeats)} 已成墓碑${
+                    lastDeathReveal.eligibleLastWords.length > 0
+                      ? `，${formatSeatList(lastDeathReveal.eligibleLastWords)} 尚有遗言。`
+                      : "。"
+                  }`
+                : "天亮之后，桌上无人倒下。",
+              tone: lastDeathReveal.deadSeats.length > 0 ? "danger" : "muted",
+            }
+          : {
+              title: currentPhase ? formatPhaseTitle(dayCount, currentPhase) : spotlightText,
+              detail: currentPhase
+                ? "桌上仍在推演，消息会持续涌入。"
+                : "等候第一条局内消息落下。",
+              tone: "muted",
+            };
+
   const handleManualReconnect = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
       window.clearTimeout(reconnectTimerRef.current);
@@ -190,10 +135,7 @@ export function App() {
   useEffect(() => {
     let disposed = false;
     shouldReconnectRef.current = true;
-    setEntries([]);
-    setPlayers(createInitialPlayers());
-    setPendingAction(null);
-    setIsTerminal(false);
+    dispatchGameState({ type: "reset" });
     setReconnectPending(false);
     setPhase("connecting");
 
@@ -221,40 +163,29 @@ export function App() {
     });
 
     socket.addEventListener("message", (event) => {
-      let payload: ServerEnvelope;
+      let raw: unknown;
       try {
-        payload = JSON.parse(event.data) as ServerEnvelope;
-      } catch (error) {
-        console.warn("Received malformed message from server; ignoring.", error);
+        raw = JSON.parse(event.data);
+      } catch {
+        console.warn("Received non-JSON message from server; ignoring.");
         return;
       }
 
-      const chatEntry = buildChatEntry(payload);
-      if (chatEntry) {
-        setEntries((current) => [...current, chatEntry]);
+      if (
+        !raw
+        || typeof raw !== "object"
+        || !("type" in raw)
+        || typeof (raw as Record<string, unknown>).type !== "string"
+        || !VALID_ENVELOPE_TYPES.has((raw as Record<string, unknown>).type as string)
+      ) {
+        console.warn("Received unknown envelope type from server; ignoring.", raw);
+        return;
       }
-      if (payload.type === "SYSTEM_MSG") {
-        setPlayers((current) => applySystemMessage(current, payload.data.message));
-      }
-      if (payload.type === "CHAT_UPDATE" && payload.data.visibility === "private") {
-        setPlayers((current) => applyIdentityMessage(current, payload.data.message));
-      }
-      if (payload.type === "CHAT_UPDATE" && payload.data.visibility === "public") {
-        setPlayers((current) => applyPublicChatMessage(current, payload.data.message));
-      }
-      if (payload.type === "AI_THINKING") {
-        setPlayers((current) =>
-          applyThinkingState(current, payload.data.seat_id, payload.data.is_thinking),
-        );
-      }
-      if (payload.type === "REQUIRE_INPUT") {
-        setPendingAction(payload.data);
-      }
+
+      const payload = raw as ServerEnvelope;
+      dispatchGameState({ type: "server-envelope", envelope: payload });
       if (payload.type === "GAME_OVER") {
         shouldReconnectRef.current = false;
-        setIsTerminal(true);
-        setPlayers((current) => applyGameOver(current, payload.data));
-        setPendingAction(null);
       }
     });
 
@@ -271,9 +202,9 @@ export function App() {
         socketRef.current = null;
       }
       setPhase("closed");
-      setPendingAction(null);
+      dispatchGameState({ type: "clear-pending-action" });
       if (event?.code === GAME_OVER_CLOSE_CODE) {
-        setIsTerminal(true);
+        dispatchGameState({ type: "mark-terminal" });
         return;
       }
       if (!shouldReconnectRef.current) {
@@ -307,70 +238,89 @@ export function App() {
         data: payload,
       }),
     );
-    setPendingAction(null);
+    dispatchGameState({ type: "clear-pending-action" });
+  }
+
+  function handleToggleTheme() {
+    const next = toggleTheme(theme);
+    applyTheme(next);
+    persistTheme(next);
+    setTheme(next);
   }
 
   return (
-    <main className="app-shell" data-connection-phase={phase}>
-      <div className="app-frame">
-        <header className="app-header">
-          <h1>狼人杀对局面板</h1>
-          <p className="app-status" role="status" aria-live="polite">
-            <span
-              className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
-            >
-              {connectionLabel}
-            </span>
-            <span className="app-status__sep" aria-hidden="true">·</span>
-            <span className="app-status__spotlight">{spotlightText}</span>
-            {canManualReconnect ? (
+    <ErrorBoundary>
+      <main
+        className="app-shell"
+        data-connection-phase={phase}
+        data-game-phase={currentPhase ?? "UNKNOWN"}
+      >
+        <div className="app-frame">
+          <header className="app-header">
+            <h1>狼人杀对局面板</h1>
+            <div className="app-header__actions">
+              {humanPlayer ? (
+                <span className="identity-badge">
+                  <span className="identity-badge__seat">
+                    {formatSeat(humanPlayer.seatId)}
+                  </span>
+                  <span className="identity-badge__role">
+                    {humanPlayer.roleLabel ?? identityStateCopy.unknownRole}
+                  </span>
+                  <span className="identity-badge__state">
+                    {humanPlayer.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
+                  </span>
+                  <RoleGuide roleCode={humanPlayer.roleCode} />
+                </span>
+              ) : null}
               <button
                 type="button"
-                className="app-status__retry"
-                onClick={handleManualReconnect}
+                className="theme-toggle"
+                onClick={handleToggleTheme}
+                aria-label={theme === "light" ? "切换至暗色主题" : "切换至亮色主题"}
               >
-                立即重连
+                {theme === "light" ? "暗" : "亮"}
               </button>
-            ) : null}
-          </p>
-        </header>
-
-        <div className="app-grid">
-          <aside className="board-column">
-            <section className="identity-card" aria-label="你的身份摘要">
-              <p className="identity-kicker">你的席位</p>
-              <strong>{humanPlayer ? formatSeat(humanPlayer.seatId) : identityStateCopy.unknownSeat}</strong>
-              <p>{humanPlayer?.roleLabel ?? identityStateCopy.unknownRole}</p>
-              <span className={`identity-state ${humanPlayer?.isAlive === false ? "is-dead" : "is-alive"}`}>
-                {humanPlayer?.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
+            </div>
+            <p className="app-status" role="status" aria-live="polite">
+              <span
+                className={`app-status__phase is-${isTerminal ? "terminal" : phase}`}
+              >
+                {connectionLabel}
               </span>
-              <RoleGuide roleCode={humanPlayer?.roleCode} />
-            </section>
-            <PlayerList players={players} />
-          </aside>
+              <span className="app-status__sep" aria-hidden="true">·</span>
+              <span className="app-status__spotlight">{spotlightText}</span>
+              {canManualReconnect ? (
+                <button
+                  type="button"
+                  className="app-status__retry"
+                  onClick={handleManualReconnect}
+                >
+                  立即重连
+                </button>
+              ) : null}
+            </p>
+          </header>
 
-          <section className="log-column">
-            <section
-              className={`result-banner ${latestOutcome ? "" : "is-muted"}`}
-              aria-label={latestOutcome ? "终局提示" : "战局提示"}
-            >
-              <strong>{latestOutcome ? latestOutcome.message : spotlightText}</strong>
-              <span>
-                {latestOutcome
-                  ? "一局终章，身份尽数揭示。"
-                  : pendingAction
-                    ? "轮到你了，在右侧落下你的决定。"
-                    : "桌上仍在推演，消息会持续涌入中央。"}
-              </span>
-            </section>
-            <ChatHistory entries={entries} />
+          <section
+            className={`battle-signal is-${battleSignal.tone}`}
+            aria-label={latestOutcome ? "终局提示" : "战局提示"}
+          >
+            <strong>{battleSignal.title}</strong>
+            <span>{battleSignal.detail}</span>
           </section>
 
-          <aside className="action-column">
-            <ActionPanel key={connectionAttempt} request={pendingAction} onSubmit={handleSubmitAction} />
-          </aside>
+          <PlayerList players={players} />
+
+          <ChatHistory entries={entries} />
+
+          <ActionPanel
+            key={connectionAttempt}
+            request={pendingAction}
+            onSubmit={handleSubmitAction}
+          />
         </div>
-      </div>
-    </main>
+      </main>
+    </ErrorBoundary>
   );
 }

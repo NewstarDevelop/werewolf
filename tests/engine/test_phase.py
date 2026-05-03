@@ -9,3 +9,4 @@ def test_phase_enum_covers_core_night_and_day_nodes() -> None:
     assert GamePhase.DEAD_LAST_WORDS.value == "DEAD_LAST_WORDS"
     assert GamePhase.DAY_SPEAKING.value == "DAY_SPEAKING"
     assert GamePhase.VOTE_RESULT.value == "VOTE_RESULT"
+    assert GamePhase.BANISH_LAST_WORDS.value == "BANISH_LAST_WORDS"

@@ -20,6 +20,7 @@ def test_run_loop_reaches_core_phases() -> None:
     assert any(message.startswith("天亮了。") for message in context.public_chat_history)
     assert any("号发言：" in message for message in context.public_chat_history)
     assert any("玩家被放逐出局。" in message or "本轮无人出局。" in message for message in context.public_chat_history)
+    assert context.public_chat_history[-1] == "夜尽未分胜负，本局暂止。"
 
 
 def test_run_loop_stops_immediately_when_win_condition_is_met() -> None:

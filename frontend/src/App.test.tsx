@@ -51,6 +51,8 @@ class MockWebSocket {
 describe("App", () => {
   beforeEach(() => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("renders the shell heading and player list", () => {
@@ -62,6 +64,19 @@ describe("App", () => {
     expect(view.getByRole("heading", { name: "狼人杀对局面板" })).toBeInTheDocument();
     expect(view.getByLabelText("玩家状态列表").children).toHaveLength(9);
     expect(MockWebSocket.instances[0]?.url).toContain("/ws/game");
+  });
+
+  it("toggles and persists the manual theme", () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "切换至暗色主题" }));
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(window.localStorage.getItem("werewolf.theme")).toBe("dark");
+    expect(within(view.container).getByRole("button", { name: "切换至亮色主题" })).toBeInTheDocument();
   });
 
   it("updates player thinking status from websocket events", async () => {
@@ -231,6 +246,26 @@ describe("App", () => {
     }
   });
 
+  it("tracks structured game phase messages on the app shell", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "PHASE_CHANGED",
+      data: {
+        phase: "NIGHT_START",
+        day_count: 2,
+      },
+    });
+
+    await waitFor(() => {
+      expect(view.container.querySelector("[data-game-phase=\"NIGHT_START\"]")).not.toBeNull();
+      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("第 2 日 · 入夜");
+    });
+  });
+
   it("renders structured chat entries from websocket messages", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -305,6 +340,33 @@ describe("App", () => {
     });
   });
 
+  it("syncs the human seat and role from structured player patches", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "PLAYER_STATE_PATCH",
+      data: {
+        players: [
+          {
+            seat_id: 5,
+            is_alive: true,
+            is_human: true,
+            role_code: "WITCH",
+            is_thinking: false,
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 女巫");
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("局外人");
+    });
+  });
+
   it("updates player alive state from public death logs", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -369,6 +431,61 @@ describe("App", () => {
         node.textContent,
       );
       expect(deadSeats).toContain("2");
+    });
+  });
+
+  it("summarizes structured death reveals in the result banner", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "DEATH_REVEALED",
+      data: {
+        dead_seats: [4],
+        eligible_last_words: [4],
+        day_count: 1,
+      },
+    });
+
+    await waitFor(() => {
+      const banner = within(view.container).getByLabelText("战局提示");
+      expect(banner).toHaveTextContent("昨夜有名");
+      expect(banner).toHaveTextContent("4号玩家 已成墓碑，4号玩家 尚有遗言。");
+    });
+  });
+
+  it("updates player alive state from structured death and vote events", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+    const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+
+    socket?.emit("message", {
+      type: "DEATH_REVEALED",
+      data: {
+        dead_seats: [4],
+        eligible_last_words: [4],
+        day_count: 1,
+      },
+    });
+    socket?.emit("message", {
+      type: "VOTE_RESOLVED",
+      data: {
+        votes: { 2: 3 },
+        abstentions: [],
+        banished_seat: 2,
+        summary: "2号玩家被放逐出局。",
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByLabelText("4号状态")).toHaveTextContent("墓碑");
+      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("墓碑");
+      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("票落成局");
+      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("刚刚开票：2号玩家被放逐出局。");
     });
   });
 

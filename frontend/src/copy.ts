@@ -4,7 +4,7 @@
  * Never expose backend code constants (WOLF_KILL / REQUIRE_INPUT / ...) to
  * the UI. Route every action_type through `actionTypeCopy`.
  *
- * Tone guide (from .impeccable.md):
+ * Tone guide:
  *   - 墨色 克制 松动: 短、克制、文人桌游感
  *   - 动词优先：用户是为了"做"，不是为了"读说明"
  *   - 仪式感：destructive 动作的 submitLabel 要有分量（下刀/下毒/开枪）
@@ -205,6 +205,25 @@ export const connectionPhaseCopy: Record<ConnectionPhase, string> = {
   error: "连接有误",
 };
 
+/** 游戏阶段的人话，避免后端阶段常量泄漏到 UI。 */
+export const gamePhaseCopy: Record<string, string> = {
+  INIT: "发牌",
+  CHECK_WIN: "验局",
+  NIGHT_START: "入夜",
+  WOLF_ACTION: "狼夜",
+  SEER_ACTION: "查验",
+  WITCH_ACTION: "持药",
+  NIGHT_END: "夜结",
+  DAY_START: "天明",
+  DEAD_LAST_WORDS: "遗言",
+  HUNTER_SHOOTING: "猎枪",
+  DAY_SPEAKING: "发言",
+  VOTING: "投票",
+  VOTE_RESULT: "开票",
+  BANISH_LAST_WORDS: "放逐遗言",
+  GAME_OVER: "终局",
+};
+
 /** 聊天气泡侧的小标签。 */
 export const chatTagCopy: Record<"system" | "private" | "speech", string> = {
   system: "系统",
@@ -215,6 +234,11 @@ export const chatTagCopy: Record<"system" | "private" | "speech", string> = {
 /** 身份卡等处的"席位"文案。 */
 export function formatSeat(seatId: number): string {
   return `${seatId}号玩家`;
+}
+
+/** 多个席位并列时的人话格式。 */
+export function formatSeatList(seatIds: number[]): string {
+  return seatIds.map((seatId) => formatSeat(seatId)).join("、");
 }
 
 /** 身份卡存活状态。 */
