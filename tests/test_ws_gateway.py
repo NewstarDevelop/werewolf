@@ -11,6 +11,7 @@ from app.domain.view_mask import build_player_view
 from app.domain.player import AIPlayer, HumanPlayer
 from app.main import app
 from app.services.setup_game import GameSetupResult, setup_game
+from app.engine.day.day_speaking import run_day_speaking
 from app.engine.night.witch_action import WitchResources
 from app.engine.states.phase import GamePhase
 from app.ws.routes import (
@@ -205,6 +206,47 @@ def test_attach_context_bridge_filters_private_messages_for_other_seats() -> Non
     asyncio.run(run())
 
     assert forwarded_payloads == []
+
+
+def test_day_speaking_publishes_human_speech_before_next_ai_speaker() -> None:
+    forwarded_payloads: list[dict[str, object]] = []
+    messages_seen_before_ai_speech: list[str] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+    context.add_player(AIPlayer(seat_id=2, role=Role.WOLF, personality="steady"))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        forwarded_payloads.append(payload)
+
+    async def human_speaker(seat_id: int) -> str:
+        assert seat_id == 1
+        return "我是预言家。"
+
+    async def ai_speaker(seat_id: int) -> str:
+        assert seat_id == 2
+        messages_seen_before_ai_speech.extend(
+            str(payload["data"]["message"])
+            for payload in forwarded_payloads
+            if payload["type"] == "CHAT_UPDATE"
+        )
+        return "我听到了前置位发言。"
+
+    async def notify_thinking(_: int, __: bool) -> None:
+        return None
+
+    async def run() -> None:
+        attach_context_bridge(context, send_json, viewer_seat_id=1)
+        await run_day_speaking(
+            context,
+            start_seat=1,
+            human_speaker=human_speaker,
+            ai_speaker=ai_speaker,
+            notify_thinking=notify_thinking,
+        )
+
+    asyncio.run(run())
+
+    assert messages_seen_before_ai_speech == ["1号发言：我是预言家。"]
 
 
 def test_log_game_session_task_outcome_records_failures(caplog) -> None:

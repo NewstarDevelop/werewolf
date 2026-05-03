@@ -39,13 +39,18 @@ async def run_day_speaking(
                 speech = "过。"
         elif isinstance(player, AIPlayer):
             await notify_thinking(seat_id, True)
-            speech = await ai_speaker(seat_id)
-            await notify_thinking(seat_id, False)
+            try:
+                speech = await ai_speaker(seat_id)
+            finally:
+                await notify_thinking(seat_id, False)
         else:
             speech = await ai_speaker(seat_id)
 
         record = f"{seat_id}号发言：{speech}"
         speeches.append(record)
         context.add_public_message(record)
+        # Let websocket bridge tasks publish this speech before the next
+        # speaker starts a potentially blocking AI request.
+        await asyncio.sleep(0)
 
     return speeches

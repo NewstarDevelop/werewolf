@@ -276,6 +276,8 @@ class GameEngine:
 
     async def _llm_speaker(self, context: GameContext, seat_id: int) -> str:
         player = context.players[seat_id]
+        if isinstance(player, HumanPlayer):
+            return await self._human_speaker(seat_id)
         if self._llm_client is None or not isinstance(player, AIPlayer):
             return await self._ai_speaker(seat_id)
 
