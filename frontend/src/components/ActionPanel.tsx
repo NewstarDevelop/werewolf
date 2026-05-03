@@ -44,6 +44,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const [selectedTarget, setSelectedTarget] = useState<TargetSelection>(null);
   const [selectedWitchAction, setSelectedWitchAction] = useState<WitchActionType | null>(null);
   const [confirmingDanger, setConfirmingDanger] = useState(false);
+  const [isPanelHidden, setIsPanelHidden] = useState(false);
 
   const canSubmitSpeech = speechText.trim().length > 0;
   const canSubmitTarget = typeof selectedTarget === "number";
@@ -62,6 +63,10 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   useEffect(() => {
     setConfirmingDanger(false);
   }, [request, selectedTarget, selectedWitchAction]);
+
+  useEffect(() => {
+    setIsPanelHidden(false);
+  }, [request?.action_type, request?.prompt]);
 
   // Auto-release confirmation after a pause so a stale arm never fires.
   useEffect(() => {
@@ -175,7 +180,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
     [request, confirmingDanger, resetSelections],
   );
 
-  useKeyboard(keyboardHandler, request !== null);
+  useKeyboard(keyboardHandler, request !== null && !isPanelHidden);
 
   const submitDisabled =
     !request
@@ -200,17 +205,42 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
     .filter(Boolean)
     .join(" ");
 
+  const panelClasses = [
+    "action-panel",
+    isPanelHidden ? "is-collapsed" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <section className="action-panel" aria-labelledby="action-panel-title">
+    <section className={panelClasses} aria-labelledby="action-panel-title">
       <header className="panel-header">
-        <h2 id="action-panel-title">操作面板</h2>
+        <div className="panel-title-block">
+          <h2 id="action-panel-title">操作面板</h2>
+          {isPanelHidden ? (
+            <p className="panel-collapsed-summary">
+              当前 · {copy.title}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="panel-visibility-button"
+          aria-expanded={!isPanelHidden}
+          aria-controls="action-panel-body"
+          aria-label={isPanelHidden ? "展开操作面板" : "隐藏操作面板"}
+          onClick={() => setIsPanelHidden((current) => !current)}
+        >
+          {isPanelHidden ? "展开" : "隐藏"}
+        </button>
       </header>
 
-      <div className="action-shell">
-        <div className="action-status-bar">
-          <span className="action-status-label">当前</span>
-          <strong>{copy.title}</strong>
-        </div>
+      {!isPanelHidden ? (
+        <div id="action-panel-body" className="action-shell">
+          <div className="action-status-bar">
+            <span className="action-status-label">当前</span>
+            <strong>{copy.title}</strong>
+          </div>
 
         {!request ? (
           <div className="action-idle">
@@ -373,7 +403,8 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
             ) : null}
           </>
         ) : null}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }

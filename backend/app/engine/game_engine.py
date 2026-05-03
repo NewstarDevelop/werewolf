@@ -47,11 +47,17 @@ class GameEngine:
         valid_targets = [
             seat_id
             for seat_id, player in sorted(context.players.items())
-            if player.is_alive and player.role is not Role.WOLF
+            if player.is_alive
         ]
         if not valid_targets:
             raise ValueError("no valid wolf target available")
-        return self._rng.choice(valid_targets) if self._rng else valid_targets[0]
+        preferred_targets = [
+            seat_id
+            for seat_id in valid_targets
+            if context.players[seat_id].role is not Role.WOLF
+        ]
+        fallback_targets = preferred_targets or valid_targets
+        return self._rng.choice(fallback_targets) if self._rng else fallback_targets[0]
 
     async def _select_wolf_target(self, context: GameContext) -> int:
         human_wolf = next(
@@ -80,7 +86,7 @@ class GameEngine:
         valid_targets = [
             seat_id
             for seat_id, player in sorted(context.players.items())
-            if player.is_alive and player.role is not Role.WOLF
+            if player.is_alive
         ]
         if alpha_wolf is None or not valid_targets:
             return self._choose_wolf_target(context)

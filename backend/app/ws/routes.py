@@ -88,7 +88,9 @@ def build_player_state_patch_message(
     seat_ids: list[int],
     *,
     reveal_roles: bool = False,
+    reveal_role_seats: set[int] | None = None,
 ) -> dict[str, object]:
+    role_seats = reveal_role_seats or set()
     return PlayerStatePatchEnvelope(
         type="PLAYER_STATE_PATCH",
         data=PlayerStatePatchPayload(
@@ -99,7 +101,7 @@ def build_player_state_patch_message(
                     is_human=isinstance(context.players[seat_id], HumanPlayer),
                     role_code=(
                         context.players[seat_id].role.value
-                        if reveal_roles
+                        if reveal_roles or seat_id in role_seats
                         else None
                     ),
                     is_thinking=False,
@@ -108,6 +110,15 @@ def build_player_state_patch_message(
             ],
         ),
     ).model_dump()
+
+
+def known_role_seat_ids_from_setup(setup_result: GameSetupResult) -> list[int]:
+    known_role_seats = [
+        int(player_view["seat_id"])
+        for player_view in setup_result.human_view["players"]
+        if player_view.get("known_role") is not None
+    ]
+    return known_role_seats or [setup_result.human_seat_id]
 
 
 def build_phase_changed_message(context: GameContext) -> dict[str, object]:
@@ -364,7 +375,7 @@ class WebSocketGameEngine(GameEngine):
         allowed_targets = [
             seat_id
             for seat_id, player in sorted(context.players.items())
-            if player.is_alive and player.role is not Role.WOLF
+            if player.is_alive
         ]
         payload = await self._await_human_input(
             human_player.seat_id,
@@ -553,12 +564,13 @@ async def game_socket(websocket: WebSocket) -> None:
             setup_result.human_seat_id,
         ),
     )
+    known_role_seat_ids = known_role_seat_ids_from_setup(setup_result)
     await manager.send_json(
         websocket,
         build_player_state_patch_message(
             setup_result.context,
-            [setup_result.human_seat_id],
-            reveal_roles=True,
+            known_role_seat_ids,
+            reveal_role_seats=set(known_role_seat_ids),
         ),
     )
     await manager.send_json(websocket, build_phase_changed_message(setup_result.context))

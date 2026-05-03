@@ -27,6 +27,19 @@ def test_human_wolf_target_takes_priority() -> None:
     assert context.killed_tonight == [4]
 
 
+def test_human_wolf_can_choose_living_wolf_target() -> None:
+    context = build_context(
+        HumanPlayer(seat_id=1, role=Role.WOLF),
+        AIPlayer(seat_id=2, role=Role.WOLF, personality="aggressive"),
+        Player(seat_id=3, role=Role.SEER),
+    )
+
+    target = resolve_wolf_action(context, human_target=1)
+
+    assert target == 1
+    assert context.killed_tonight == [1]
+
+
 def test_all_ai_wolves_use_alpha_choice() -> None:
     context = build_context(
         AIPlayer(seat_id=2, role=Role.WOLF, personality="aggressive"),
@@ -54,6 +67,21 @@ def test_all_ai_wolves_can_use_explicit_ai_target() -> None:
 
     assert target == 4
     assert context.killed_tonight == [4]
+
+
+def test_all_ai_wolves_can_use_explicit_wolf_target() -> None:
+    context = build_context(
+        AIPlayer(seat_id=2, role=Role.WOLF, personality="aggressive"),
+        AIPlayer(seat_id=5, role=Role.WOLF, personality="steady"),
+        Player(seat_id=3, role=Role.SEER),
+        Player(seat_id=4, role=Role.VILLAGER),
+    )
+
+    target = resolve_wolf_action(context, ai_target=5)
+
+    assert target == 5
+    assert context.killed_tonight == [5]
+    assert context.get_private_log(2) == ["Alpha 狼决定击杀 5 号。"]
 
 
 def test_human_wolf_cannot_choose_invalid_target() -> None:

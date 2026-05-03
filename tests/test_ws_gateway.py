@@ -7,9 +7,10 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext
+from app.domain.view_mask import build_player_view
 from app.domain.player import AIPlayer, HumanPlayer
 from app.main import app
-from app.services.setup_game import setup_game
+from app.services.setup_game import GameSetupResult, setup_game
 from app.engine.night.witch_action import WitchResources
 from app.engine.states.phase import GamePhase
 from app.ws.routes import (
@@ -21,6 +22,7 @@ from app.ws.routes import (
     build_player_state_patch_message,
     build_vote_resolved_message,
     GAME_OVER_CLOSE_CODE,
+    known_role_seat_ids_from_setup,
     log_game_session_task_outcome,
     resolve_human_submit_action,
     run_game_session,
@@ -46,8 +48,13 @@ def test_websocket_sends_welcome_message() -> None:
     assert private_message["data"]["visibility"] == "private"
     assert "\u8eab\u4efd\u662f" in private_message["data"]["message"]
     assert player_patch["type"] == "PLAYER_STATE_PATCH"
-    assert player_patch["data"]["players"][0]["is_human"] is True
-    assert player_patch["data"]["players"][0]["role_code"] in {
+    human_patches = [
+        player
+        for player in player_patch["data"]["players"]
+        if player["is_human"] is True
+    ]
+    assert len(human_patches) == 1
+    assert human_patches[0]["role_code"] in {
         role.value for role in Role
     }
     assert phase_changed == {
@@ -398,6 +405,72 @@ def test_build_player_state_patch_message_can_reveal_roles() -> None:
     assert payload["data"]["players"][0]["role_code"] == "WITCH"
 
 
+def test_build_player_state_patch_message_can_reveal_selected_roles() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(AIPlayer(seat_id=2, role=Role.WOLF, personality="steady"))
+    context.add_player(AIPlayer(seat_id=3, role=Role.SEER, personality="careful"))
+
+    payload = build_player_state_patch_message(
+        context,
+        [1, 2, 3],
+        reveal_role_seats={1, 2},
+    )
+
+    players = payload["data"]["players"]
+    assert [player["role_code"] for player in players] == ["WOLF", "WOLF", None]
+
+
+def test_known_role_seat_ids_include_wolf_teammates_for_wolf_view() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WOLF))
+    context.add_player(AIPlayer(seat_id=2, role=Role.WOLF, personality="steady"))
+    context.add_player(AIPlayer(seat_id=3, role=Role.SEER, personality="careful"))
+    setup_result = GameSetupResult(
+        context=context,
+        human_seat_id=1,
+        human_role=Role.WOLF.value,
+        human_view=build_player_view(context, 1),
+    )
+
+    assert known_role_seat_ids_from_setup(setup_result) == [1, 2]
+
+
+def test_websocket_welcome_reveals_wolf_teammates(monkeypatch) -> None:
+    async def idle_session(*args, **kwargs) -> None:
+        await asyncio.sleep(0)
+
+    context = GameContext(phase="INIT")
+    context.add_public_message("游戏开始，分配身份完毕。")
+    context.add_player(AIPlayer(seat_id=1, role=Role.SEER, personality="careful"))
+    context.add_player(AIPlayer(seat_id=2, role=Role.WOLF, personality="steady"))
+    context.add_player(HumanPlayer(seat_id=7, role=Role.WOLF))
+    context.add_private_message(7, "你的座位号是 7 号，身份是 WOLF。")
+    setup_result = GameSetupResult(
+        context=context,
+        human_seat_id=7,
+        human_role=Role.WOLF.value,
+        human_view=build_player_view(context, 7),
+    )
+
+    monkeypatch.setattr("app.ws.routes.setup_game", lambda: setup_result)
+    monkeypatch.setattr("app.ws.routes.run_game_session", idle_session)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+        player_patch = websocket.receive_json()
+
+    players = player_patch["data"]["players"]
+    assert [(player["seat_id"], player["role_code"]) for player in players] == [
+        (2, "WOLF"),
+        (7, "WOLF"),
+    ]
+    assert [player["is_human"] for player in players] == [False, True]
+
+
 def test_build_phase_changed_message_uses_context_phase_and_day() -> None:
     context = GameContext(phase="DAY_SPEAKING", day_count=2)
 
@@ -727,9 +800,9 @@ def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None
         try:
             target_task = asyncio.create_task(engine._select_wolf_target(context))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "WOLF_KILL", "target": 3})
+            context.players[1].resolve_input({"action_type": "WOLF_KILL", "target": 1})
             result = await target_task
-            assert result == 3
+            assert result == 1
         finally:
             engine._active_context = None
 
@@ -741,7 +814,7 @@ def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None
             "data": {
                 "action_type": "WOLF_KILL",
                 "prompt": "\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u51fb\u6740\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
-                "allowed_targets": [2, 3],
+                "allowed_targets": [1, 2, 3],
             },
             "meta": {},
         },

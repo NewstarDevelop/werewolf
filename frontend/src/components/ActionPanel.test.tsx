@@ -37,6 +37,36 @@ describe("ActionPanel", () => {
     });
   });
 
+  it("collapses and restores the panel body", () => {
+    const view = render(
+      <ActionPanel
+        request={{
+          action_type: "WOLF_KILL",
+          prompt: "请选择狼刀目标",
+          allowed_targets: [1, 3, 6],
+        }}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(within(view.container).getByText("请选择狼刀目标")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(view.container).getByRole("button", { name: "隐藏操作面板" }),
+    );
+
+    expect(within(view.container).queryByText("请选择狼刀目标")).toBeNull();
+    expect(
+      within(view.container).getByRole("button", { name: "展开操作面板" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(view.container).getByRole("button", { name: "展开操作面板" }),
+    );
+
+    expect(within(view.container).getByText("请选择狼刀目标")).toBeInTheDocument();
+  });
+
   it("submits targeted payload with selected seat", () => {
     const onSubmit = vi.fn();
     const view = render(

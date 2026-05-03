@@ -1,4 +1,4 @@
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 
@@ -19,8 +19,10 @@ class ConnectionManager:
 
     async def send_json(self, websocket: WebSocket, payload: dict[str, object]) -> None:
         if websocket.application_state != WebSocketState.CONNECTED:
+            self.disconnect(websocket)
             return
         try:
             await websocket.send_json(payload)
-        except RuntimeError:
+        except (RuntimeError, WebSocketDisconnect, OSError):
+            self.disconnect(websocket)
             return
