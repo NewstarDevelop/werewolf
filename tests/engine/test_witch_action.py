@@ -67,3 +67,45 @@ def test_witch_cannot_self_save_or_reuse_missing_items() -> None:
             resources=WitchResources(has_poison=False),
             poison_target=2,
         )
+
+
+def test_witch_dead_cannot_act() -> None:
+    """Line 23: dead witch raises error."""
+    context = build_context()
+    context.players[1].is_alive = False
+
+    with pytest.raises(ValueError, match="living witch"):
+        resolve_witch_action(context, witch_seat=1, resources=WitchResources())
+
+
+def test_witch_non_witch_seat_raises_error() -> None:
+    """Line 23: non-witch role raises error."""
+    context = build_context()
+
+    with pytest.raises(ValueError, match="living witch"):
+        resolve_witch_action(context, witch_seat=2, resources=WitchResources())
+
+
+def test_witch_cannot_save_not_killed() -> None:
+    """Line 31: save target not in killed_tonight raises error."""
+    context = build_context()
+
+    with pytest.raises(ValueError, match="killed_tonight"):
+        resolve_witch_action(context, witch_seat=1, resources=WitchResources(), save_target=3)
+
+
+def test_witch_cannot_poison_self() -> None:
+    """Line 40: poison self raises error."""
+    context = build_context()
+
+    with pytest.raises(ValueError, match="poison self"):
+        resolve_witch_action(context, witch_seat=1, resources=WitchResources(), poison_target=1)
+
+
+def test_witch_cannot_poison_dead() -> None:
+    """Line 43: poison dead target raises error."""
+    context = build_context()
+    context.players[2].is_alive = False
+
+    with pytest.raises(ValueError, match="alive"):
+        resolve_witch_action(context, witch_seat=1, resources=WitchResources(), poison_target=2)

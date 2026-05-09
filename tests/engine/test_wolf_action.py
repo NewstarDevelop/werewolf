@@ -93,3 +93,27 @@ def test_human_wolf_cannot_choose_invalid_target() -> None:
 
     with pytest.raises(ValueError):
         resolve_wolf_action(context, human_target=2)
+
+
+def test_no_alive_wolves_error() -> None:
+    """Line 35: no alive wolves raises error."""
+    context = build_context(
+        Player(seat_id=1, role=Role.WOLF, is_alive=False),
+        Player(seat_id=2, role=Role.VILLAGER),
+    )
+
+    with pytest.raises(ValueError, match="no alive wolves"):
+        resolve_wolf_action(context)
+
+
+def test_ai_wolf_invalid_target_error() -> None:
+    """Line 58: AI wolves with invalid (dead) ai_target raises error."""
+    context = build_context(
+        AIPlayer(seat_id=2, role=Role.WOLF, personality="aggressive"),
+        AIPlayer(seat_id=5, role=Role.WOLF, personality="steady"),
+        Player(seat_id=3, role=Role.SEER),
+        Player(seat_id=4, role=Role.VILLAGER, is_alive=False),
+    )
+
+    with pytest.raises(ValueError, match="living player"):
+        resolve_wolf_action(context, ai_target=4)
