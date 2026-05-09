@@ -449,3 +449,73 @@ def test_local_provider_raises_type_error_for_unsupported_schema() -> None:
         assert False, "Expected TypeError"
     except TypeError as e:
         assert "unsupported response schema" in str(e)
+
+
+# ===== 3个缺失False分支补测 =====
+
+def test_extract_players_ast_mixed_dict_and_non_dict() -> None:
+    """Cover line 55->54: AST fallback where payload list contains non-dict items.
+    isinstance(item, dict) is False → continue loop (skip non-dict)."""
+    provider = LocalRuleBasedProvider()
+    # No 玩家视图JSON → trigger AST fallback.
+    # List has int (non-dict) followed by valid dict → both branches at line 55 are taken.
+    prompt = PromptEnvelope(
+        system_prompt="x",
+        context_prompt=(
+            "当前阶段：NIGHT_ACTION\n"
+            "当前天数：第 2 天\n"
+            # Python syntax (True/False) for ast.literal_eval
+            "玩家视图："
+            '[123, {"seat_id": 2, "is_alive": True, "is_self": False, "known_role": "WOLF"}]\n'
+        ),
+        task_prompt="x",
+    )
+    payload = provider.complete(prompt=prompt, response_schema=VoteResponse)
+    assert payload["vote_target"] == 2  # only player 2 parsed, first alive non-self target
+
+
+def test_checked_results_private_log_no_match() -> None:
+    """Cover line 101->99: _extract_checked_results where private_log entry
+    doesn't match _SEER_CHECK_PATTERN → match is None → continue loop."""
+    provider = LocalRuleBasedProvider()
+    # private_log has non-check messages; SEER vote falls through to first alive target
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="SEER",
+            private_log=["3号昨晚被刀了，不是查验消息"],
+        ),
+        response_schema=VoteResponse,
+    )
+    assert payload["vote_target"] == 2  # first alive non-self (player 2)
+
+
+def test_checked_wolf_target_dead() -> None:
+    """Cover line 109->108: _pick_checked_wolf_target where checked wolf
+    seat_id is NOT in alive_targets → continue loop → return None.
+    Then SEER vote falls through to default first-alive target."""
+    provider = LocalRuleBasedProvider()
+    # Player 4 is is_alive=False in build_prompt, but checked as wolf
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="SEER",
+            private_log=["查验结果：4 号是狼人。"],
+        ),
+        response_schema=VoteResponse,
+    )
+    assert payload["vote_target"] == 2  # first alive non-self target
+
+
+def test_speech_seer_no_match_checked_results() -> None:
+    """Cover branch 101->99: _extract_checked_results loop where
+    _SEER_CHECK_PATTERN does NOT match any private_log message.
+    This is only triggered via SpeechResponse path (line 185+)."""
+    provider = LocalRuleBasedProvider()
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="SEER",
+            private_log=["3号昨晚被刀了，不是查验消息"],
+        ),
+        response_schema=SpeechResponse,
+    )
+    # Falls through to generic SEER speech since no checked_results match
+    assert "speech_text" in payload
