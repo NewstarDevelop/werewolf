@@ -1,8 +1,10 @@
 from app.llm.prompts import (
     GOOD_SIDE_OBJECTIVE,
     NIGHT_TASK_TEMPLATE,
+    ROLE_STRATEGY_GUIDE,
     SPEECH_TASK_TEMPLATE,
     SYSTEM_GUARDRAILS,
+    TACTICAL_REASONING_GUIDE,
     VOTE_TASK_TEMPLATE,
     WOLF_SIDE_OBJECTIVE,
 )
@@ -16,6 +18,9 @@ def test_system_guardrails_include_fourth_wall_and_length_limits() -> None:
 def test_objectives_cover_both_camps() -> None:
     assert "识别狼人" in GOOD_SIDE_OBJECTIVE
     assert "隐藏同伴身份" in WOLF_SIDE_OBJECTIVE
+    assert "不要主动暴露狼同伴" in ROLE_STRATEGY_GUIDE
+    assert "前后发言一致" in SYSTEM_GUARDRAILS
+    assert "自己公开说过什么" in TACTICAL_REASONING_GUIDE
 
 
 def test_task_templates_keep_current_stage_focus() -> None:

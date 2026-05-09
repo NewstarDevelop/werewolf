@@ -25,7 +25,7 @@ async def run_day_speaking(
     human_speaker: HumanSpeaker,
     ai_speaker: AISpeaker,
     notify_thinking: ThinkingNotifier,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float | None = 60.0,
 ) -> list[str]:
     speeches: list[str] = []
 
@@ -33,10 +33,13 @@ async def run_day_speaking(
         player = context.players[seat_id]
 
         if isinstance(player, HumanPlayer):
-            try:
-                speech = await asyncio.wait_for(human_speaker(seat_id), timeout=timeout_seconds)
-            except asyncio.TimeoutError:
-                speech = "过。"
+            if timeout_seconds is None:
+                speech = await human_speaker(seat_id)
+            else:
+                try:
+                    speech = await asyncio.wait_for(human_speaker(seat_id), timeout=timeout_seconds)
+                except asyncio.TimeoutError:
+                    speech = "过。"
         elif isinstance(player, AIPlayer):
             await notify_thinking(seat_id, True)
             try:
@@ -48,7 +51,14 @@ async def run_day_speaking(
 
         record = f"{seat_id}号发言：{speech}"
         speeches.append(record)
-        context.add_public_message(record)
+        if isinstance(player, AIPlayer):
+            player.remember(f"我白天公开发言：{speech}")
+        context.add_public_message(
+            record,
+            message_kind="speech",
+            event_type="SPEECH",
+            actor_seat=seat_id,
+        )
         # Let websocket bridge tasks publish this speech before the next
         # speaker starts a potentially blocking AI request.
         await asyncio.sleep(0)

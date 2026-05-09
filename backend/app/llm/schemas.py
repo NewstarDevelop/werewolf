@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class SpeechResponse(BaseModel):
     inner_thought: str = Field(min_length=1)
-    speech_text: str = Field(min_length=1, max_length=150)
+    speech_text: str = Field(min_length=1)
 
 
 class VoteResponse(BaseModel):

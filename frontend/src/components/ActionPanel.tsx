@@ -207,6 +207,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
 
   const panelClasses = [
     "action-panel",
+    request ? "is-active" : "is-idle",
     isPanelHidden ? "is-collapsed" : "",
   ]
     .filter(Boolean)

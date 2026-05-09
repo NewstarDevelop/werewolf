@@ -32,6 +32,8 @@ def clear_openai_env(monkeypatch) -> None:
         "STITCH_MODEL",
         "STITCH_BASE_URL",
         "STITCH_TIMEOUT_SECONDS",
+        "OPENAI_ALLOW_LOCALHOST",
+        "STITCH_ALLOW_LOCALHOST",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -269,3 +271,27 @@ def test_openai_provider_retries_without_response_format_for_compatible_backends
     assert len(request_payloads) == 2
     assert request_payloads[0]["response_format"] == {"type": "json_object"}
     assert "response_format" not in request_payloads[1]
+
+def test_load_settings_accepts_localhost_when_env_var_set(monkeypatch) -> None:
+    """OPENAI_ALLOW_LOCALHOST=true allows localhost base URLs."""
+    clear_openai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "secret")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
+    monkeypatch.setenv("OPENAI_ALLOW_LOCALHOST", "true")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+
+    settings = load_openai_compatible_settings_from_env()
+
+    assert settings is not None
+    assert settings.base_url == "http://localhost:11434/v1"
+
+
+def test_load_settings_rejects_localhost_without_env_var(monkeypatch) -> None:
+    """Without OPENAI_ALLOW_LOCALHOST, localhost base URLs raise ValueError."""
+    clear_openai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "secret")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+
+    with pytest.raises(ValueError, match="localhost"):
+        load_openai_compatible_settings_from_env()

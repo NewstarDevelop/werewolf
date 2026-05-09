@@ -14,6 +14,12 @@ from app.protocols.s2c import (
     PlayerStatePatchPayload,
     RequireInputEnvelope,
     RequireInputPayload,
+    SettlementDayPayload,
+    SettlementEventPayload,
+    SettlementNightPayload,
+    SettlementPlayerPayload,
+    SettlementRecapPayload,
+    SettlementSpeechPayload,
     SystemMessageEnvelope,
     SystemMessagePayload,
     VoteResolvedEnvelope,
@@ -137,6 +143,7 @@ def test_vote_resolved_envelope_carries_tally_and_banishment() -> None:
         type="VOTE_RESOLVED",
         data=VoteResolvedPayload(
             votes={2: 3, 5: 1},
+            ballots={1: 2, 3: 2, 6: 5, 8: 2},
             abstentions=[4],
             banished_seat=2,
             summary="2号玩家被放逐出局。",
@@ -147,6 +154,7 @@ def test_vote_resolved_envelope_carries_tally_and_banishment() -> None:
         "type": "VOTE_RESOLVED",
         "data": {
             "votes": {2: 3, 5: 1},
+            "ballots": {1: 2, 3: 2, 6: 5, 8: 2},
             "abstentions": [4],
             "banished_seat": 2,
             "summary": "2号玩家被放逐出局。",
@@ -181,6 +189,70 @@ def test_require_input_envelope_supports_hunter_shoot() -> None:
     assert payload["data"]["action_type"] == "HUNTER_SHOOT"
 
 
+def test_settlement_recap_payload_carries_revealed_review() -> None:
+    payload = SettlementRecapPayload(
+        day_count=2,
+        outcome_reason="狼人全灭。",
+        players=[
+            SettlementPlayerPayload(
+                seat_id=1,
+                role_code="SEER",
+                side="GOOD",
+                is_alive=True,
+                is_human=True,
+            )
+        ],
+        key_events=[
+            SettlementEventPayload(
+                day_count=1,
+                phase="DAY_START",
+                event_type="NIGHT_DEATH",
+                message="天亮了。昨夜死亡的是 3号。",
+                target_seats=[3],
+            )
+        ],
+        nights=[
+            SettlementNightPayload(
+                day_count=1,
+                wolf_target=3,
+                seer_seat=1,
+                seer_target=2,
+                seer_result="WOLF",
+                witch_save_target=3,
+                dead_seats=[],
+            )
+        ],
+        days=[
+            SettlementDayPayload(
+                day_count=1,
+                speeches=[
+                    SettlementSpeechPayload(
+                        seat_id=1,
+                        message="1号发言：我查杀2号。",
+                        event_type="SPEECH",
+                    )
+                ],
+                vote_explanation="2号以 3 票成为最高票，被放逐出局。",
+            )
+        ],
+        final_vote=VoteResolvedPayload(
+            votes={2: 3},
+            ballots={1: 2, 3: 2, 4: 2},
+            abstentions=[],
+            banished_seat=2,
+            summary="2号玩家被放逐出局。",
+        ),
+    ).model_dump()
+
+    assert payload["day_count"] == 2
+    assert payload["players"][0]["role_code"] == "SEER"
+    assert payload["key_events"][0]["event_type"] == "NIGHT_DEATH"
+    assert payload["nights"][0]["wolf_target"] == 3
+    assert payload["days"][0]["speeches"][0]["seat_id"] == 1
+    assert payload["outcome_reason"] == "狼人全灭。"
+    assert payload["final_vote"]["banished_seat"] == 2
+
+
 def test_game_over_envelope_reveals_roles() -> None:
     payload = GameOverEnvelope(
         type="GAME_OVER",
@@ -193,6 +265,7 @@ def test_game_over_envelope_reveals_roles() -> None:
 
     assert payload["data"]["winning_side"] == "GOOD"
     assert payload["data"]["revealed_roles"] == {1: "SEER", 2: "WOLF"}
+    assert payload["data"]["recap"] is None
 
 
 def test_game_over_envelope_allows_draw_safety_stop() -> None:
@@ -207,3 +280,4 @@ def test_game_over_envelope_allows_draw_safety_stop() -> None:
 
     assert payload["data"]["winning_side"] == "DRAW"
     assert payload["data"]["summary"] == "夜尽未分胜负，本局暂止。"
+    assert payload["data"]["recap"] is None

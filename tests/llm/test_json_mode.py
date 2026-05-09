@@ -13,6 +13,17 @@ def test_speech_response_requires_short_public_output() -> None:
     assert response.speech_text.startswith("4号")
 
 
+def test_speech_response_accepts_overlong_public_output() -> None:
+    speech_text = "4号这轮发言反复摇摆，" * 30
+
+    response = SpeechResponse(
+        inner_thought="模型输出偏长。",
+        speech_text=speech_text,
+    )
+
+    assert response.speech_text == speech_text
+
+
 def test_vote_response_accepts_abstain_and_valid_targets() -> None:
     abstain = VoteResponse(inner_thought="信息不够，先弃票。", vote_target=0)
     vote = VoteResponse(inner_thought="4号像狼。", vote_target=4)

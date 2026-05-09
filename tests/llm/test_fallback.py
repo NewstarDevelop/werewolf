@@ -1,4 +1,6 @@
+import asyncio
 from collections.abc import Sequence
+import time
 
 from app.llm.client import JSONModeClient, ProviderRequestError
 from app.llm.fallback import FallbackLLMClient
@@ -21,6 +23,20 @@ class ScriptedProvider:
         if isinstance(response, Exception):
             raise response
         return response
+
+
+class SlowProvider:
+    def complete(
+        self,
+        *,
+        prompt: PromptEnvelope,
+        response_schema: type[object],
+    ) -> object:
+        time.sleep(0.05)
+        return {
+            "inner_thought": "慢请求完成。",
+            "speech_text": "我先给出这一轮判断。",
+        }
 
 
 def build_prompt() -> PromptEnvelope:
@@ -48,6 +64,40 @@ def test_timeout_then_retry_returns_successful_speech() -> None:
     assert response.speech_text.startswith("我先保留")
     assert len(provider.prompts) == 2
     assert provider.prompts[1].task_prompt == provider.prompts[0].task_prompt
+
+
+def test_overlong_speech_is_accepted_without_retry() -> None:
+    speech_text = "我是4号，这轮我觉得前置位和后置位都有问题，" * 20
+    provider = ScriptedProvider(
+        [
+            {
+                "inner_thought": "发言太长。",
+                "speech_text": speech_text,
+            },
+        ]
+    )
+    client = FallbackLLMClient(client=JSONModeClient(provider=provider))
+
+    response = client.request_speech(prompt=build_prompt())
+
+    assert response.speech_text == speech_text
+    assert len(provider.prompts) == 1
+
+
+def test_async_request_does_not_block_event_loop() -> None:
+    client = FallbackLLMClient(client=JSONModeClient(provider=SlowProvider()))
+
+    async def run() -> None:
+        speech_task = asyncio.create_task(client.request_speech_async(prompt=build_prompt()))
+
+        await asyncio.sleep(0)
+        assert speech_task.done() is False
+
+        response = await speech_task
+
+        assert response.speech_text == "我先给出这一轮判断。"
+
+    asyncio.run(run())
 
 
 def test_retryable_provider_error_retries_without_mutating_prompt() -> None:

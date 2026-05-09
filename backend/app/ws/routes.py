@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.domain.enums import Role
-from app.domain.game_context import GameContext
+from app.domain.game_context import GameContext, PrivateChatEvent, PublicChatEvent, VoteSnapshot
 from app.domain.player import HumanPlayer
 from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
@@ -29,6 +29,12 @@ from app.protocols.s2c import (
     PlayerStatePatchPayload,
     RequireInputEnvelope,
     RequireInputPayload,
+    SettlementDayPayload,
+    SettlementEventPayload,
+    SettlementNightPayload,
+    SettlementPlayerPayload,
+    SettlementRecapPayload,
+    SettlementSpeechPayload,
     SystemMessageEnvelope,
     SystemMessagePayload,
     VoteResolvedEnvelope,
@@ -44,6 +50,17 @@ SendJson = Callable[[dict[str, object]], Awaitable[None]]
 CloseConnection = Callable[[], Awaitable[None]]
 GAME_OVER_CLOSE_CODE = 4000
 GAME_OVER_CLOSE_REASON = "game_over"
+SETTLEMENT_EVENT_TYPES = {
+    "NIGHT_DEATH",
+    "PEACEFUL_NIGHT",
+    "BANISHMENT",
+    "VOTE_NO_BANISHMENT",
+    "HUNTER_SHOT",
+    "HUNTER_POISONED",
+    "HUNTER_NO_TARGET",
+    "LAST_WORDS",
+    "GAME_OVER_SUMMARY",
+}
 
 
 def build_system_message(message: str) -> dict[str, object]:
@@ -53,7 +70,12 @@ def build_system_message(message: str) -> dict[str, object]:
     ).model_dump()
 
 
-def build_private_message(message: str, seat_id: int) -> dict[str, object]:
+def build_private_message(
+    message: str,
+    seat_id: int,
+    *,
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     return ChatUpdateEnvelope(
         type="CHAT_UPDATE",
         data=ChatUpdatePayload(
@@ -62,10 +84,15 @@ def build_private_message(message: str, seat_id: int) -> dict[str, object]:
             speaker="\u7cfb\u7edf",
             visibility="private",
         ),
+        meta=meta or {},
     ).model_dump()
 
 
-def build_public_message(message: str) -> dict[str, object]:
+def build_public_message(
+    message: str,
+    *,
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     return ChatUpdateEnvelope(
         type="CHAT_UPDATE",
         data=ChatUpdatePayload(
@@ -73,7 +100,32 @@ def build_public_message(message: str) -> dict[str, object]:
             speaker="\u7cfb\u7edf",
             visibility="public",
         ),
+        meta=meta or {},
     ).model_dump()
+
+
+def build_public_chat_event_message(event: PublicChatEvent) -> dict[str, object]:
+    meta: dict[str, object] = {}
+    if event.message_kind != "system":
+        meta["message_kind"] = event.message_kind
+    if event.event_type is not None:
+        meta["event_type"] = event.event_type
+    if event.actor_seat is not None:
+        meta["actor_seat"] = event.actor_seat
+    if event.target_seats:
+        meta["target_seats"] = event.target_seats
+
+    return build_public_message(event.message, meta=meta)
+
+
+def build_private_chat_event_message(event: PrivateChatEvent) -> dict[str, object]:
+    meta: dict[str, object] = {}
+    if event.event_type is not None:
+        meta["event_type"] = event.event_type
+    if event.target_seats:
+        meta["target_seats"] = event.target_seats
+
+    return build_private_message(event.message, event.seat_id, meta=meta)
 
 
 def build_ai_thinking_message(seat_id: int, is_thinking: bool) -> dict[str, object]:
@@ -150,6 +202,7 @@ def build_death_revealed_message(
 def build_vote_resolved_message(
     *,
     votes: dict[int, int],
+    ballots: dict[int, int] | None = None,
     abstentions: list[int],
     banished_seat: int | None,
     summary: str,
@@ -158,6 +211,7 @@ def build_vote_resolved_message(
         type="VOTE_RESOLVED",
         data=VoteResolvedPayload(
             votes=votes,
+            ballots=ballots or {},
             abstentions=abstentions,
             banished_seat=banished_seat,
             summary=summary,
@@ -181,6 +235,145 @@ def build_require_input_message(
     ).model_dump()
 
 
+def role_side(role: Role) -> Literal["GOOD", "WOLF"]:
+    return "WOLF" if role is Role.WOLF else "GOOD"
+
+
+def build_vote_payload(snapshot: VoteSnapshot) -> VoteResolvedPayload:
+    return VoteResolvedPayload(
+        votes=dict(snapshot.votes),
+        ballots=dict(snapshot.ballots),
+        abstentions=list(snapshot.abstentions),
+        banished_seat=snapshot.banished_seat,
+        summary=snapshot.summary,
+    )
+
+
+def explain_vote(snapshot: VoteSnapshot) -> str:
+    if not snapshot.votes:
+        return "所有玩家弃票，本轮无人出局。"
+
+    highest_votes = max(snapshot.votes.values())
+    leading_seats = [
+        seat_id
+        for seat_id, count in sorted(snapshot.votes.items())
+        if count == highest_votes
+    ]
+    if snapshot.banished_seat is None:
+        tied = "、".join(f"{seat_id}号" for seat_id in leading_seats)
+        return f"最高票为 {highest_votes} 票，{tied} 平票，本轮无人出局。"
+    return f"{snapshot.banished_seat}号以 {highest_votes} 票成为最高票，被放逐出局。"
+
+
+def outcome_reason(winning_side: Literal["GOOD", "WOLF", "DRAW"], summary: str) -> str:
+    if winning_side == "DRAW":
+        return "达到回合上限仍未分出胜负，系统安全停局。"
+    if "狼人已全部出局" in summary:
+        return "狼人全灭。"
+    if "平民已全部出局" in summary:
+        return "平民屠边。"
+    if "神职已全部出局" in summary:
+        return "神职屠边。"
+    return summary
+
+
+def build_settlement_days(context: GameContext) -> list[SettlementDayPayload]:
+    speeches_by_day: dict[int, list[SettlementSpeechPayload]] = {}
+    for event in context.public_chat_events:
+        if event.message_kind != "speech" or event.actor_seat is None:
+            continue
+        speeches_by_day.setdefault(event.day_count, []).append(
+            SettlementSpeechPayload(
+                seat_id=event.actor_seat,
+                message=event.message,
+                event_type=event.event_type or "SPEECH",
+            )
+        )
+
+    from collections import defaultdict
+
+    votes_by_day: dict[int, list[VoteSnapshot]] = defaultdict(list)
+    for snapshot in context.vote_history:
+        votes_by_day[snapshot.day_count].append(snapshot)
+    day_numbers = sorted(set(speeches_by_day) | set(votes_by_day))
+
+    return [
+        SettlementDayPayload(
+            day_count=day_count,
+            speeches=speeches_by_day.get(day_count, []),
+            vote=(
+                build_vote_payload(votes_by_day[day_count][-1])
+                if day_count in votes_by_day
+                else None
+            ),
+            vote_explanation=(
+                explain_vote(votes_by_day[day_count][-1])
+                if day_count in votes_by_day
+                else None
+            ),
+        )
+        for day_count in day_numbers
+    ]
+
+
+def build_settlement_recap(context: GameContext) -> SettlementRecapPayload:
+    winner = check_win(context)
+    winning_side: Literal["GOOD", "WOLF", "DRAW"] = (
+        winner["winning_side"] if winner is not None else "DRAW"
+    )
+    summary = winner["summary"] if winner is not None else (
+        context.public_chat_history[-1]
+        if context.public_chat_history
+        else "夜尽未分胜负，本局暂止。"
+    )
+    final_vote = None
+    if context.last_vote_result is not None:
+        final_vote = build_vote_payload(context.last_vote_result)
+
+    return SettlementRecapPayload(
+        day_count=context.day_count,
+        outcome_reason=outcome_reason(winning_side, summary),
+        players=[
+            SettlementPlayerPayload(
+                seat_id=seat_id,
+                role_code=player.role.value,
+                side=role_side(player.role),
+                is_alive=player.is_alive,
+                is_human=isinstance(player, HumanPlayer),
+            )
+            for seat_id, player in sorted(context.players.items())
+        ],
+        nights=[
+            SettlementNightPayload(
+                day_count=night.day_count,
+                wolf_target=night.wolf_target,
+                seer_seat=night.seer_seat,
+                seer_target=night.seer_target,
+                seer_result=night.seer_result,
+                witch_seat=night.witch_seat,
+                witch_save_target=night.witch_save_target,
+                witch_poison_target=night.witch_poison_target,
+                dead_seats=list(night.dead_seats),
+            )
+            for night in context.night_actions
+        ],
+        days=build_settlement_days(context),
+        key_events=[
+            SettlementEventPayload(
+                day_count=event.day_count,
+                phase=event.phase,
+                event_type=event.event_type,
+                message=event.message,
+                actor_seat=event.actor_seat,
+                target_seats=list(event.target_seats),
+            )
+            for event in context.public_chat_events
+            if event.event_type in SETTLEMENT_EVENT_TYPES
+        ],
+        final_vote=final_vote,
+    )
+
+
 def build_game_over_message(context: GameContext) -> dict[str, object] | None:
     winner = check_win(context)
     if winner is None and context.phase != "GAME_OVER":
@@ -202,6 +395,7 @@ def build_game_over_message(context: GameContext) -> dict[str, object] | None:
                 seat_id: player.role.value
                 for seat_id, player in sorted(context.players.items())
             },
+            recap=build_settlement_recap(context),
         ),
     ).model_dump()
 
@@ -214,13 +408,13 @@ def attach_context_bridge(
 ) -> None:
     loop = asyncio.get_running_loop()
 
-    context.on_public_message(
-        lambda message: loop.create_task(send_json(build_public_message(message))),
+    context.on_public_chat_event(
+        lambda event: loop.create_task(send_json(build_public_chat_event_message(event))),
     )
-    context.on_private_message(
-        lambda seat_id, message: (
-            loop.create_task(send_json(build_private_message(message, seat_id)))
-            if seat_id == viewer_seat_id
+    context.on_private_chat_event(
+        lambda event: (
+            loop.create_task(send_json(build_private_chat_event_message(event)))
+            if event.seat_id == viewer_seat_id
             else None
         ),
     )
@@ -237,7 +431,10 @@ def log_game_session_task_outcome(task: asyncio.Task[None]) -> None:
 
 class WebSocketGameEngine(GameEngine):
     def __init__(self, *, send_json: SendJson) -> None:
-        super().__init__(llm_client=build_default_llm_client())
+        super().__init__(
+            llm_client=build_default_llm_client(),
+            human_speech_timeout_seconds=None,
+        )
         self._send_json = send_json
         self._active_context: GameContext | None = None
 
@@ -275,6 +472,7 @@ class WebSocketGameEngine(GameEngine):
         self,
         *,
         votes: dict[int, int],
+        ballots: dict[int, int] | None = None,
         abstentions: list[int],
         banished_seat: int | None,
         summary: str,
@@ -282,6 +480,7 @@ class WebSocketGameEngine(GameEngine):
         await self._send_json(
             build_vote_resolved_message(
                 votes=votes,
+                ballots=ballots,
                 abstentions=abstentions,
                 banished_seat=banished_seat,
                 summary=summary,
@@ -385,6 +584,12 @@ class WebSocketGameEngine(GameEngine):
         )
         target = payload.get("target")
         if isinstance(target, int) and target in set(allowed_targets):
+            context.add_private_message(
+                human_player.seat_id,
+                f"你选择今晚击杀 {target} 号。",
+                event_type="NIGHT_ACTION_FEEDBACK",
+                target_seats=[target],
+            )
             return target
         return await super()._select_wolf_target(context)
 
@@ -411,6 +616,12 @@ class WebSocketGameEngine(GameEngine):
         )
         target = payload.get("target")
         if isinstance(target, int) and target in set(allowed_targets):
+            context.add_private_message(
+                seer_seat,
+                f"你选择查验 {target} 号。",
+                event_type="NIGHT_ACTION_FEEDBACK",
+                target_seats=[target],
+            )
             return target
         return await super()._select_seer_target(
             context,
@@ -452,12 +663,29 @@ class WebSocketGameEngine(GameEngine):
 
         action_type = payload.get("action_type")
         if action_type == "WITCH_SAVE" and save_candidates and resources.has_antidote:
+            context.add_private_message(
+                witch_seat,
+                f"你使用解药救起 {save_candidates[0]} 号。",
+                event_type="NIGHT_ACTION_FEEDBACK",
+                target_seats=[save_candidates[0]],
+            )
             return save_candidates[0], None
         if action_type == "WITCH_POISON":
             target = payload.get("target")
             if isinstance(target, int) and target in set(poison_candidates):
+                context.add_private_message(
+                    witch_seat,
+                    f"你对 {target} 号使用毒药。",
+                    event_type="NIGHT_ACTION_FEEDBACK",
+                    target_seats=[target],
+                )
                 return None, target
         if action_type == "PASS":
+            context.add_private_message(
+                witch_seat,
+                "你选择今晚不用药。",
+                event_type="NIGHT_ACTION_FEEDBACK",
+            )
             return None, None
         return await super()._select_witch_action(
             context,

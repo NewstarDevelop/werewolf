@@ -288,6 +288,31 @@ describe("App", () => {
     });
   });
 
+  it("promotes private night action feedback", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    MockWebSocket.instances[MockWebSocket.instances.length - 1]?.emit("message", {
+      type: "CHAT_UPDATE",
+      data: {
+        message: "你选择今晚击杀 5 号。",
+        speaker: "系统",
+        visibility: "private",
+      },
+      meta: {
+        event_type: "NIGHT_ACTION_FEEDBACK",
+        target_seats: [5],
+      },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("夜晚回执");
+      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 5 号。");
+    });
+  });
+
   it("classifies public chat updates as system broadcasts or speeches", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -475,6 +500,7 @@ describe("App", () => {
       type: "VOTE_RESOLVED",
       data: {
         votes: { 2: 3 },
+        ballots: { 1: 2, 3: 2, 5: 2 },
         abstentions: [],
         banished_seat: 2,
         summary: "2号玩家被放逐出局。",
@@ -486,6 +512,8 @@ describe("App", () => {
       expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("墓碑");
       expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("票落成局");
       expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("刚刚开票：2号玩家被放逐出局。");
+      expect(within(view.container).getByLabelText("投票票型")).toHaveTextContent("2号玩家被放逐出局。");
+      expect(within(view.container).getByLabelText("2号玩家得票来源")).toHaveTextContent("1号玩家");
     });
   });
 
@@ -504,6 +532,76 @@ describe("App", () => {
           1: "WOLF",
           2: "SEER",
         },
+        recap: {
+          day_count: 2,
+          outcome_reason: "狼人全灭。",
+          players: [
+            {
+              seat_id: 1,
+              role_code: "WOLF",
+              side: "WOLF",
+              is_alive: false,
+              is_human: true,
+            },
+            {
+              seat_id: 2,
+              role_code: "SEER",
+              side: "GOOD",
+              is_alive: true,
+              is_human: false,
+            },
+          ],
+          key_events: [
+            {
+              day_count: 2,
+              phase: "VOTE_RESULT",
+              event_type: "BANISHMENT",
+              message: "1号玩家被放逐出局。",
+              actor_seat: null,
+              target_seats: [1],
+            },
+          ],
+          nights: [
+            {
+              day_count: 1,
+              wolf_target: 2,
+              seer_seat: 2,
+              seer_target: 1,
+              seer_result: "WOLF",
+              witch_seat: null,
+              witch_save_target: null,
+              witch_poison_target: null,
+              dead_seats: [],
+            },
+          ],
+          days: [
+            {
+              day_count: 2,
+              speeches: [
+                {
+                  seat_id: 2,
+                  message: "2号发言：我归票1号。",
+                  event_type: "SPEECH",
+                },
+              ],
+              vote: {
+                votes: { 1: 3 },
+                ballots: { 2: 1, 3: 1, 4: 1 },
+                abstentions: [],
+                banished_seat: 1,
+                summary: "1号玩家被放逐出局。",
+              },
+              vote_explanation: "1号以 3 票成为最高票，被放逐出局。",
+            },
+          ],
+          final_vote: {
+            votes: { 1: 3 },
+            ballots: { 2: 1, 3: 1, 4: 1 },
+            abstentions: [],
+            banished_seat: 1,
+            summary: "1号玩家被放逐出局。",
+          },
+        },
       },
     });
 
@@ -512,6 +610,12 @@ describe("App", () => {
       expect(within(logList).getByText("狼人已全部出局，好人阵营获胜。")).toBeInTheDocument();
       expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("狼人");
       expect(within(view.container).getByLabelText("2号玩家")).toHaveTextContent("预言家");
+      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
+      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
+      expect(within(view.container).getByLabelText("夜间因果")).toHaveTextContent("狼人刀向：2号玩家");
+      expect(within(view.container).getByLabelText("白天因果")).toHaveTextContent("1号以 3 票成为最高票，被放逐出局。");
+      expect(within(view.container).getByLabelText("关键节点")).toHaveTextContent("1号玩家被放逐出局。");
+      expect(within(view.container).getByLabelText("终局票型")).toHaveTextContent("3票");
     });
   });
 

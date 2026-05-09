@@ -19,6 +19,7 @@ _API_KEY_ENV_VARS = ("OPENAI_API_KEY", "STITCH_API_KEY")
 _MODEL_ENV_VARS = ("OPENAI_MODEL", "STITCH_MODEL")
 _BASE_URL_ENV_VARS = ("OPENAI_BASE_URL", "STITCH_BASE_URL")
 _TIMEOUT_ENV_VARS = ("OPENAI_TIMEOUT_SECONDS", "STITCH_TIMEOUT_SECONDS")
+_ALLOW_LOCALHOST_ENV_VARS = ("OPENAI_ALLOW_LOCALHOST", "STITCH_ALLOW_LOCALHOST")
 logger = logging.getLogger(__name__)
 
 
@@ -156,7 +157,14 @@ def _format_env_aliases(*names: str) -> str:
 
 
 def _validate_base_url(url: str) -> None:
-    """Prevent SSRF by rejecting internal/localhost/private-network endpoints."""
+    """Prevent SSRF by rejecting internal/localhost/private-network endpoints.
+
+    Set any of ``_ALLOW_LOCALHOST_ENV_VARS`` to a truthy value (e.g. ``"true"``,
+    ``"1"``) to skip this check and allow localhost/private-network URLs
+    (e.g. for local Ollama or LiteLLM instances).
+    """
+    if _read_env_value(*_ALLOW_LOCALHOST_ENV_VARS):
+        return
     parsed = urlparse(url)
     if parsed.scheme not in ("https", "http"):
         raise ValueError(

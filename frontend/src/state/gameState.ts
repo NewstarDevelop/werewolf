@@ -6,7 +6,76 @@ import {
   narratorSpeaker,
   toRoleLabel,
 } from "../copy";
-import type { GameOverEnvelope, RequireInputEnvelope, ServerEnvelope } from "../types/ws";
+import type {
+  ChatUpdateEnvelope,
+  ChatUpdateMeta,
+  GameOverEnvelope,
+  RequireInputEnvelope,
+  ServerEnvelope,
+} from "../types/ws";
+
+export interface VoteResultView {
+  votes: Record<number, number>;
+  ballots: Record<number, number>;
+  abstentions: number[];
+  banishedSeat: number | null;
+  summary: string;
+}
+
+export interface SettlementReviewPlayer {
+  seatId: number;
+  roleCode: string;
+  roleLabel: string;
+  side: "GOOD" | "WOLF";
+  isAlive: boolean;
+  isHuman: boolean;
+}
+
+export interface SettlementReviewEvent {
+  dayCount: number;
+  phase: string;
+  eventType: string;
+  message: string;
+  actorSeat: number | null;
+  targetSeats: number[];
+}
+
+export interface SettlementReviewNight {
+  dayCount: number;
+  wolfTarget: number | null;
+  seerSeat: number | null;
+  seerTarget: number | null;
+  seerResult: "GOOD" | "WOLF" | null;
+  witchSeat: number | null;
+  witchSaveTarget: number | null;
+  witchPoisonTarget: number | null;
+  deadSeats: number[];
+}
+
+export interface SettlementReviewSpeech {
+  seatId: number;
+  message: string;
+  eventType: string;
+}
+
+export interface SettlementReviewDay {
+  dayCount: number;
+  speeches: SettlementReviewSpeech[];
+  vote: VoteResultView | null;
+  voteExplanation: string | null;
+}
+
+export interface SettlementReviewData {
+  winningSide: "GOOD" | "WOLF" | "DRAW";
+  summary: string;
+  outcomeReason: string;
+  dayCount: number | null;
+  players: SettlementReviewPlayer[];
+  nights: SettlementReviewNight[];
+  days: SettlementReviewDay[];
+  keyEvents: SettlementReviewEvent[];
+  finalVote: VoteResultView | null;
+}
 
 export interface GameState {
   entries: ChatEntry[];
@@ -20,12 +89,12 @@ export interface GameState {
     eligibleLastWords: number[];
     dayCount: number;
   } | null;
-  lastVoteResult: {
-    votes: Record<number, number>;
-    abstentions: number[];
-    banishedSeat: number | null;
-    summary: string;
+  lastVoteResult: VoteResultView | null;
+  lastNightActionFeedback: {
+    message: string;
+    targetSeats: number[];
   } | null;
+  settlementReview: SettlementReviewData | null;
 }
 
 export type GameStateAction =
@@ -54,6 +123,8 @@ export function createInitialGameState(): GameState {
     dayCount: 1,
     lastDeathReveal: null,
     lastVoteResult: null,
+    lastNightActionFeedback: null,
+    settlementReview: null,
   };
 }
 
@@ -77,15 +148,25 @@ export function gameReducer(state: GameState, action: GameStateAction): GameStat
   let dayCount = state.dayCount;
   let lastDeathReveal = state.lastDeathReveal;
   let lastVoteResult = state.lastVoteResult;
+  let lastNightActionFeedback = state.lastNightActionFeedback;
+  let settlementReview = state.settlementReview;
 
   if (action.envelope.type === "SYSTEM_MSG") {
     players = applySystemMessage(players, action.envelope.data.message);
   }
   if (action.envelope.type === "CHAT_UPDATE" && action.envelope.data.visibility === "private") {
     players = applyIdentityMessage(players, action.envelope.data.message);
+    if (action.envelope.meta?.event_type === "NIGHT_ACTION_FEEDBACK") {
+      lastNightActionFeedback = {
+        message: action.envelope.data.message,
+        targetSeats: Array.isArray(action.envelope.meta.target_seats)
+          ? action.envelope.meta.target_seats.filter((seatId) => Number.isInteger(seatId))
+          : [],
+      };
+    }
   }
   if (action.envelope.type === "CHAT_UPDATE" && action.envelope.data.visibility === "public") {
-    players = applyPublicChatMessage(players, action.envelope.data.message);
+    players = applyPublicChatMessage(players, action.envelope);
   }
   if (action.envelope.type === "AI_THINKING") {
     players = applyThinkingState(
@@ -113,6 +194,7 @@ export function gameReducer(state: GameState, action: GameStateAction): GameStat
     players = applyBanishResult(players, action.envelope.data.banished_seat ?? null);
     lastVoteResult = {
       votes: action.envelope.data.votes,
+      ballots: action.envelope.data.ballots ?? {},
       abstentions: action.envelope.data.abstentions,
       banishedSeat: action.envelope.data.banished_seat ?? null,
       summary: action.envelope.data.summary,
@@ -126,6 +208,10 @@ export function gameReducer(state: GameState, action: GameStateAction): GameStat
     currentPhase = "GAME_OVER";
     players = applyGameOver(players, action.envelope.data);
     pendingAction = null;
+    const review = buildSettlementReview(action.envelope.data);
+    settlementReview = review.finalVote || lastVoteResult === null
+      ? review
+      : { ...review, finalVote: lastVoteResult };
   }
 
   return {
@@ -137,6 +223,8 @@ export function gameReducer(state: GameState, action: GameStateAction): GameStat
     dayCount,
     lastDeathReveal,
     lastVoteResult,
+    lastNightActionFeedback,
+    settlementReview,
   };
 }
 
@@ -255,8 +343,32 @@ function applySystemMessage(players: PlayerListItem[], message: string) {
   return nextPlayers;
 }
 
-function applyPublicChatMessage(players: PlayerListItem[], message: string) {
-  return applySystemMessage(players, message);
+function applyPublicChatMessage(players: PlayerListItem[], envelope: ChatUpdateEnvelope) {
+  const structuredDeadSeats = extractDeadSeatsFromChatMeta(envelope.meta);
+  if (structuredDeadSeats.length > 0) {
+    return markSeatsDead(players, structuredDeadSeats);
+  }
+  return applySystemMessage(players, envelope.data.message);
+}
+
+function markSeatsDead(players: PlayerListItem[], seatIds: number[]) {
+  const deadSeats = new Set(seatIds);
+  return players.map((player) =>
+    deadSeats.has(player.seatId) ? { ...player, isAlive: false, isThinking: false } : player,
+  );
+}
+
+function extractDeadSeatsFromChatMeta(meta: ChatUpdateMeta | undefined) {
+  if (!meta?.event_type || !Array.isArray(meta.target_seats)) {
+    return [];
+  }
+
+  const deathEvents = new Set(["NIGHT_DEATH", "BANISHMENT", "HUNTER_SHOT"]);
+  if (!deathEvents.has(meta.event_type)) {
+    return [];
+  }
+
+  return meta.target_seats.filter((seatId) => Number.isInteger(seatId));
 }
 
 function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
@@ -273,6 +385,84 @@ function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["dat
   });
 }
 
+function toRoleSide(roleCode: string): "GOOD" | "WOLF" {
+  return roleCode === "WOLF" ? "WOLF" : "GOOD";
+}
+
+function buildVoteResultView(vote: NonNullable<GameOverEnvelope["data"]["recap"]>["final_vote"]): VoteResultView | null {
+  if (!vote) {
+    return null;
+  }
+  return {
+    votes: vote.votes,
+    ballots: vote.ballots ?? {},
+    abstentions: vote.abstentions,
+    banishedSeat: vote.banished_seat ?? null,
+    summary: vote.summary,
+  };
+}
+
+function buildSettlementReview(payload: GameOverEnvelope["data"]): SettlementReviewData {
+  const recap = payload.recap;
+  const players = recap
+    ? recap.players.map((player) => ({
+        seatId: player.seat_id,
+        roleCode: player.role_code,
+        roleLabel: toRoleLabel(player.role_code) ?? player.role_code,
+        side: player.side,
+        isAlive: player.is_alive,
+        isHuman: player.is_human,
+      }))
+    : Object.entries(payload.revealed_roles)
+        .map(([seatId, roleCode]) => ({
+          seatId: Number(seatId),
+          roleCode,
+          roleLabel: toRoleLabel(roleCode) ?? roleCode,
+          side: toRoleSide(roleCode),
+          isAlive: false,
+          isHuman: false,
+        }))
+        .sort((left, right) => left.seatId - right.seatId);
+
+  return {
+    winningSide: payload.winning_side,
+    summary: payload.summary,
+    outcomeReason: recap?.outcome_reason ?? payload.summary,
+    dayCount: recap?.day_count ?? null,
+    players,
+    nights: (recap?.nights ?? []).map((night) => ({
+      dayCount: night.day_count,
+      wolfTarget: night.wolf_target ?? null,
+      seerSeat: night.seer_seat ?? null,
+      seerTarget: night.seer_target ?? null,
+      seerResult: night.seer_result ?? null,
+      witchSeat: night.witch_seat ?? null,
+      witchSaveTarget: night.witch_save_target ?? null,
+      witchPoisonTarget: night.witch_poison_target ?? null,
+      deadSeats: night.dead_seats,
+    })),
+    days: (recap?.days ?? []).map((day) => ({
+      dayCount: day.day_count,
+      speeches: day.speeches.map((speech) => ({
+        seatId: speech.seat_id,
+        message: speech.message,
+        eventType: speech.event_type,
+      })),
+      vote: buildVoteResultView(day.vote),
+      voteExplanation: day.vote_explanation ?? null,
+    })),
+    keyEvents: (recap?.key_events ?? []).map((event) => ({
+      dayCount: event.day_count,
+      phase: event.phase,
+      eventType: event.event_type,
+      message: event.message,
+      actorSeat: event.actor_seat ?? null,
+      targetSeats: event.target_seats,
+    })),
+    finalVote: buildVoteResultView(recap?.final_vote),
+  };
+}
+
 function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   if (payload.type === "SYSTEM_MSG") {
     return {
@@ -283,21 +473,33 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   }
 
   if (payload.type === "CHAT_UPDATE") {
-    const publicSpeechMatch = payload.data.visibility === "public"
+    const chatMeta = payload.meta;
+    const structuredSpeaker = typeof chatMeta?.actor_seat === "number"
+      ? formatSeat(chatMeta.actor_seat)
+      : null;
+    const publicSpeechMatch = payload.data.visibility === "public" && !structuredSpeaker
       ? payload.data.message.match(/^(\d+)号发言[:：]/)
       : null;
+    const isStructuredSpeech = payload.data.visibility === "public"
+      && (
+        chatMeta?.message_kind === "speech"
+        || chatMeta?.event_type === "SPEECH"
+        || chatMeta?.event_type === "LAST_WORDS"
+      );
 
     return {
       id: `chat-${crypto.randomUUID()}`,
       kind: payload.data.visibility === "private"
         ? "private"
-        : publicSpeechMatch
+        : isStructuredSpeech || publicSpeechMatch
           ? "speech"
           : "system",
       message: payload.data.message,
       speaker: payload.data.visibility === "private"
         ? payload.data.speaker ?? "你的视角"
-        : publicSpeechMatch
+        : structuredSpeaker
+          ? structuredSpeaker
+          : publicSpeechMatch
           ? formatSeat(Number(publicSpeechMatch[1]))
           : payload.data.speaker ?? narratorSpeaker,
     };

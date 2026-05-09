@@ -1,7 +1,7 @@
 import random
 
 from app.domain.enums import Role
-from app.domain.game_context import GameContext
+from app.domain.game_context import GameContext, NightActionSnapshot, VoteSnapshot
 from app.domain.player import AIPlayer, HumanPlayer
 from app.engine.day.day_speaking import run_day_speaking
 from app.engine.check_win import check_win
@@ -23,9 +23,11 @@ class GameEngine:
         *,
         rng: random.Random | None = None,
         llm_client: FallbackLLMClient | None = None,
+        human_speech_timeout_seconds: float | None = 60.0,
     ) -> None:
         self._rng = rng
         self._llm_client = llm_client
+        self._human_speech_timeout_seconds = human_speech_timeout_seconds
         self._witch_resources: dict[int, WitchResources] = {}
 
     def _ensure_witch_resources(self, context: GameContext) -> None:
@@ -91,7 +93,7 @@ class GameEngine:
         if alpha_wolf is None or not valid_targets:
             return self._choose_wolf_target(context)
 
-        response = self._llm_client.request_targeted_action(
+        response = await self._llm_client.request_targeted_action_async(
             prompt=build_night_prompt(
                 context,
                 seat_id=alpha_wolf.seat_id,
@@ -119,7 +121,28 @@ class GameEngine:
         *,
         hunter_seat: int,
     ) -> int | None:
-        return self._choose_hunter_target(context, hunter_seat)
+        allowed_targets = [
+            seat_id
+            for seat_id, player in sorted(context.players.items())
+            if player.is_alive and seat_id != hunter_seat
+        ]
+        if not allowed_targets:
+            return None
+
+        player = context.players[hunter_seat]
+        if self._llm_client is not None and isinstance(player, AIPlayer):
+            response = await self._llm_client.request_targeted_action_async(
+                prompt=build_night_prompt(
+                    context,
+                    seat_id=hunter_seat,
+                    allowed_targets=allowed_targets,
+                ),
+                allowed_targets=allowed_targets,
+            )
+            if response.target in set(allowed_targets):
+                return response.target
+
+        return self._rng.choice(allowed_targets) if self._rng else allowed_targets[0]
 
     def _choose_witch_poison_target(
         self,
@@ -150,7 +173,7 @@ class GameEngine:
     ) -> int:
         player = context.players[seer_seat]
         if self._llm_client is not None and isinstance(player, AIPlayer):
-            response = self._llm_client.request_targeted_action(
+            response = await self._llm_client.request_targeted_action_async(
                 prompt=build_night_prompt(
                     context,
                     seat_id=seer_seat,
@@ -173,7 +196,7 @@ class GameEngine:
     ) -> tuple[int | None, int | None]:
         player = context.players[witch_seat]
         if self._llm_client is not None and isinstance(player, AIPlayer):
-            response = self._llm_client.request_targeted_action(
+            response = await self._llm_client.request_targeted_action_async(
                 prompt=build_night_prompt(
                     context,
                     seat_id=witch_seat,
@@ -214,7 +237,11 @@ class GameEngine:
         )
 
         if not poisoned and target_seat is None:
-            context.add_public_message(f"{hunter_seat}号猎人死亡时场上已无可开枪目标。")
+            context.add_public_message(
+                f"{hunter_seat}号猎人死亡时场上已无可开枪目标。",
+                event_type="HUNTER_NO_TARGET",
+                actor_seat=hunter_seat,
+            )
             return False
 
         result = resolve_hunter_shooting(
@@ -223,7 +250,12 @@ class GameEngine:
             target_seat=target_seat,
             poisoned=poisoned,
         )
-        context.add_public_message(result.summary)
+        context.add_public_message(
+            result.summary,
+            event_type="HUNTER_POISONED" if poisoned else "HUNTER_SHOT",
+            actor_seat=hunter_seat,
+            target_seats=([result.shot_seat] if result.shot_seat is not None else []),
+        )
         if result.shot_seat is not None:
             await self._notify_player_state(context, [result.shot_seat])
 
@@ -232,7 +264,7 @@ class GameEngine:
             return False
 
         await self._set_phase(context, GamePhase.GAME_OVER)
-        context.add_public_message(winner["summary"])
+        context.add_public_message(winner["summary"], event_type="GAME_OVER_SUMMARY")
         return True
 
     async def _run_last_words(
@@ -250,7 +282,12 @@ class GameEngine:
                 speech = await self._llm_speaker(context, seat_id)
             else:
                 speech = await self._ai_speaker(seat_id)
-            context.add_public_message(f"{seat_id}号遗言：{speech}")
+            context.add_public_message(
+                f"{seat_id}号遗言：{speech}",
+                message_kind="speech",
+                event_type="LAST_WORDS",
+                actor_seat=seat_id,
+            )
 
     async def _human_speaker(self, seat_id: int) -> str:
         return f"{seat_id}号选择过麦。"
@@ -281,7 +318,7 @@ class GameEngine:
         if self._llm_client is None or not isinstance(player, AIPlayer):
             return await self._ai_speaker(seat_id)
 
-        response = self._llm_client.request_speech(
+        response = await self._llm_client.request_speech_async(
             prompt=build_speech_prompt(context, seat_id=seat_id),
         )
         return response.speech_text
@@ -312,6 +349,7 @@ class GameEngine:
         self,
         *,
         votes: dict[int, int],
+        ballots: dict[int, int] | None = None,
         abstentions: list[int],
         banished_seat: int | None,
         summary: str,
@@ -329,7 +367,7 @@ class GameEngine:
         if self._llm_client is None or not isinstance(player, AIPlayer):
             return await self._ai_vote(seat_id, allowed_targets=allowed_targets)
 
-        response = self._llm_client.request_vote(
+        response = await self._llm_client.request_vote_async(
             prompt=build_vote_prompt(
                 context,
                 seat_id=seat_id,
@@ -385,16 +423,19 @@ class GameEngine:
         winner = check_win(game_context)
         if winner is not None:
             await self._set_phase(game_context, GamePhase.GAME_OVER)
-            game_context.add_public_message(winner["summary"])
+            game_context.add_public_message(winner["summary"], event_type="GAME_OVER_SUMMARY")
             return game_context
 
         for _ in range(max_rounds):
             await self._set_phase(game_context, GamePhase.NIGHT_START)
             game_context.clear_night_deaths()
-            game_context.add_public_message("天黑请闭眼。")
+            night_snapshot = NightActionSnapshot(day_count=game_context.day_count)
+            game_context.night_actions.append(night_snapshot)
+            game_context.add_public_message("天黑请闭眼。", event_type="NIGHT_START")
 
             await self._set_phase(game_context, GamePhase.WOLF_ACTION)
             wolf_target = await self._select_wolf_target(game_context)
+            night_snapshot.wolf_target = wolf_target
             resolve_wolf_action(
                 game_context,
                 human_target=wolf_target,
@@ -410,14 +451,20 @@ class GameEngine:
                     if seat_id != seer_seat
                 ]
                 if seer_targets:
-                    resolve_seer_action(
+                    seer_target = await self._select_seer_target(
                         game_context,
                         seer_seat=seer_seat,
-                        target_seat=await self._select_seer_target(
-                            game_context,
-                            seer_seat=seer_seat,
-                            allowed_targets=seer_targets,
-                        ),
+                        allowed_targets=seer_targets,
+                    )
+                    seer_result = resolve_seer_action(
+                        game_context,
+                        seer_seat=seer_seat,
+                        target_seat=seer_target,
+                    )
+                    night_snapshot.seer_seat = seer_seat
+                    night_snapshot.seer_target = seer_target
+                    night_snapshot.seer_result = (
+                        "WOLF" if seer_result == "狼人" else "GOOD"
                     )
 
             witch_seat = self._first_alive_seat_by_role(game_context, Role.WITCH)
@@ -443,6 +490,9 @@ class GameEngine:
                     save_candidates=save_candidates,
                     poison_candidates=poison_candidates,
                 )
+                night_snapshot.witch_seat = witch_seat
+                night_snapshot.witch_save_target = save_target
+                night_snapshot.witch_poison_target = poison_target
                 resolve_witch_action(
                     game_context,
                     witch_seat=witch_seat,
@@ -464,6 +514,7 @@ class GameEngine:
                             "poison" in game_context.death_causes_for(seat_id),
                         )
                     )
+            night_snapshot.dead_seats = list(night_dead_seats)
             await self._notify_player_state(game_context, night_dead_seats)
 
             await self._set_phase(game_context, GamePhase.DAY_START)
@@ -484,7 +535,7 @@ class GameEngine:
             winner = check_win(game_context)
             if winner is not None:
                 await self._set_phase(game_context, GamePhase.GAME_OVER)
-                game_context.add_public_message(winner["summary"])
+                game_context.add_public_message(winner["summary"], event_type="GAME_OVER_SUMMARY")
                 return game_context
 
             if announcement.eligible_last_words:
@@ -511,6 +562,7 @@ class GameEngine:
                         else lambda seat_id: self._llm_speaker(game_context, seat_id)
                     ),
                     notify_thinking=self._notify_thinking,
+                    timeout_seconds=self._human_speech_timeout_seconds,
                 )
 
             await self._set_phase(game_context, GamePhase.VOTING)
@@ -518,11 +570,34 @@ class GameEngine:
                 game_context,
                 votes_by_voter=await self._build_votes(game_context),
             )
+            vote_snapshot = VoteSnapshot(
+                day_count=game_context.day_count,
+                votes=dict(voting_result.votes),
+                ballots=dict(voting_result.ballots),
+                abstentions=list(voting_result.abstentions),
+                banished_seat=voting_result.banished_seat,
+                summary=voting_result.summary,
+            )
+            game_context.last_vote_result = vote_snapshot
+            game_context.vote_history.append(vote_snapshot)
             await self._set_phase(game_context, GamePhase.VOTE_RESULT)
-            game_context.add_public_message(voting_result.summary)
+            game_context.add_public_message(
+                voting_result.summary,
+                event_type=(
+                    "BANISHMENT"
+                    if voting_result.banished_seat is not None
+                    else "VOTE_NO_BANISHMENT"
+                ),
+                target_seats=(
+                    [voting_result.banished_seat]
+                    if voting_result.banished_seat is not None
+                    else []
+                ),
+            )
             banished_seat = voting_result.banished_seat
             await self._notify_vote_resolved(
                 votes=voting_result.votes,
+                ballots=voting_result.ballots,
                 abstentions=voting_result.abstentions,
                 banished_seat=banished_seat,
                 summary=voting_result.summary,
@@ -550,11 +625,11 @@ class GameEngine:
             winner = check_win(game_context)
             if winner is not None:
                 await self._set_phase(game_context, GamePhase.GAME_OVER)
-                game_context.add_public_message(winner["summary"])
+                game_context.add_public_message(winner["summary"], event_type="GAME_OVER_SUMMARY")
                 return game_context
 
             game_context.day_count += 1
 
         await self._set_phase(game_context, GamePhase.GAME_OVER)
-        game_context.add_public_message("夜尽未分胜负，本局暂止。")
+        game_context.add_public_message("夜尽未分胜负，本局暂止。", event_type="GAME_OVER_SUMMARY")
         return game_context

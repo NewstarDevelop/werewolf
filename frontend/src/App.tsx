@@ -5,6 +5,8 @@ import { ChatHistory } from "./components/ChatHistory";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PlayerList } from "./components/PlayerList";
 import { RoleGuide } from "./components/RoleGuide";
+import { SettlementReview } from "./components/SettlementReview";
+import { VoteBoard } from "./components/VoteBoard";
 import {
   connectionPhaseCopy,
   formatSeat,
@@ -64,6 +66,8 @@ export function App() {
     dayCount,
     lastDeathReveal,
     lastVoteResult,
+    lastNightActionFeedback,
+    settlementReview,
   } = gameState;
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
   const latestOutcome = findLatestOutcome(entries);
@@ -309,6 +313,19 @@ export function App() {
             <strong>{battleSignal.title}</strong>
             <span>{battleSignal.detail}</span>
           </section>
+
+          {lastNightActionFeedback ? (
+            <section className="night-feedback" aria-label="夜晚行动反馈">
+              <span>夜晚回执</span>
+              <strong>{lastNightActionFeedback.message}</strong>
+            </section>
+          ) : null}
+
+          {settlementReview ? (
+            <SettlementReview review={settlementReview} />
+          ) : lastVoteResult ? (
+            <VoteBoard result={lastVoteResult} />
+          ) : null}
 
           <PlayerList players={players} />
 

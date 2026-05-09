@@ -45,9 +45,62 @@ class DeathRevealedPayload(BaseModel):
 
 class VoteResolvedPayload(BaseModel):
     votes: dict[int, int] = Field(default_factory=dict)
+    ballots: dict[int, int] = Field(default_factory=dict)
     abstentions: list[int] = Field(default_factory=list)
     banished_seat: int | None = Field(default=None, ge=1, le=9)
     summary: str = Field(min_length=1)
+
+
+class SettlementPlayerPayload(BaseModel):
+    seat_id: int = Field(ge=1, le=9)
+    role_code: str = Field(min_length=1)
+    side: Literal["GOOD", "WOLF"]
+    is_alive: bool
+    is_human: bool
+
+
+class SettlementEventPayload(BaseModel):
+    day_count: int = Field(ge=1)
+    phase: str = Field(min_length=1)
+    event_type: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    actor_seat: int | None = Field(default=None, ge=1, le=9)
+    target_seats: list[int] = Field(default_factory=list)
+
+
+class SettlementNightPayload(BaseModel):
+    day_count: int = Field(ge=1)
+    wolf_target: int | None = Field(default=None, ge=1, le=9)
+    seer_seat: int | None = Field(default=None, ge=1, le=9)
+    seer_target: int | None = Field(default=None, ge=1, le=9)
+    seer_result: Literal["GOOD", "WOLF"] | None = None
+    witch_seat: int | None = Field(default=None, ge=1, le=9)
+    witch_save_target: int | None = Field(default=None, ge=1, le=9)
+    witch_poison_target: int | None = Field(default=None, ge=1, le=9)
+    dead_seats: list[int] = Field(default_factory=list)
+
+
+class SettlementSpeechPayload(BaseModel):
+    seat_id: int = Field(ge=1, le=9)
+    message: str = Field(min_length=1)
+    event_type: str = Field(min_length=1)
+
+
+class SettlementDayPayload(BaseModel):
+    day_count: int = Field(ge=1)
+    speeches: list[SettlementSpeechPayload] = Field(default_factory=list)
+    vote: VoteResolvedPayload | None = None
+    vote_explanation: str | None = None
+
+
+class SettlementRecapPayload(BaseModel):
+    day_count: int = Field(ge=1)
+    outcome_reason: str = Field(min_length=1)
+    players: list[SettlementPlayerPayload] = Field(default_factory=list)
+    nights: list[SettlementNightPayload] = Field(default_factory=list)
+    days: list[SettlementDayPayload] = Field(default_factory=list)
+    key_events: list[SettlementEventPayload] = Field(default_factory=list)
+    final_vote: VoteResolvedPayload | None = None
 
 
 class RequireInputPayload(BaseModel):
@@ -60,6 +113,7 @@ class GameOverPayload(BaseModel):
     winning_side: Literal["GOOD", "WOLF", "DRAW"]
     summary: str = Field(min_length=1)
     revealed_roles: dict[int, str] = Field(default_factory=dict)
+    recap: SettlementRecapPayload | None = None
 
 
 class SystemMessageEnvelope(BaseModel):

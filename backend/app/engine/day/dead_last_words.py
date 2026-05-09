@@ -28,5 +28,9 @@ def announce_deaths_and_last_words(
     if banished_seat is not None:
         eligible_last_words.append(banished_seat)
 
-    context.add_public_message(message)
+    context.add_public_message(
+        message,
+        event_type="NIGHT_DEATH" if dead_list else "PEACEFUL_NIGHT",
+        target_seats=dead_list,
+    )
     return DeathAnnouncement(message=message, eligible_last_words=eligible_last_words)

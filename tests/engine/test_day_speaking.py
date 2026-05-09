@@ -55,6 +55,8 @@ def test_run_day_speaking_records_human_and_ai_speeches() -> None:
     ]
     assert thinking_events == [(2, True), (2, False), (4, True), (4, False)]
     assert context.public_chat_history == speeches
+    assert context.players[2].private_memory[-1] == "我白天公开发言：2号AI发言"
+    assert context.players[4].private_memory[-1] == "我白天公开发言：4号AI发言"
 
 
 def test_run_day_speaking_falls_back_when_human_times_out() -> None:
@@ -82,3 +84,30 @@ def test_run_day_speaking_falls_back_when_human_times_out() -> None:
     )
 
     assert speeches[0] == "1号发言：过。"
+
+
+def test_run_day_speaking_can_wait_for_human_without_timeout() -> None:
+    context = build_context()
+
+    async def human_speaker(_: int) -> str:
+        await asyncio.sleep(0.03)
+        return "我还在发言。"
+
+    async def ai_speaker(seat_id: int) -> str:
+        return f"{seat_id}号AI发言"
+
+    async def notify_thinking(_: int, __: bool) -> None:
+        return None
+
+    speeches = asyncio.run(
+        run_day_speaking(
+            context,
+            start_seat=1,
+            human_speaker=human_speaker,
+            ai_speaker=ai_speaker,
+            notify_thinking=notify_thinking,
+            timeout_seconds=None,
+        )
+    )
+
+    assert speeches[0] == "1号发言：我还在发言。"

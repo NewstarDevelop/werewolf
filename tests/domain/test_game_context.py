@@ -15,12 +15,16 @@ def build_context() -> GameContext:
 
 def test_game_context_tracks_messages_and_alive_players() -> None:
     context = build_context()
+    context.phase = "NIGHT_START"
     context.add_public_message("天黑请闭眼")
     context.add_private_message(2, "你和3号是狼同伴")
     context.players[4].mark_dead()
     context.mark_killed_tonight(4, cause="wolf")
 
     assert context.public_chat_history == ["天黑请闭眼"]
+    assert context.public_chat_events[0].message == "天黑请闭眼"
+    assert context.public_chat_events[0].phase == "NIGHT_START"
+    assert context.public_chat_events[0].day_count == 1
     assert context.get_private_log(2) == ["你和3号是狼同伴"]
     assert context.players[2].private_memory == ["你和3号是狼同伴"]
     assert context.alive_seat_ids() == [1, 2, 3]
@@ -52,6 +56,25 @@ def test_game_context_notifies_public_and_private_message_listeners() -> None:
 
     assert public_messages == ["游戏开始"]
     assert private_messages == [(1, "你的身份是预言家")]
+
+
+def test_public_speech_mentions_are_remembered_by_ai_targets() -> None:
+    context = build_context()
+
+    context.add_public_message(
+        "1号发言：我保2号是好人，3号像狼要出。",
+        message_kind="speech",
+        actor_seat=1,
+    )
+
+    assert any(
+        "1号在公开发言中保护/认可你" in memory
+        for memory in context.players[2].private_memory
+    )
+    assert any(
+        "1号在公开发言中攻击/质疑你" in memory
+        for memory in context.players[3].private_memory
+    )
 
 
 def test_view_mask_hides_unpublished_roles_from_non_wolves() -> None:

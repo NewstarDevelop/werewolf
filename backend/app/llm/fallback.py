@@ -1,5 +1,6 @@
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
+import asyncio
 import logging
 import time
 from typing import TypeVar
@@ -39,6 +40,9 @@ class FallbackLLMClient:
             fallback_factory=default_speech_response,
         )
 
+    async def request_speech_async(self, *, prompt: PromptEnvelope) -> SpeechResponse:
+        return await asyncio.to_thread(self.request_speech, prompt=prompt)
+
     def request_vote(
         self,
         *,
@@ -55,6 +59,18 @@ class FallbackLLMClient:
             fallback_factory=default_vote_response,
         )
 
+    async def request_vote_async(
+        self,
+        *,
+        prompt: PromptEnvelope,
+        allowed_targets: Collection[int],
+    ) -> VoteResponse:
+        return await asyncio.to_thread(
+            self.request_vote,
+            prompt=prompt,
+            allowed_targets=allowed_targets,
+        )
+
     def request_targeted_action(
         self,
         *,
@@ -69,6 +85,18 @@ class FallbackLLMClient:
                 allowed_targets=allowed_targets,
             ),
             fallback_factory=default_targeted_action_response,
+        )
+
+    async def request_targeted_action_async(
+        self,
+        *,
+        prompt: PromptEnvelope,
+        allowed_targets: Collection[int],
+    ) -> TargetedActionResponse:
+        return await asyncio.to_thread(
+            self.request_targeted_action,
+            prompt=prompt,
+            allowed_targets=allowed_targets,
         )
 
     def _request_with_fallback(

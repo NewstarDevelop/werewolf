@@ -6,7 +6,13 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.domain.enums import Role
-from app.domain.game_context import GameContext
+from app.domain.game_context import (
+    GameContext,
+    NightActionSnapshot,
+    PrivateChatEvent,
+    PublicChatEvent,
+    VoteSnapshot,
+)
 from app.domain.view_mask import build_player_view
 from app.domain.player import AIPlayer, HumanPlayer
 from app.main import app
@@ -20,7 +26,10 @@ from app.ws.routes import (
     build_death_revealed_message,
     build_game_over_message,
     build_phase_changed_message,
+    build_private_chat_event_message,
     build_player_state_patch_message,
+    build_public_chat_event_message,
+    build_settlement_recap,
     build_vote_resolved_message,
     GAME_OVER_CLOSE_CODE,
     known_role_seat_ids_from_setup,
@@ -208,6 +217,56 @@ def test_attach_context_bridge_filters_private_messages_for_other_seats() -> Non
     assert forwarded_payloads == []
 
 
+def test_private_chat_event_message_carries_night_feedback_metadata() -> None:
+    payload = build_private_chat_event_message(
+        PrivateChatEvent(
+            seat_id=3,
+            message="你选择今晚击杀 5 号。",
+            event_type="NIGHT_ACTION_FEEDBACK",
+            target_seats=[5],
+        )
+    )
+
+    assert payload == {
+        "type": "CHAT_UPDATE",
+        "data": {
+            "message": "你选择今晚击杀 5 号。",
+            "seat_id": 3,
+            "speaker": "\u7cfb\u7edf",
+            "visibility": "private",
+        },
+        "meta": {
+            "event_type": "NIGHT_ACTION_FEEDBACK",
+            "target_seats": [5],
+        },
+    }
+
+
+def test_attach_context_bridge_forwards_private_night_feedback_metadata() -> None:
+    forwarded_payloads: list[dict[str, object]] = []
+    context = GameContext()
+
+    async def send_json(payload: dict[str, object]) -> None:
+        forwarded_payloads.append(payload)
+
+    async def run() -> None:
+        attach_context_bridge(context, send_json, viewer_seat_id=1)
+        context.add_private_message(
+            1,
+            "你选择查验 4 号。",
+            event_type="NIGHT_ACTION_FEEDBACK",
+            target_seats=[4],
+        )
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert forwarded_payloads[0]["meta"] == {
+        "event_type": "NIGHT_ACTION_FEEDBACK",
+        "target_seats": [4],
+    }
+
+
 def test_day_speaking_publishes_human_speech_before_next_ai_speaker() -> None:
     forwarded_payloads: list[dict[str, object]] = []
     messages_seen_before_ai_speech: list[str] = []
@@ -300,20 +359,14 @@ def test_run_game_session_emits_game_over_payload() -> None:
         ),
     )
 
-    assert sent_payloads == [
-        {
-            "type": "GAME_OVER",
-            "data": {
-                "winning_side": "GOOD",
-                "summary": "\u72fc\u4eba\u5df2\u5168\u90e8\u51fa\u5c40\uff0c\u597d\u4eba\u9635\u8425\u83b7\u80dc\u3002",
-                "revealed_roles": {
-                    seat_id: player.role.value
-                    for seat_id, player in sorted(setup_result.context.players.items())
-                },
-            },
-            "meta": {},
-        },
-    ]
+    assert sent_payloads[0]["type"] == "GAME_OVER"
+    assert sent_payloads[0]["data"]["winning_side"] == "GOOD"
+    assert sent_payloads[0]["data"]["summary"] == "狼人已全部出局，好人阵营获胜。"
+    assert sent_payloads[0]["data"]["revealed_roles"] == {
+        seat_id: player.role.value
+        for seat_id, player in sorted(setup_result.context.players.items())
+    }
+    assert sent_payloads[0]["data"]["recap"]["players"][0]["seat_id"] == 1
     assert closed is True
 
 
@@ -336,9 +389,126 @@ def test_build_game_over_message_handles_safety_stop_draw() -> None:
                 2: "VILLAGER",
                 3: "SEER",
             },
+            "recap": {
+                "day_count": 1,
+                "outcome_reason": "达到回合上限仍未分出胜负，系统安全停局。",
+                "players": [
+                    {
+                        "seat_id": 1,
+                        "role_code": "WOLF",
+                        "side": "WOLF",
+                        "is_alive": True,
+                        "is_human": True,
+                    },
+                    {
+                        "seat_id": 2,
+                        "role_code": "VILLAGER",
+                        "side": "GOOD",
+                        "is_alive": True,
+                        "is_human": False,
+                    },
+                    {
+                        "seat_id": 3,
+                        "role_code": "SEER",
+                        "side": "GOOD",
+                        "is_alive": True,
+                        "is_human": False,
+                    },
+                ],
+                "nights": [],
+                "days": [],
+                "key_events": [],
+                "final_vote": None,
+            },
         },
         "meta": {},
     }
+
+
+def test_build_settlement_recap_includes_roles_events_and_final_vote() -> None:
+    context = GameContext(phase=GamePhase.DAY_START.value, day_count=2)
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+    context.add_player(AIPlayer(seat_id=2, role=Role.WOLF, personality="steady"))
+    context.add_player(AIPlayer(seat_id=3, role=Role.VILLAGER, personality="quiet"))
+    context.players[2].mark_dead()
+    context.add_public_message(
+        "天亮了。昨夜死亡的是 3号。",
+        event_type="NIGHT_DEATH",
+        target_seats=[3],
+    )
+    context.add_public_message(
+        "1号发言：我查杀2号。",
+        message_kind="speech",
+        event_type="SPEECH",
+        actor_seat=1,
+    )
+    context.night_actions.append(
+        NightActionSnapshot(
+            day_count=2,
+            wolf_target=3,
+            seer_seat=1,
+            seer_target=2,
+            seer_result="WOLF",
+            witch_seat=3,
+            witch_save_target=3,
+            dead_seats=[],
+        )
+    )
+    context.last_vote_result = VoteSnapshot(
+        day_count=2,
+        votes={2: 2},
+        ballots={1: 2, 3: 2},
+        abstentions=[],
+        banished_seat=2,
+        summary="2号玩家被放逐出局。",
+    )
+    context.vote_history.append(context.last_vote_result)
+
+    recap = build_settlement_recap(context).model_dump()
+
+    assert recap["day_count"] == 2
+    assert recap["outcome_reason"] == "狼人全灭。"
+    assert recap["players"] == [
+        {
+            "seat_id": 1,
+            "role_code": "SEER",
+            "side": "GOOD",
+            "is_alive": True,
+            "is_human": True,
+        },
+        {
+            "seat_id": 2,
+            "role_code": "WOLF",
+            "side": "WOLF",
+            "is_alive": False,
+            "is_human": False,
+        },
+        {
+            "seat_id": 3,
+            "role_code": "VILLAGER",
+            "side": "GOOD",
+            "is_alive": True,
+            "is_human": False,
+        },
+    ]
+    assert recap["nights"] == [
+        {
+            "day_count": 2,
+            "wolf_target": 3,
+            "seer_seat": 1,
+            "seer_target": 2,
+            "seer_result": "WOLF",
+            "witch_seat": 3,
+            "witch_save_target": 3,
+            "witch_poison_target": None,
+            "dead_seats": [],
+        }
+    ]
+    assert recap["days"][0]["speeches"][0]["message"] == "1号发言：我查杀2号。"
+    assert recap["days"][0]["vote_explanation"] == "2号以 2 票成为最高票，被放逐出局。"
+    assert recap["key_events"][0]["event_type"] == "NIGHT_DEATH"
+    assert recap["key_events"][0]["phase"] == "DAY_START"
+    assert recap["final_vote"]["summary"] == "2号玩家被放逐出局。"
 
 
 def test_run_game_session_emits_draw_payload_on_safety_stop() -> None:
@@ -413,6 +583,12 @@ def test_websocket_game_engine_emits_ai_thinking_payload() -> None:
             "meta": {},
         },
     ]
+
+
+def test_websocket_game_engine_disables_human_speech_timeout() -> None:
+    engine = WebSocketGameEngine(send_json=lambda _: asyncio.sleep(0))
+
+    assert engine._human_speech_timeout_seconds is None
 
 
 def test_build_player_state_patch_message_hides_roles_by_default() -> None:
@@ -513,6 +689,48 @@ def test_websocket_welcome_reveals_wolf_teammates(monkeypatch) -> None:
     assert [player["is_human"] for player in players] == [False, True]
 
 
+def test_public_chat_event_message_carries_structured_metadata() -> None:
+    payload = build_public_chat_event_message(
+        PublicChatEvent(
+            message="3号发言：我站边预言家。",
+            message_kind="speech",
+            event_type="SPEECH",
+            actor_seat=3,
+        )
+    )
+
+    assert payload["type"] == "CHAT_UPDATE"
+    assert payload["meta"] == {
+        "message_kind": "speech",
+        "event_type": "SPEECH",
+        "actor_seat": 3,
+    }
+
+
+def test_attach_context_bridge_forwards_structured_death_metadata() -> None:
+    forwarded_payloads: list[dict[str, object]] = []
+    context = GameContext()
+
+    async def send_json(payload: dict[str, object]) -> None:
+        forwarded_payloads.append(payload)
+
+    async def run() -> None:
+        attach_context_bridge(context, send_json, viewer_seat_id=1)
+        context.add_public_message(
+            "2号玩家被放逐出局。",
+            event_type="BANISHMENT",
+            target_seats=[2],
+        )
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert forwarded_payloads[0]["meta"] == {
+        "event_type": "BANISHMENT",
+        "target_seats": [2],
+    }
+
+
 def test_build_phase_changed_message_uses_context_phase_and_day() -> None:
     context = GameContext(phase="DAY_SPEAKING", day_count=2)
 
@@ -606,6 +824,7 @@ def test_websocket_game_engine_emits_death_revealed_payload() -> None:
 def test_build_vote_resolved_message_carries_tally() -> None:
     payload = build_vote_resolved_message(
         votes={2: 3, 5: 1},
+        ballots={1: 2, 3: 2, 6: 5, 8: 2},
         abstentions=[4],
         banished_seat=2,
         summary="2号玩家被放逐出局。",
@@ -615,6 +834,7 @@ def test_build_vote_resolved_message_carries_tally() -> None:
         "type": "VOTE_RESOLVED",
         "data": {
             "votes": {2: 3, 5: 1},
+            "ballots": {1: 2, 3: 2, 6: 5, 8: 2},
             "abstentions": [4],
             "banished_seat": 2,
             "summary": "2号玩家被放逐出局。",
@@ -633,6 +853,7 @@ def test_websocket_game_engine_emits_vote_resolved_payload() -> None:
         engine = WebSocketGameEngine(send_json=send_json)
         await engine._notify_vote_resolved(
             votes={3: 2},
+            ballots={1: 3, 2: 3},
             abstentions=[],
             banished_seat=3,
             summary="3号玩家被放逐出局。",
@@ -645,6 +866,7 @@ def test_websocket_game_engine_emits_vote_resolved_payload() -> None:
             "type": "VOTE_RESOLVED",
             "data": {
                 "votes": {3: 2},
+                "ballots": {1: 3, 2: 3},
                 "abstentions": [],
                 "banished_seat": 3,
                 "summary": "3号玩家被放逐出局。",
@@ -850,6 +1072,7 @@ def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None
 
     asyncio.run(run_with_context())
 
+    assert context.get_private_log(1)[-1] == "你选择今晚击杀 1 号。"
     assert sent_payloads == [
         {
             "type": "REQUIRE_INPUT",
@@ -894,6 +1117,7 @@ def test_websocket_game_engine_requests_and_consumes_human_seer_target() -> None
 
     asyncio.run(run_with_context())
 
+    assert context.get_private_log(1)[-1] == "你选择查验 2 号。"
     assert sent_payloads == [
         {
             "type": "REQUIRE_INPUT",
@@ -941,6 +1165,7 @@ def test_websocket_game_engine_requests_and_consumes_human_witch_action() -> Non
 
     asyncio.run(run_with_context())
 
+    assert context.get_private_log(1)[-1] == "你对 2 号使用毒药。"
     assert sent_payloads == [
         {
             "type": "REQUIRE_INPUT",

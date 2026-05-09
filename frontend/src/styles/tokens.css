@@ -116,7 +116,7 @@
   --font-size-lg: 1.375rem;    /* 22px */
   --font-size-xl: 1.75rem;     /* 28px */
   --font-size-2xl: 2.25rem;    /* 36px */
-  --font-size-3xl: clamp(2.5rem, 5.5vw, 4rem);
+  --font-size-3xl: 3rem;
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;
@@ -127,7 +127,7 @@
   --line-height-base: 1.55;
   --line-height-relaxed: 1.8;
 
-  --letter-spacing-tight: -0.01em;
+  --letter-spacing-tight: 0;
   --letter-spacing-base: 0;
   --letter-spacing-wide: 0.04em;
 
@@ -262,6 +262,9 @@
   --seat-size: 3.5rem;              /* 56px — 座位筹码 */
   --seat-size-compact: 3rem;        /* 48px */
   --seat-size-mobile: 2.5rem;       /* 40px */
+  --seat-card-width: 5.5rem;        /* 88px — 座位文字稳定宽度 */
+  --seat-card-width-compact: 4.75rem;
+  --seat-card-width-mobile: 4rem;
   --arc-offset-1: 0.75rem;          /* 12px — 弧线第一阶 */
   --arc-offset-2: 1.5rem;           /* 24px */
   --arc-offset-3: 2.5rem;           /* 40px */
@@ -275,6 +278,8 @@
   --textarea-min-height: 8rem;      /* 128px */
   --target-button-min-width: 5rem;  /* 80px */
   --target-button-min-height: 3rem; /* 48px */
+  --header-control-min-height: 2.25rem;
+  --focus-ring-offset: 0.1875rem;
 }
 
 /* --------------------------------------------------------------------------

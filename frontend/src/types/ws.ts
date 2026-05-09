@@ -5,6 +5,26 @@ export interface SystemMessageEnvelope {
   };
 }
 
+export interface ChatUpdateMeta {
+  message_kind?: "system" | "speech";
+  event_type?:
+    | "SPEECH"
+    | "LAST_WORDS"
+    | "NIGHT_START"
+    | "NIGHT_DEATH"
+    | "PEACEFUL_NIGHT"
+    | "BANISHMENT"
+    | "VOTE_NO_BANISHMENT"
+    | "HUNTER_SHOT"
+    | "HUNTER_POISONED"
+    | "HUNTER_NO_TARGET"
+    | "GAME_OVER_SUMMARY"
+    | "NIGHT_ACTION_FEEDBACK"
+    | string;
+  actor_seat?: number;
+  target_seats?: number[];
+}
+
 export interface ChatUpdateEnvelope {
   type: "CHAT_UPDATE";
   data: {
@@ -13,6 +33,7 @@ export interface ChatUpdateEnvelope {
     speaker?: string;
     visibility: "public" | "private";
   };
+  meta?: ChatUpdateMeta;
 }
 
 export interface AIThinkingEnvelope {
@@ -58,10 +79,63 @@ export interface VoteResolvedEnvelope {
   type: "VOTE_RESOLVED";
   data: {
     votes: Record<number, number>;
+    ballots?: Record<number, number>;
     abstentions: number[];
     banished_seat?: number | null;
     summary: string;
   };
+}
+
+export interface SettlementPlayerPayload {
+  seat_id: number;
+  role_code: string;
+  side: "GOOD" | "WOLF";
+  is_alive: boolean;
+  is_human: boolean;
+}
+
+export interface SettlementEventPayload {
+  day_count: number;
+  phase: string;
+  event_type: string;
+  message: string;
+  actor_seat?: number | null;
+  target_seats: number[];
+}
+
+export interface SettlementNightPayload {
+  day_count: number;
+  wolf_target?: number | null;
+  seer_seat?: number | null;
+  seer_target?: number | null;
+  seer_result?: "GOOD" | "WOLF" | null;
+  witch_seat?: number | null;
+  witch_save_target?: number | null;
+  witch_poison_target?: number | null;
+  dead_seats: number[];
+}
+
+export interface SettlementSpeechPayload {
+  seat_id: number;
+  message: string;
+  event_type: string;
+}
+
+export interface SettlementDayPayload {
+  day_count: number;
+  speeches: SettlementSpeechPayload[];
+  vote?: VoteResolvedEnvelope["data"] | null;
+  vote_explanation?: string | null;
+}
+
+export interface SettlementRecapPayload {
+  day_count: number;
+  outcome_reason: string;
+  players: SettlementPlayerPayload[];
+  nights: SettlementNightPayload[];
+  days: SettlementDayPayload[];
+  key_events: SettlementEventPayload[];
+  final_vote?: VoteResolvedEnvelope["data"] | null;
 }
 
 export interface RequireInputEnvelope {
@@ -79,6 +153,7 @@ export interface GameOverEnvelope {
     winning_side: "GOOD" | "WOLF" | "DRAW";
     summary: string;
     revealed_roles: Record<number, string>;
+    recap?: SettlementRecapPayload | null;
   };
 }
 
