@@ -68,6 +68,14 @@ def _snippet(message: str, *, limit: int = 80) -> str:
     return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
 
+def _mentioned_seat_ids(message: str) -> list[int]:
+    return sorted({
+        int(match.group(1))
+        for match in re.finditer(r"(\d+)号", message)
+        if 1 <= int(match.group(1)) <= 9
+    })
+
+
 @dataclass(slots=True, kw_only=True)
 class PublicChatEvent:
     message: str
@@ -189,17 +197,71 @@ class GameContext:
             player.remember(message)
 
     def _remember_public_speech_interactions(self, event: PublicChatEvent) -> None:
+        mentioned_seats = _mentioned_seat_ids(event.message)
+        actor = self.players.get(event.actor_seat)
+        if isinstance(actor, AIPlayer):
+            actor.remember(f"你公开发言：{_snippet(event.message)}")
+            for mentioned_seat in mentioned_seats:
+                if mentioned_seat == event.actor_seat:
+                    continue
+                relation = _classify_mention(event.message, mentioned_seat)
+                if relation == "攻击/质疑":
+                    actor.adjust_suspicion(mentioned_seat, 2)
+                    actor.adjust_trust(mentioned_seat, -1)
+                elif relation == "保护/认可":
+                    actor.adjust_trust(mentioned_seat, 1)
+
         for seat_id, player in sorted(self.players.items()):
             if not isinstance(player, AIPlayer):
                 continue
             if seat_id == event.actor_seat:
                 continue
-            if f"{seat_id}号" not in event.message:
+            if seat_id not in mentioned_seats:
                 continue
             relation = _classify_mention(event.message, seat_id)
+            if relation == "攻击/质疑" and event.actor_seat is not None:
+                player.adjust_suspicion(event.actor_seat, 1)
+            elif relation == "保护/认可" and event.actor_seat is not None:
+                player.adjust_trust(event.actor_seat, 1)
             player.remember(
                 f"{event.actor_seat}号在公开发言中{relation}你：{_snippet(event.message)}"
             )
+
+    def remember_vote_snapshot(self, snapshot: VoteSnapshot) -> None:
+        for seat_id, player in sorted(self.players.items()):
+            if not isinstance(player, AIPlayer):
+                continue
+
+            own_vote = snapshot.ballots.get(seat_id)
+            if own_vote is not None:
+                player.remember(
+                    f"第{snapshot.day_count}天你投给{own_vote}号；投票结果：{snapshot.summary}"
+                )
+                player.adjust_suspicion(own_vote, 1)
+                aligned_voters = [
+                    voter
+                    for voter, target in sorted(snapshot.ballots.items())
+                    if voter != seat_id and target == own_vote
+                ]
+                for voter in aligned_voters:
+                    player.adjust_trust(voter, 1)
+            elif seat_id in snapshot.abstentions:
+                player.remember(
+                    f"第{snapshot.day_count}天你弃票；投票结果：{snapshot.summary}"
+                )
+
+            voters_against_self = [
+                voter
+                for voter, target in sorted(snapshot.ballots.items())
+                if voter != seat_id and target == seat_id
+            ]
+            if voters_against_self:
+                voter_line = "、".join(f"{voter}号" for voter in voters_against_self)
+                player.remember(
+                    f"第{snapshot.day_count}天{voter_line}投给你；投票结果：{snapshot.summary}"
+                )
+                for voter in voters_against_self:
+                    player.adjust_suspicion(voter, 1)
 
     def on_public_message(self, listener: PublicMessageListener) -> None:
         self.public_message_listeners.append(listener)

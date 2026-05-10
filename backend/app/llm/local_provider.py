@@ -9,6 +9,7 @@ from app.llm.schemas import PromptEnvelope, SpeechResponse, TargetedActionRespon
 
 _SEER_CHECK_PATTERN = re.compile(r"查验结果：\s*(\d+)\s*号是\s*(狼人|好人)")
 _SEER_WOLF_CHECK_PATTERN = re.compile(r"查验结果：\s*(\d+)\s*号是\s*狼人")
+_STANCE_ITEM_PATTERN = re.compile(r"(\d+)号\((\d+)\)")
 
 
 def _extract_section(prompt: PromptEnvelope, label: str) -> str | None:
@@ -111,6 +112,31 @@ def _pick_checked_wolf_target(prompt: PromptEnvelope) -> int | None:
     return None
 
 
+def _extract_stance_targets(prompt: PromptEnvelope, label: str) -> list[int]:
+    stance_line = _extract_section(prompt, "立场摘要")
+    if not stance_line:
+        return []
+    section_match = re.search(fr"{label}：([^；]+)", stance_line)
+    if section_match is None:
+        return []
+    scored_seats = [
+        (int(match.group(1)), int(match.group(2)))
+        for match in _STANCE_ITEM_PATTERN.finditer(section_match.group(1))
+    ]
+    return [
+        seat_id
+        for seat_id, _ in sorted(scored_seats, key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _pick_stance_target(prompt: PromptEnvelope, *, label: str = "怀疑") -> int | None:
+    alive_targets = set(_extract_alive_targets(prompt))
+    for seat_id in _extract_stance_targets(prompt, label):
+        if seat_id in alive_targets:
+            return seat_id
+    return None
+
+
 def _extract_alive_targets(prompt: PromptEnvelope) -> list[int]:
     players = _extract_players(prompt)
     self_seat = next(
@@ -176,6 +202,7 @@ class LocalRuleBasedProvider(LLMProvider):
         if response_schema is SpeechResponse:
             self_role = _extract_self_role(prompt)
             checked_wolf = _pick_checked_wolf_target(prompt)
+            suspected_target = _pick_stance_target(prompt)
             if self_role == "SEER" and checked_wolf is not None:
                 return {
                     "inner_thought": "预言家已有查杀，公开推动白天放逐。",
@@ -193,6 +220,12 @@ class LocalRuleBasedProvider(LLMProvider):
                         "speech_text": f"我是预言家，验人链是：{chain}。今天先按发言和票型找狼，警徽流留给外置位压力最大的牌。",
                     }
 
+            if suspected_target is not None:
+                return {
+                    "inner_thought": "延续已有怀疑对象，给出可被票型验证的公开压力。",
+                    "speech_text": f"我现在更怀疑{suspected_target}号，前后发言和票型需要对齐。今天先把他的逻辑问清楚，别让焦点散掉。",
+                }
+
             return {
                 "inner_thought": "先给出保守公开发言。",
                 "speech_text": "信息还不够，我先听后置位怎么聊。",
@@ -204,6 +237,13 @@ class LocalRuleBasedProvider(LLMProvider):
                 return {
                     "inner_thought": "优先投给自己查验到的狼人。",
                     "vote_target": checked_wolf,
+                }
+
+            suspected_target = _pick_stance_target(prompt)
+            if suspected_target is not None:
+                return {
+                    "inner_thought": "延续当前怀疑分最高的对象投票。",
+                    "vote_target": suspected_target,
                 }
 
             targets = _extract_alive_targets(prompt)
@@ -223,9 +263,10 @@ class LocalRuleBasedProvider(LLMProvider):
                 }
 
             targets = _extract_alive_targets(prompt)
+            suspected_target = _pick_stance_target(prompt)
             return {
-                "inner_thought": "优先选择最靠前的合法目标。",
-                "target": targets[0] if targets else None,
+                "inner_thought": "优先选择当前最有压力的合法目标。",
+                "target": suspected_target if suspected_target is not None else (targets[0] if targets else None),
                 "use_antidote": False,
                 "use_poison": False,
             }

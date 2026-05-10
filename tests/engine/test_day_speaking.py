@@ -55,8 +55,8 @@ def test_run_day_speaking_records_human_and_ai_speeches() -> None:
     ]
     assert thinking_events == [(2, True), (2, False), (4, True), (4, False)]
     assert context.public_chat_history == speeches
-    assert context.players[2].private_memory[-1] == "我白天公开发言：2号AI发言"
-    assert context.players[4].private_memory[-1] == "我白天公开发言：4号AI发言"
+    assert "我白天公开发言：2号AI发言" in context.players[2].private_memory
+    assert "我白天公开发言：4号AI发言" in context.players[4].private_memory
 
 
 def test_run_day_speaking_falls_back_when_human_times_out() -> None:

@@ -35,6 +35,7 @@ def test_build_speech_prompt_includes_role_goal_and_private_view() -> None:
     assert "不要主动暴露狼同伴" in prompt.system_prompt
     assert "激进悍跳" in prompt.context_prompt
     assert "局势摘要" in prompt.context_prompt
+    assert "立场摘要" in prompt.context_prompt
     assert "2号发言：我先站边自己听后置位。" in prompt.context_prompt
     assert "你的狼同伴是 6号 和 8号。" in prompt.context_prompt
     assert view["private_log"] == ["你的狼同伴是 6号 和 8号。"]
@@ -100,6 +101,18 @@ def test_build_speech_prompt_includes_seer_check_chain_and_badge_flow() -> None:
 
     assert "第1夜验2号=狼人" in prompt.context_prompt
     assert "警徽流" in prompt.context_prompt
+
+
+def test_build_prompt_includes_ai_stance_summary() -> None:
+    context = build_context()
+    player = context.players[2]
+    assert isinstance(player, AIPlayer)
+    player.adjust_suspicion(4, 3)
+    player.adjust_trust(3, 2)
+
+    prompt = build_speech_prompt(context, seat_id=2)
+
+    assert "立场摘要：怀疑：4号(3)；信任：3号(2)" in prompt.context_prompt
 
 
 def test_build_vote_prompt_reuses_same_context_sections() -> None:

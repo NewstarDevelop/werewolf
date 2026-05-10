@@ -580,6 +580,7 @@ class GameEngine:
             )
             game_context.last_vote_result = vote_snapshot
             game_context.vote_history.append(vote_snapshot)
+            game_context.remember_vote_snapshot(vote_snapshot)
             await self._set_phase(game_context, GamePhase.VOTE_RESULT)
             game_context.add_public_message(
                 voting_result.summary,

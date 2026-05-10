@@ -9,6 +9,7 @@ def build_prompt(
     known_role: str = "SEER",
     killed_tonight: list[int] | None = None,
     private_log: list[str] | None = None,
+    stance_summary: str = "怀疑：无；信任：无",
 ) -> PromptEnvelope:
     view = {
         "day_count": 2,
@@ -35,6 +36,7 @@ def build_prompt(
             "当前阶段：NIGHT_ACTION\n"
             "当前天数：第 2 天\n"
             "你的性格：谨慎分析\n"
+            f"立场摘要：{stance_summary}\n"
             '公开历史：["1号发言：先听后置位"]\n'
             f"私有记忆：{json.dumps(private_log or [], ensure_ascii=False)}\n"
             f"玩家视图JSON：{view_json}"
@@ -63,6 +65,34 @@ def test_local_provider_picks_first_alive_vote_target() -> None:
     )
 
     assert payload["vote_target"] == 2
+
+
+def test_local_provider_votes_for_highest_suspicion_target() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="VILLAGER",
+            stance_summary="怀疑：3号(4)、2号(1)；信任：无",
+        ),
+        response_schema=VoteResponse,
+    )
+
+    assert payload["vote_target"] == 3
+
+
+def test_local_provider_speech_follows_suspicion_stance() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="VILLAGER",
+            stance_summary="怀疑：3号(4)；信任：2号(1)",
+        ),
+        response_schema=SpeechResponse,
+    )
+
+    assert "怀疑3号" in str(payload["speech_text"])
 
 
 def test_local_provider_seer_pushes_checked_wolf_in_speech_and_vote() -> None:

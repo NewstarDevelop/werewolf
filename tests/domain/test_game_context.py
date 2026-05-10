@@ -1,5 +1,5 @@
 from app.domain.enums import Role
-from app.domain.game_context import GameContext
+from app.domain.game_context import GameContext, VoteSnapshot
 from app.domain.player import AIPlayer, HumanPlayer, Player
 from app.domain.view_mask import build_player_view
 
@@ -75,6 +75,41 @@ def test_public_speech_mentions_are_remembered_by_ai_targets() -> None:
         "1号在公开发言中攻击/质疑你" in memory
         for memory in context.players[3].private_memory
     )
+    assert context.players[2].trust_scores[1] == 1
+    assert context.players[3].suspicion_scores[1] == 1
+
+
+def test_ai_actor_speech_updates_own_stance_memory() -> None:
+    context = build_context()
+
+    context.add_public_message(
+        "2号发言：我怀疑4号，先保3号。",
+        message_kind="speech",
+        actor_seat=2,
+    )
+
+    assert any("你公开发言" in memory for memory in context.players[2].private_memory)
+    assert context.players[2].suspicion_scores[4] == 2
+    assert context.players[2].trust_scores[3] == 1
+
+
+def test_vote_snapshot_updates_ai_memory_and_stance() -> None:
+    context = build_context()
+    snapshot = VoteSnapshot(
+        day_count=1,
+        votes={2: 1, 4: 2},
+        ballots={1: 4, 2: 4, 4: 2},
+        abstentions=[3],
+        banished_seat=4,
+        summary="4号玩家被放逐出局。",
+    )
+
+    context.remember_vote_snapshot(snapshot)
+
+    assert any("第1天你投给4号" in memory for memory in context.players[2].private_memory)
+    assert context.players[2].suspicion_scores[4] == 2
+    assert context.players[2].trust_scores[1] == 1
+    assert any("第1天你弃票" in memory for memory in context.players[3].private_memory)
 
 
 def test_view_mask_hides_unpublished_roles_from_non_wolves() -> None:

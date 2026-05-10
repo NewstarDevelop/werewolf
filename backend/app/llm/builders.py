@@ -38,6 +38,29 @@ def _seat_list(seats: list[int]) -> str:
     return "、".join(_seat_label(seat_id) for seat_id in sorted(seats))
 
 
+def _score_line(scores: list[tuple[int, int]]) -> str:
+    if not scores:
+        return "无"
+    return "、".join(f"{_seat_label(seat_id)}({score})" for seat_id, score in scores)
+
+
+def _ai_stance_summary(context: GameContext, seat_id: int) -> str:
+    player = context.players[seat_id]
+    if not isinstance(player, AIPlayer):
+        return "无"
+    return (
+        f"怀疑：{_score_line(player.top_suspicions())}；"
+        f"信任：{_score_line(player.top_trusts())}"
+    )
+
+
+def _recent_private_memory(context: GameContext, seat_id: int) -> list[str]:
+    player = context.players[seat_id]
+    if isinstance(player, AIPlayer):
+        return player.private_memory[-8:]
+    return context.get_private_log(seat_id)[-8:]
+
+
 def _situation_summary(view: dict[str, object]) -> str:
     players = _players_from_view(view)
     alive_seats = [
@@ -186,9 +209,10 @@ def _context_section(
         f"你的性格：{personality}\n"
         f"局势摘要：{_situation_summary(view)}\n"
         f"战术连续性提示：{_strategic_continuity(context, seat_id)}\n"
+        f"立场摘要：{_ai_stance_summary(context, seat_id)}\n"
         f"你的既往公开发言：{_stable_json(_own_public_statements(view, seat_id))}\n"
         f"公开历史：{_stable_json(_recent_public_history(view))}\n"
-        f"私有记忆：{_stable_json(view['private_log'])}\n"
+        f"私有记忆：{_stable_json(_recent_private_memory(context, seat_id))}\n"
         f"玩家视图JSON：{_stable_json(view)}"
     )
 
