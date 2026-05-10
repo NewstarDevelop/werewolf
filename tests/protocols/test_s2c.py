@@ -168,12 +168,31 @@ def test_require_input_envelope_carries_targets() -> None:
         type="REQUIRE_INPUT",
         data=RequireInputPayload(
             action_type="VOTE",
+            request_id="input-1",
             prompt="请选择投票目标",
             allowed_targets=[2, 4, 6],
         ),
     ).model_dump()
 
+    assert payload["data"]["request_id"] == "input-1"
     assert payload["data"]["allowed_targets"] == [2, 4, 6]
+
+
+def test_require_input_envelope_can_carry_witch_action_options() -> None:
+    payload = RequireInputEnvelope(
+        type="REQUIRE_INPUT",
+        data=RequireInputPayload(
+            action_type="WITCH_ACTION",
+            request_id="input-2",
+            prompt="请选择女巫行动",
+            allowed_targets=[2, 4],
+            available_actions=["WITCH_SAVE", "WITCH_POISON", "PASS"],
+            save_targets=[3],
+        ),
+    ).model_dump()
+
+    assert payload["data"]["available_actions"] == ["WITCH_SAVE", "WITCH_POISON", "PASS"]
+    assert payload["data"]["save_targets"] == [3]
 
 
 def test_require_input_envelope_supports_hunter_shoot() -> None:
@@ -181,6 +200,7 @@ def test_require_input_envelope_supports_hunter_shoot() -> None:
         type="REQUIRE_INPUT",
         data=RequireInputPayload(
             action_type="HUNTER_SHOOT",
+            request_id="input-3",
             prompt="请选择开枪目标",
             allowed_targets=[2, 5],
         ),
@@ -193,6 +213,7 @@ def test_settlement_recap_payload_carries_revealed_review() -> None:
     payload = SettlementRecapPayload(
         day_count=2,
         outcome_reason="狼人全灭。",
+        role_reveal_summary="狼人：2号；神职：1号；平民：无。",
         players=[
             SettlementPlayerPayload(
                 seat_id=1,
@@ -210,6 +231,22 @@ def test_settlement_recap_payload_carries_revealed_review() -> None:
                 message="天亮了。昨夜死亡的是 3号。",
                 target_seats=[3],
             )
+        ],
+        timeline=[
+            SettlementEventPayload(
+                day_count=1,
+                phase="DAY_START",
+                event_type="NIGHT_DEATH",
+                message="天亮了。昨夜死亡的是 3号。",
+                target_seats=[3],
+            ),
+            SettlementEventPayload(
+                day_count=1,
+                phase="DAY_SPEAKING",
+                event_type="SPEECH",
+                message="1号发言：我查杀2号。",
+                actor_seat=1,
+            ),
         ],
         nights=[
             SettlementNightPayload(
@@ -250,6 +287,8 @@ def test_settlement_recap_payload_carries_revealed_review() -> None:
     assert payload["nights"][0]["wolf_target"] == 3
     assert payload["days"][0]["speeches"][0]["seat_id"] == 1
     assert payload["outcome_reason"] == "狼人全灭。"
+    assert payload["role_reveal_summary"] == "狼人：2号；神职：1号；平民：无。"
+    assert payload["timeline"][1]["event_type"] == "SPEECH"
     assert payload["final_vote"]["banished_seat"] == 2
 
 

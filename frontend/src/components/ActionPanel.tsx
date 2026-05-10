@@ -39,6 +39,13 @@ function resolveCopy(
   return actionTypeCopy[request.action_type];
 }
 
+function availableWitchActions(request: PendingAction): WitchActionType[] {
+  if (request?.action_type !== "WITCH_ACTION") {
+    return [];
+  }
+  return request.available_actions ?? ["WITCH_SAVE", "WITCH_POISON", "PASS"];
+}
+
 export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const [speechText, setSpeechText] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<TargetSelection>(null);
@@ -49,10 +56,16 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const canSubmitSpeech = speechText.trim().length > 0;
   const canSubmitTarget = typeof selectedTarget === "number";
   const canSubmitVote = selectedTarget === "PASS" || canSubmitTarget;
+  const witchActions = availableWitchActions(request);
+  const selectedWitchActionIsAvailable = selectedWitchAction !== null
+    && witchActions.includes(selectedWitchAction);
   const canSubmitWitchAction =
-    selectedWitchAction === "WITCH_SAVE"
-    || selectedWitchAction === "PASS"
-    || (selectedWitchAction === "WITCH_POISON" && canSubmitTarget);
+    selectedWitchActionIsAvailable
+    && (
+      selectedWitchAction === "WITCH_SAVE"
+      || selectedWitchAction === "PASS"
+      || (selectedWitchAction === "WITCH_POISON" && canSubmitTarget)
+    );
 
   const copy = useMemo(
     () => resolveCopy(request, selectedWitchAction),
@@ -63,6 +76,11 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   useEffect(() => {
     setConfirmingDanger(false);
   }, [request, selectedTarget, selectedWitchAction]);
+
+  useEffect(() => {
+    setSelectedTarget(null);
+    setSelectedWitchAction(null);
+  }, [request]);
 
   useEffect(() => {
     setIsPanelHidden(false);
@@ -295,39 +313,45 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                 role="group"
                 aria-label="女巫行动"
               >
-                <button
-                  type="button"
-                  className={selectedWitchAction === "WITCH_SAVE" ? "target-button is-selected" : "target-button"}
-                  aria-pressed={selectedWitchAction === "WITCH_SAVE"}
-                  onClick={() => {
-                    setSelectedWitchAction("WITCH_SAVE");
-                    setSelectedTarget(null);
-                  }}
-                >
-                  救人
-                </button>
-                <button
-                  type="button"
-                  className={selectedWitchAction === "WITCH_POISON" ? "target-button is-selected danger" : "target-button danger"}
-                  aria-pressed={selectedWitchAction === "WITCH_POISON"}
-                  onClick={() => {
-                    setSelectedWitchAction("WITCH_POISON");
-                    setSelectedTarget(null);
-                  }}
-                >
-                  毒人
-                </button>
-                <button
-                  type="button"
-                  className={selectedWitchAction === "PASS" ? "target-button is-selected" : "target-button"}
-                  aria-pressed={selectedWitchAction === "PASS"}
-                  onClick={() => {
-                    setSelectedWitchAction("PASS");
-                    setSelectedTarget(null);
-                  }}
-                >
-                  跳过
-                </button>
+                {witchActions.includes("WITCH_SAVE") ? (
+                  <button
+                    type="button"
+                    className={selectedWitchAction === "WITCH_SAVE" ? "target-button is-selected" : "target-button"}
+                    aria-pressed={selectedWitchAction === "WITCH_SAVE"}
+                    onClick={() => {
+                      setSelectedWitchAction("WITCH_SAVE");
+                      setSelectedTarget(null);
+                    }}
+                  >
+                    救人
+                  </button>
+                ) : null}
+                {witchActions.includes("WITCH_POISON") ? (
+                  <button
+                    type="button"
+                    className={selectedWitchAction === "WITCH_POISON" ? "target-button is-selected danger" : "target-button danger"}
+                    aria-pressed={selectedWitchAction === "WITCH_POISON"}
+                    onClick={() => {
+                      setSelectedWitchAction("WITCH_POISON");
+                      setSelectedTarget(null);
+                    }}
+                  >
+                    毒人
+                  </button>
+                ) : null}
+                {witchActions.includes("PASS") ? (
+                  <button
+                    type="button"
+                    className={selectedWitchAction === "PASS" ? "target-button is-selected" : "target-button"}
+                    aria-pressed={selectedWitchAction === "PASS"}
+                    onClick={() => {
+                      setSelectedWitchAction("PASS");
+                      setSelectedTarget(null);
+                    }}
+                  >
+                    跳过
+                  </button>
+                ) : null}
               </div>
             ) : null}
 

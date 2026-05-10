@@ -50,6 +50,7 @@ SendJson = Callable[[dict[str, object]], Awaitable[None]]
 CloseConnection = Callable[[], Awaitable[None]]
 GAME_OVER_CLOSE_CODE = 4000
 GAME_OVER_CLOSE_REASON = "game_over"
+MAX_AI_THINKING_DELAY_SECONDS = 2.0
 SETTLEMENT_EVENT_TYPES = {
     "NIGHT_DEATH",
     "PEACEFUL_NIGHT",
@@ -63,10 +64,15 @@ SETTLEMENT_EVENT_TYPES = {
 }
 
 
-def build_system_message(message: str) -> dict[str, object]:
+def build_system_message(
+    message: str,
+    *,
+    meta: dict[str, object] | None = None,
+) -> dict[str, object]:
     return SystemMessageEnvelope(
         type="SYSTEM_MSG",
         data=SystemMessagePayload(message=message),
+        meta=meta or {},
     ).model_dump()
 
 
@@ -222,17 +228,37 @@ def build_vote_resolved_message(
 def build_require_input_message(
     action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
     *,
+    request_id: str,
     prompt: str,
     allowed_targets: list[int],
+    available_actions: list[Literal["WITCH_SAVE", "WITCH_POISON", "PASS"]] | None = None,
+    save_targets: list[int] | None = None,
 ) -> dict[str, object]:
     return RequireInputEnvelope(
         type="REQUIRE_INPUT",
         data=RequireInputPayload(
             action_type=action_type,
+            request_id=request_id,
             prompt=prompt,
             allowed_targets=allowed_targets,
+            available_actions=available_actions,
+            save_targets=save_targets,
         ),
-    ).model_dump()
+    ).model_dump(exclude_none=True)
+
+
+def allowed_submit_action_types(
+    action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
+    *,
+    available_actions: list[Literal["WITCH_SAVE", "WITCH_POISON", "PASS"]] | None = None,
+) -> set[str]:
+    if action_type == "VOTE":
+        return {"VOTE", "PASS"}
+    if action_type == "WITCH_ACTION":
+        if available_actions is None:
+            return {"WITCH_SAVE", "WITCH_POISON", "PASS"}
+        return set(available_actions)
+    return {action_type}
 
 
 def role_side(role: Role) -> Literal["GOOD", "WOLF"]:
@@ -275,6 +301,51 @@ def outcome_reason(winning_side: Literal["GOOD", "WOLF", "DRAW"], summary: str) 
     if "神职已全部出局" in summary:
         return "神职屠边。"
     return summary
+
+
+def build_role_reveal_summary(context: GameContext) -> str:
+    wolves = [
+        seat_id
+        for seat_id, player in sorted(context.players.items())
+        if player.role is Role.WOLF
+    ]
+    gods = [
+        seat_id
+        for seat_id, player in sorted(context.players.items())
+        if player.role in {Role.SEER, Role.WITCH, Role.HUNTER}
+    ]
+    villagers = [
+        seat_id
+        for seat_id, player in sorted(context.players.items())
+        if player.role is Role.VILLAGER
+    ]
+    format_seats = lambda seats: "、".join(f"{seat_id}号" for seat_id in seats) or "无"
+    return (
+        f"狼人：{format_seats(wolves)}；"
+        f"神职：{format_seats(gods)}；"
+        f"平民：{format_seats(villagers)}。"
+    )
+
+
+def build_settlement_timeline(context: GameContext) -> list[SettlementEventPayload]:
+    timeline: list[SettlementEventPayload] = []
+    for event in context.public_chat_events:
+        event_type = event.event_type
+        if event_type is None and event.message_kind == "speech":
+            event_type = "SPEECH"
+        if event_type is None:
+            event_type = "PUBLIC_MESSAGE"
+        timeline.append(
+            SettlementEventPayload(
+                day_count=event.day_count,
+                phase=event.phase,
+                event_type=event_type,
+                message=event.message,
+                actor_seat=event.actor_seat,
+                target_seats=list(event.target_seats),
+            )
+        )
+    return timeline
 
 
 def build_settlement_days(context: GameContext) -> list[SettlementDayPayload]:
@@ -333,6 +404,7 @@ def build_settlement_recap(context: GameContext) -> SettlementRecapPayload:
     return SettlementRecapPayload(
         day_count=context.day_count,
         outcome_reason=outcome_reason(winning_side, summary),
+        role_reveal_summary=build_role_reveal_summary(context),
         players=[
             SettlementPlayerPayload(
                 seat_id=seat_id,
@@ -370,6 +442,7 @@ def build_settlement_recap(context: GameContext) -> SettlementRecapPayload:
             for event in context.public_chat_events
             if event.event_type in SETTLEMENT_EVENT_TYPES
         ],
+        timeline=build_settlement_timeline(context),
         final_vote=final_vote,
     )
 
@@ -430,16 +503,32 @@ def log_game_session_task_outcome(task: asyncio.Task[None]) -> None:
 
 
 class WebSocketGameEngine(GameEngine):
-    def __init__(self, *, send_json: SendJson) -> None:
+    def __init__(
+        self,
+        *,
+        send_json: SendJson,
+        ai_thinking_delay_seconds: float = 0.0,
+    ) -> None:
         super().__init__(
             llm_client=build_default_llm_client(),
             human_speech_timeout_seconds=None,
         )
         self._send_json = send_json
         self._active_context: GameContext | None = None
+        self._input_request_counter = 0
+        self._ai_thinking_delay_seconds = max(
+            0.0,
+            min(ai_thinking_delay_seconds, MAX_AI_THINKING_DELAY_SECONDS),
+        )
+
+    def _next_input_request_id(self) -> str:
+        self._input_request_counter += 1
+        return f"input-{self._input_request_counter}"
 
     async def _notify_thinking(self, seat_id: int, is_thinking: bool) -> None:
         await self._send_json(build_ai_thinking_message(seat_id, is_thinking))
+        if is_thinking and self._ai_thinking_delay_seconds > 0:
+            await asyncio.sleep(self._ai_thinking_delay_seconds)
 
     async def _notify_player_state(
         self,
@@ -494,6 +583,8 @@ class WebSocketGameEngine(GameEngine):
         action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"],
         prompt: str,
         allowed_targets: list[int],
+        available_actions: list[Literal["WITCH_SAVE", "WITCH_POISON", "PASS"]] | None = None,
+        save_targets: list[int] | None = None,
     ) -> dict[str, object]:
         if self._active_context is None:
             return {}
@@ -502,13 +593,24 @@ class WebSocketGameEngine(GameEngine):
         if not isinstance(player, HumanPlayer):
             return {}
 
-        pending_input = player.begin_input()
+        request_id = self._next_input_request_id()
+        pending_input = player.begin_input(
+            allowed_action_types=allowed_submit_action_types(
+                action_type,
+                available_actions=available_actions,
+            ),
+            allowed_targets=set(allowed_targets),
+            request_id=request_id,
+        )
         try:
             await self._send_json(
                 build_require_input_message(
                     action_type,
+                    request_id=request_id,
                     prompt=prompt,
                     allowed_targets=allowed_targets,
+                    available_actions=available_actions,
+                    save_targets=save_targets,
                 ),
             )
             return await pending_input
@@ -651,14 +753,23 @@ class WebSocketGameEngine(GameEngine):
         prompt_parts: list[str] = []
         if save_candidates and resources.has_antidote:
             prompt_parts.append(f"\u6628\u591c {save_candidates[0]} \u53f7\u88ab\u51fb\u6740\uff0c\u4f60\u53ef\u4ee5\u9009\u62e9\u6551\u4eba\u3002")
-        if resources.has_poison:
+        if resources.has_poison and poison_candidates:
             prompt_parts.append("\u4f60\u4e5f\u53ef\u4ee5\u9009\u62e9\u6bd2\u4eba\u6216\u8df3\u8fc7\u3002")
         prompt = " ".join(prompt_parts) or "\u8bf7\u9009\u62e9\u672c\u56de\u5408\u662f\u5426\u7528\u836f\u3002"
+        available_actions: list[Literal["WITCH_SAVE", "WITCH_POISON", "PASS"]] = []
+        save_targets = save_candidates if resources.has_antidote else []
+        if save_targets:
+            available_actions.append("WITCH_SAVE")
+        if resources.has_poison and poison_candidates:
+            available_actions.append("WITCH_POISON")
+        available_actions.append("PASS")
         payload = await self._await_human_input(
             witch_seat,
             action_type="WITCH_ACTION",
             prompt=prompt,
             allowed_targets=poison_candidates,
+            available_actions=available_actions,
+            save_targets=save_targets,
         )
 
         action_type = payload.get("action_type")
@@ -687,13 +798,12 @@ class WebSocketGameEngine(GameEngine):
                 event_type="NIGHT_ACTION_FEEDBACK",
             )
             return None, None
-        return await super()._select_witch_action(
-            context,
-            witch_seat=witch_seat,
-            resources=resources,
-            save_candidates=save_candidates,
-            poison_candidates=poison_candidates,
+        context.add_private_message(
+            witch_seat,
+            "无效的用药选择已忽略，本轮不使用药。",
+            event_type="NIGHT_ACTION_FEEDBACK",
         )
+        return None, None
 
     async def _select_hunter_target(
         self,
@@ -765,9 +875,22 @@ def resolve_human_submit_action(
     return player.resolve_input(payload)
 
 
+def parse_ai_delay_seconds(raw_delay_ms: str | None) -> float:
+    if raw_delay_ms is None:
+        return 0.0
+    try:
+        delay_ms = int(raw_delay_ms)
+    except ValueError:
+        return 0.0
+    return max(0.0, min(delay_ms / 1000, MAX_AI_THINKING_DELAY_SECONDS))
+
+
 @router.websocket("/ws/game")
 async def game_socket(websocket: WebSocket) -> None:
     setup_result = setup_game()
+    ai_thinking_delay_seconds = parse_ai_delay_seconds(
+        websocket.query_params.get("ai_delay_ms"),
+    )
 
     await manager.connect(websocket)
     logger.info(
@@ -810,6 +933,10 @@ async def game_socket(websocket: WebSocket) -> None:
                 code=GAME_OVER_CLOSE_CODE,
                 reason=GAME_OVER_CLOSE_REASON,
             ),
+            engine=WebSocketGameEngine(
+                send_json=lambda payload: manager.send_json(websocket, payload),
+                ai_thinking_delay_seconds=ai_thinking_delay_seconds,
+            ),
         ),
     )
     engine_task.add_done_callback(log_game_session_task_outcome)
@@ -825,13 +952,33 @@ async def game_socket(websocket: WebSocket) -> None:
                 continue
 
             action = envelope.data.action_type
-            resolve_human_submit_action(
+            request_id = envelope.data.request_id
+            resolved = resolve_human_submit_action(
                 setup_result,
                 envelope.data.model_dump(exclude_none=True),
             )
+            if not resolved:
+                logger.warning("unexpected websocket action ignored action=%s", action)
+                meta: dict[str, object] = {
+                    "status": "reject",
+                    "action_type": action,
+                }
+                if request_id is not None:
+                    meta["request_id"] = request_id
+                await manager.send_json(
+                    websocket,
+                    build_system_message(f"reject:{action}", meta=meta),
+                )
+                continue
+            meta = {
+                "status": "ack",
+                "action_type": action,
+            }
+            if request_id is not None:
+                meta["request_id"] = request_id
             await manager.send_json(
                 websocket,
-                build_system_message(f"ack:{action}"),
+                build_system_message(f"ack:{action}", meta=meta),
             )
     except WebSocketDisconnect:
         logger.info("websocket disconnected by client")

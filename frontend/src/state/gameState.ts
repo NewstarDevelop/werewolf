@@ -12,6 +12,7 @@ import type {
   GameOverEnvelope,
   RequireInputEnvelope,
   ServerEnvelope,
+  SystemMessageEnvelope,
 } from "../types/ws";
 
 export interface VoteResultView {
@@ -69,11 +70,13 @@ export interface SettlementReviewData {
   winningSide: "GOOD" | "WOLF" | "DRAW";
   summary: string;
   outcomeReason: string;
+  roleRevealSummary: string;
   dayCount: number | null;
   players: SettlementReviewPlayer[];
   nights: SettlementReviewNight[];
   days: SettlementReviewDay[];
   keyEvents: SettlementReviewEvent[];
+  timeline: SettlementReviewEvent[];
   finalVote: VoteResultView | null;
 }
 
@@ -153,6 +156,9 @@ export function gameReducer(state: GameState, action: GameStateAction): GameStat
 
   if (action.envelope.type === "SYSTEM_MSG") {
     players = applySystemMessage(players, action.envelope.data.message);
+    if (shouldClearPendingAction(pendingAction, action.envelope)) {
+      pendingAction = null;
+    }
   }
   if (action.envelope.type === "CHAT_UPDATE" && action.envelope.data.visibility === "private") {
     players = applyIdentityMessage(players, action.envelope.data.message);
@@ -343,10 +349,42 @@ function applySystemMessage(players: PlayerListItem[], message: string) {
   return nextPlayers;
 }
 
+function isSubmitAckMessage(message: string) {
+  return message.startsWith("ack:");
+}
+
+function submitAckRequestId(envelope: SystemMessageEnvelope) {
+  const metaRequestId = envelope.meta?.request_id;
+  if (typeof metaRequestId === "string" && metaRequestId.length > 0) {
+    return metaRequestId;
+  }
+
+  const [, , messageRequestId] = envelope.data.message.split(":");
+  return messageRequestId || null;
+}
+
+function shouldClearPendingAction(
+  pendingAction: RequireInputEnvelope["data"] | null,
+  envelope: SystemMessageEnvelope,
+) {
+  if (!pendingAction || !isSubmitAckMessage(envelope.data.message)) {
+    return false;
+  }
+
+  const ackRequestId = submitAckRequestId(envelope);
+  if (!pendingAction.request_id) {
+    return ackRequestId === null;
+  }
+  return ackRequestId === pendingAction.request_id;
+}
+
 function applyPublicChatMessage(players: PlayerListItem[], envelope: ChatUpdateEnvelope) {
   const structuredDeadSeats = extractDeadSeatsFromChatMeta(envelope.meta);
   if (structuredDeadSeats.length > 0) {
     return markSeatsDead(players, structuredDeadSeats);
+  }
+  if (isStructuredSpeechMeta(envelope.meta)) {
+    return players;
   }
   return applySystemMessage(players, envelope.data.message);
 }
@@ -369,6 +407,12 @@ function extractDeadSeatsFromChatMeta(meta: ChatUpdateMeta | undefined) {
   }
 
   return meta.target_seats.filter((seatId) => Number.isInteger(seatId));
+}
+
+function isStructuredSpeechMeta(meta: ChatUpdateMeta | undefined) {
+  return meta?.message_kind === "speech"
+    || meta?.event_type === "SPEECH"
+    || meta?.event_type === "LAST_WORDS";
 }
 
 function applyGameOver(players: PlayerListItem[], payload: GameOverEnvelope["data"]) {
@@ -428,6 +472,7 @@ function buildSettlementReview(payload: GameOverEnvelope["data"]): SettlementRev
     winningSide: payload.winning_side,
     summary: payload.summary,
     outcomeReason: recap?.outcome_reason ?? payload.summary,
+    roleRevealSummary: recap?.role_reveal_summary ?? "身份揭示暂不可用。",
     dayCount: recap?.day_count ?? null,
     players,
     nights: (recap?.nights ?? []).map((night) => ({
@@ -452,6 +497,14 @@ function buildSettlementReview(payload: GameOverEnvelope["data"]): SettlementRev
       voteExplanation: day.vote_explanation ?? null,
     })),
     keyEvents: (recap?.key_events ?? []).map((event) => ({
+      dayCount: event.day_count,
+      phase: event.phase,
+      eventType: event.event_type,
+      message: event.message,
+      actorSeat: event.actor_seat ?? null,
+      targetSeats: event.target_seats,
+    })),
+    timeline: (recap?.timeline ?? recap?.key_events ?? []).map((event) => ({
       dayCount: event.day_count,
       phase: event.phase,
       eventType: event.event_type,

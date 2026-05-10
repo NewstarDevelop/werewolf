@@ -16,6 +16,7 @@ class SubmitActionPayload(BaseModel):
     ]
     target: int | None = None
     text: str | None = None
+    request_id: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def validate_shape(self) -> "SubmitActionPayload":
@@ -24,7 +25,9 @@ class SubmitActionPayload(BaseModel):
 
         if self.action_type in targeted_actions and self.target is None:
             raise ValueError("target is required for targeted actions")
-        if self.action_type in text_actions and not self.text:
+        if self.action_type not in targeted_actions and self.target is not None:
+            raise ValueError("target is only allowed for targeted actions")
+        if self.action_type in text_actions and (self.text is None or not self.text.strip()):
             raise ValueError("text is required for speech actions")
 
         return self

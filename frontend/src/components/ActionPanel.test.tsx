@@ -16,6 +16,7 @@ describe("ActionPanel", () => {
     render(
       <ActionPanel
         request={{
+          request_id: "input-speech",
           action_type: "SPEAK",
           prompt: "请开始发言",
           allowed_targets: [],
@@ -41,6 +42,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-collapse",
           action_type: "WOLF_KILL",
           prompt: "请选择狼刀目标",
           allowed_targets: [1, 3, 6],
@@ -72,6 +74,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-vote-target",
           action_type: "VOTE",
           prompt: "请选择投票目标",
           allowed_targets: [2, 4, 7],
@@ -98,6 +101,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-hunter",
           action_type: "HUNTER_SHOOT",
           prompt: "请选择开枪目标",
           allowed_targets: [2, 5],
@@ -131,6 +135,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-vote-pass",
           action_type: "VOTE",
           prompt: "请选择投票目标",
           allowed_targets: [2, 4, 7],
@@ -154,6 +159,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-witch",
           action_type: "WITCH_ACTION",
           prompt: "请选择女巫行动",
           allowed_targets: [2, 5],
@@ -197,11 +203,48 @@ describe("ActionPanel", () => {
     expect(onSubmit).toHaveBeenLastCalledWith({ action_type: "PASS" });
   });
 
+  it("hides unavailable witch save action", () => {
+    const onSubmit = vi.fn();
+    const view = render(
+      <ActionPanel
+        request={{
+          request_id: "input-witch-options",
+          action_type: "WITCH_ACTION",
+          prompt: "请选择女巫行动",
+          allowed_targets: [2, 5],
+          available_actions: ["WITCH_POISON", "PASS"],
+          save_targets: [],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(within(view.container).queryByRole("button", { name: "救人" })).toBeNull();
+    fireEvent.click(within(view.container).getByRole("button", { name: "毒人" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(
+      within(view.container).getByRole("button", {
+        name: submitActionCopy.WITCH_POISON.submitLabel,
+      }),
+    );
+    fireEvent.click(
+      within(view.container).getByRole("button", {
+        name: `再按一次 · ${submitActionCopy.WITCH_POISON.submitLabel}`,
+      }),
+    );
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      action_type: "WITCH_POISON",
+      target: 5,
+    });
+  });
+
   it("arms destructive actions on first click and commits on second", () => {
     const onSubmit = vi.fn();
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-wolf-confirm",
           action_type: "WOLF_KILL",
           prompt: "请选择狼刀目标",
           allowed_targets: [3, 6],
@@ -234,6 +277,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-wolf-escape",
           action_type: "WOLF_KILL",
           prompt: "请选择狼刀目标",
           allowed_targets: [3, 6],
@@ -263,6 +307,7 @@ describe("ActionPanel", () => {
     const view = render(
       <ActionPanel
         request={{
+          request_id: "input-keyboard",
           action_type: "VOTE",
           prompt: "请选择投票目标",
           allowed_targets: [2, 4, 7],

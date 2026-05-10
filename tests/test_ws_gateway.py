@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import threading
 
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -22,6 +23,7 @@ from app.engine.night.witch_action import WitchResources
 from app.engine.states.phase import GamePhase
 from app.ws.routes import (
     WebSocketGameEngine,
+    allowed_submit_action_types,
     attach_context_bridge,
     build_death_revealed_message,
     build_game_over_message,
@@ -34,6 +36,7 @@ from app.ws.routes import (
     GAME_OVER_CLOSE_CODE,
     known_role_seat_ids_from_setup,
     log_game_session_task_outcome,
+    parse_ai_delay_seconds,
     resolve_human_submit_action,
     run_game_session,
 )
@@ -77,11 +80,60 @@ def test_websocket_sends_welcome_message() -> None:
     }
 
 
+def test_parse_ai_delay_seconds_clamps_invalid_and_large_values() -> None:
+    assert parse_ai_delay_seconds(None) == 0.0
+    assert parse_ai_delay_seconds("bad") == 0.0
+    assert parse_ai_delay_seconds("-50") == 0.0
+    assert parse_ai_delay_seconds("700") == 0.7
+    assert parse_ai_delay_seconds("9999") == 2.0
+
+
 def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
+    ready = threading.Event()
+
+    async def pending_vote_session(setup_result, *args, **kwargs) -> None:
+        player = setup_result.context.players[setup_result.human_seat_id]
+        assert isinstance(player, HumanPlayer)
+        pending = player.begin_input(
+            allowed_action_types={"VOTE", "PASS"},
+            allowed_targets={3},
+            request_id="input-1",
+        )
+        ready.set()
+        try:
+            await pending
+        finally:
+            player.clear_input()
+
+    monkeypatch.setattr("app.ws.routes.run_game_session", pending_vote_session)
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/game") as websocket:
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+        assert ready.wait(timeout=1)
+        websocket.send_json(
+            {
+                "type": "SUBMIT_ACTION",
+                "data": {"action_type": "VOTE", "target": 3, "request_id": "input-1"},
+            }
+        )
+        message = websocket.receive_json()
+
+    assert message["type"] == "SYSTEM_MSG"
+    assert message["data"]["message"] == "ack:VOTE"
+    assert message["meta"]["request_id"] == "input-1"
+
+
+def test_websocket_rejects_submit_action_without_pending_input(monkeypatch, caplog) -> None:
     async def idle_session(*args, **kwargs) -> None:
         await asyncio.sleep(0)
 
     monkeypatch.setattr("app.ws.routes.run_game_session", idle_session)
+    caplog.set_level(logging.WARNING, logger="app.ws.routes")
     client = TestClient(app)
 
     with client.websocket_connect("/ws/game") as websocket:
@@ -99,7 +151,8 @@ def test_websocket_acknowledges_submit_action(monkeypatch) -> None:
         message = websocket.receive_json()
 
     assert message["type"] == "SYSTEM_MSG"
-    assert message["data"]["message"] == "ack:VOTE"
+    assert message["data"]["message"] == "reject:VOTE"
+    assert "unexpected websocket action ignored action=VOTE" in caplog.text
 
 
 def test_websocket_logs_invalid_payload_warning(monkeypatch, caplog) -> None:
@@ -392,6 +445,7 @@ def test_build_game_over_message_handles_safety_stop_draw() -> None:
             "recap": {
                 "day_count": 1,
                 "outcome_reason": "达到回合上限仍未分出胜负，系统安全停局。",
+                "role_reveal_summary": "狼人：1号；神职：3号；平民：2号。",
                 "players": [
                     {
                         "seat_id": 1,
@@ -418,6 +472,16 @@ def test_build_game_over_message_handles_safety_stop_draw() -> None:
                 "nights": [],
                 "days": [],
                 "key_events": [],
+                "timeline": [
+                    {
+                        "day_count": 1,
+                        "phase": "GAME_OVER",
+                        "event_type": "PUBLIC_MESSAGE",
+                        "message": "夜尽未分胜负，本局暂止。",
+                        "actor_seat": None,
+                        "target_seats": [],
+                    },
+                ],
                 "final_vote": None,
             },
         },
@@ -468,6 +532,7 @@ def test_build_settlement_recap_includes_roles_events_and_final_vote() -> None:
 
     assert recap["day_count"] == 2
     assert recap["outcome_reason"] == "狼人全灭。"
+    assert recap["role_reveal_summary"] == "狼人：2号；神职：1号；平民：3号。"
     assert recap["players"] == [
         {
             "seat_id": 1,
@@ -508,6 +573,10 @@ def test_build_settlement_recap_includes_roles_events_and_final_vote() -> None:
     assert recap["days"][0]["vote_explanation"] == "2号以 2 票成为最高票，被放逐出局。"
     assert recap["key_events"][0]["event_type"] == "NIGHT_DEATH"
     assert recap["key_events"][0]["phase"] == "DAY_START"
+    assert [event["event_type"] for event in recap["timeline"]] == [
+        "NIGHT_DEATH",
+        "SPEECH",
+    ]
     assert recap["final_vote"]["summary"] == "2号玩家被放逐出局。"
 
 
@@ -936,7 +1005,9 @@ def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
         try:
             task = asyncio.create_task(engine._human_speaker(1))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "SPEAK", "text": "\u6211\u662f\u9884\u8a00\u5bb6\u3002"})
+            context.players[1].resolve_input(
+                {"action_type": "SPEAK", "text": "\u6211\u662f\u9884\u8a00\u5bb6\u3002", "request_id": "input-1"}
+            )
             result = await task
             assert result == "\u6211\u662f\u9884\u8a00\u5bb6\u3002"
         finally:
@@ -949,6 +1020,7 @@ def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "SPEAK",
+                "request_id": "input-1",
                 "prompt": "\u8f6e\u5230\u4f60\u53d1\u8a00\uff0c\u8bf7\u4ee5 1 \u53f7\u73a9\u5bb6\u8eab\u4efd\u53d1\u8a00\u3002",
                 "allowed_targets": [],
             },
@@ -975,6 +1047,109 @@ def test_resolve_human_submit_action_unlocks_pending_input() -> None:
     asyncio.run(run())
 
 
+def test_resolve_human_submit_action_rejects_mismatched_request_id() -> None:
+    setup_result = setup_game(rng=random.Random(7))
+    player = setup_result.context.players[setup_result.human_seat_id]
+    assert isinstance(player, HumanPlayer)
+
+    async def run() -> None:
+        pending = player.begin_input(request_id="input-1")
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "SPEAK", "text": "\u8fc7\u3002", "request_id": "input-0"},
+        ) is False
+        assert pending.done() is False
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "SPEAK", "text": "\u8fc7\u3002", "request_id": "input-1"},
+        ) is True
+        assert await pending == {"action_type": "SPEAK", "text": "\u8fc7\u3002", "request_id": "input-1"}
+
+    asyncio.run(run())
+
+
+def test_resolve_human_submit_action_rejects_unexpected_pending_action() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+    setup_result = GameSetupResult(
+        context=context,
+        human_seat_id=1,
+        human_role=Role.SEER.value,
+        human_view={},
+    )
+    player = context.players[1]
+    assert isinstance(player, HumanPlayer)
+
+    async def run() -> None:
+        pending = player.begin_input(
+            allowed_action_types={"VOTE", "PASS"},
+            allowed_targets={2, 3},
+        )
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "WOLF_KILL", "target": 2},
+        ) is False
+        assert pending.done() is False
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "VOTE", "target": 2},
+        ) is True
+        assert await pending == {"action_type": "VOTE", "target": 2}
+
+    asyncio.run(run())
+
+
+def test_resolve_human_submit_action_rejects_target_outside_pending_targets() -> None:
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.SEER))
+    setup_result = GameSetupResult(
+        context=context,
+        human_seat_id=1,
+        human_role=Role.SEER.value,
+        human_view={},
+    )
+    player = context.players[1]
+    assert isinstance(player, HumanPlayer)
+
+    async def run() -> None:
+        pending = player.begin_input(
+            allowed_action_types={"VOTE", "PASS"},
+            allowed_targets={2, 3},
+            request_id="input-1",
+        )
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "VOTE", "target": 9, "request_id": "input-1"},
+        ) is False
+        assert pending.done() is False
+
+        assert resolve_human_submit_action(
+            setup_result,
+            {"action_type": "VOTE", "target": 3, "request_id": "input-1"},
+        ) is True
+        assert await pending == {"action_type": "VOTE", "target": 3, "request_id": "input-1"}
+
+    asyncio.run(run())
+
+
+def test_allowed_submit_action_types_match_input_requests() -> None:
+    assert allowed_submit_action_types("VOTE") == {"VOTE", "PASS"}
+    assert allowed_submit_action_types(
+        "WITCH_ACTION",
+        available_actions=["WITCH_POISON", "PASS"],
+    ) == {"WITCH_POISON", "PASS"}
+    assert allowed_submit_action_types(
+        "WITCH_ACTION",
+        available_actions=[],
+    ) == set()
+    assert allowed_submit_action_types("SEER_CHECK") == {"SEER_CHECK"}
+
+
 def test_websocket_game_engine_requests_and_consumes_human_vote() -> None:
     sent_payloads: list[dict[str, object]] = []
     context = GameContext()
@@ -990,7 +1165,7 @@ def test_websocket_game_engine_requests_and_consumes_human_vote() -> None:
         try:
             task = asyncio.create_task(engine._human_vote(1, allowed_targets=[2, 3, 4]))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "VOTE", "target": 3})
+            context.players[1].resolve_input({"action_type": "VOTE", "target": 3, "request_id": "input-1"})
             result = await task
             assert result == 3
         finally:
@@ -1003,6 +1178,7 @@ def test_websocket_game_engine_requests_and_consumes_human_vote() -> None:
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "VOTE",
+                "request_id": "input-1",
                 "prompt": "\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
                 "allowed_targets": [2, 3, 4],
             },
@@ -1026,7 +1202,7 @@ def test_websocket_game_engine_accepts_pass_for_human_vote() -> None:
         try:
             task = asyncio.create_task(engine._human_vote(1, allowed_targets=[2, 3, 4]))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "PASS"})
+            context.players[1].resolve_input({"action_type": "PASS", "request_id": "input-1"})
             result = await task
             assert result is None
         finally:
@@ -1039,6 +1215,7 @@ def test_websocket_game_engine_accepts_pass_for_human_vote() -> None:
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "VOTE",
+                "request_id": "input-1",
                 "prompt": "\u8bf7\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u4f5c\u4e3a\u653e\u9010\u76ee\u6807\u3002",
                 "allowed_targets": [2, 3, 4],
             },
@@ -1064,7 +1241,7 @@ def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None
         try:
             target_task = asyncio.create_task(engine._select_wolf_target(context))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "WOLF_KILL", "target": 1})
+            context.players[1].resolve_input({"action_type": "WOLF_KILL", "target": 1, "request_id": "input-1"})
             result = await target_task
             assert result == 1
         finally:
@@ -1078,6 +1255,7 @@ def test_websocket_game_engine_requests_and_consumes_human_wolf_target() -> None
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "WOLF_KILL",
+                "request_id": "input-1",
                 "prompt": "\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u51fb\u6740\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
                 "allowed_targets": [1, 2, 3],
             },
@@ -1109,7 +1287,7 @@ def test_websocket_game_engine_requests_and_consumes_human_seer_target() -> None
                 )
             )
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "SEER_CHECK", "target": 2})
+            context.players[1].resolve_input({"action_type": "SEER_CHECK", "target": 2, "request_id": "input-1"})
             result = await target_task
             assert result == 2
         finally:
@@ -1123,6 +1301,7 @@ def test_websocket_game_engine_requests_and_consumes_human_seer_target() -> None
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "SEER_CHECK",
+                "request_id": "input-1",
                 "prompt": "\u8bf7\u9009\u62e9\u4eca\u591c\u8981\u67e5\u9a8c\u7684\u5b58\u6d3b\u73a9\u5bb6\u3002",
                 "allowed_targets": [2, 3],
             },
@@ -1157,7 +1336,7 @@ def test_websocket_game_engine_requests_and_consumes_human_witch_action() -> Non
                 )
             )
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "WITCH_POISON", "target": 2})
+            context.players[1].resolve_input({"action_type": "WITCH_POISON", "target": 2, "request_id": "input-1"})
             result = await action_task
             assert result == (None, 2)
         finally:
@@ -1171,8 +1350,109 @@ def test_websocket_game_engine_requests_and_consumes_human_witch_action() -> Non
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "WITCH_ACTION",
+                "request_id": "input-1",
                 "prompt": "\u6628\u591c 3 \u53f7\u88ab\u51fb\u6740\uff0c\u4f60\u53ef\u4ee5\u9009\u62e9\u6551\u4eba\u3002 \u4f60\u4e5f\u53ef\u4ee5\u9009\u62e9\u6bd2\u4eba\u6216\u8df3\u8fc7\u3002",
                 "allowed_targets": [2, 4],
+                "available_actions": ["WITCH_SAVE", "WITCH_POISON", "PASS"],
+                "save_targets": [3],
+            },
+            "meta": {},
+        },
+    ]
+
+
+def test_websocket_game_engine_ignores_unavailable_human_witch_save() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WITCH))
+    context.add_player(HumanPlayer(seat_id=2, role=Role.WOLF))
+    context.add_player(HumanPlayer(seat_id=3, role=Role.VILLAGER))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            action_task = asyncio.create_task(
+                engine._select_witch_action(
+                    context,
+                    witch_seat=1,
+                    resources=engine._witch_resources.setdefault(1, WitchResources()),
+                    save_candidates=[],
+                    poison_candidates=[2, 3],
+                )
+            )
+            await asyncio.sleep(0)
+            assert context.players[1].resolve_input({"action_type": "WITCH_SAVE", "request_id": "input-1"}) is False
+            context.players[1].resolve_input({"action_type": "PASS", "request_id": "input-1"})
+            result = await action_task
+            assert result == (None, None)
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "WITCH_ACTION",
+                "request_id": "input-1",
+                "prompt": "\u4f60\u4e5f\u53ef\u4ee5\u9009\u62e9\u6bd2\u4eba\u6216\u8df3\u8fc7\u3002",
+                "allowed_targets": [2, 3],
+                "available_actions": ["WITCH_POISON", "PASS"],
+                "save_targets": [],
+            },
+            "meta": {},
+        },
+    ]
+    assert context.get_private_log(1)[-1] == "你选择今晚不用药。"
+
+
+def test_websocket_game_engine_hides_witch_poison_when_no_targets() -> None:
+    sent_payloads: list[dict[str, object]] = []
+    context = GameContext()
+    context.add_player(HumanPlayer(seat_id=1, role=Role.WITCH))
+
+    async def send_json(payload: dict[str, object]) -> None:
+        sent_payloads.append(payload)
+
+    engine = WebSocketGameEngine(send_json=send_json)
+
+    async def run_with_context() -> None:
+        engine._active_context = context
+        try:
+            action_task = asyncio.create_task(
+                engine._select_witch_action(
+                    context,
+                    witch_seat=1,
+                    resources=engine._witch_resources.setdefault(1, WitchResources()),
+                    save_candidates=[],
+                    poison_candidates=[],
+                )
+            )
+            await asyncio.sleep(0)
+            context.players[1].resolve_input({"action_type": "PASS", "request_id": "input-1"})
+            result = await action_task
+            assert result == (None, None)
+        finally:
+            engine._active_context = None
+
+    asyncio.run(run_with_context())
+
+    assert sent_payloads == [
+        {
+            "type": "REQUIRE_INPUT",
+            "data": {
+                "action_type": "WITCH_ACTION",
+                "request_id": "input-1",
+                "prompt": "\u8bf7\u9009\u62e9\u672c\u56de\u5408\u662f\u5426\u7528\u836f\u3002",
+                "allowed_targets": [],
+                "available_actions": ["PASS"],
+                "save_targets": [],
             },
             "meta": {},
         },
@@ -1196,7 +1476,7 @@ def test_websocket_game_engine_requests_and_consumes_human_hunter_target() -> No
         try:
             target_task = asyncio.create_task(engine._select_hunter_target(context, hunter_seat=1))
             await asyncio.sleep(0)
-            context.players[1].resolve_input({"action_type": "HUNTER_SHOOT", "target": 2})
+            context.players[1].resolve_input({"action_type": "HUNTER_SHOOT", "target": 2, "request_id": "input-1"})
             result = await target_task
             assert result == 2
         finally:
@@ -1209,6 +1489,7 @@ def test_websocket_game_engine_requests_and_consumes_human_hunter_target() -> No
             "type": "REQUIRE_INPUT",
             "data": {
                 "action_type": "HUNTER_SHOOT",
+                "request_id": "input-1",
                 "prompt": "\u4f60\u53ef\u4ee5\u9009\u62e9\u4e00\u540d\u5b58\u6d3b\u73a9\u5bb6\u5f00\u67aa\u3002",
                 "allowed_targets": [2, 3],
             },

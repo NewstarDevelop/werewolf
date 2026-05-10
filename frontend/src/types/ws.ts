@@ -3,6 +3,12 @@ export interface SystemMessageEnvelope {
   data: {
     message: string;
   };
+  meta?: {
+    status?: "ack" | "reject" | string;
+    action_type?: string;
+    request_id?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface ChatUpdateMeta {
@@ -131,10 +137,12 @@ export interface SettlementDayPayload {
 export interface SettlementRecapPayload {
   day_count: number;
   outcome_reason: string;
+  role_reveal_summary: string;
   players: SettlementPlayerPayload[];
   nights: SettlementNightPayload[];
   days: SettlementDayPayload[];
   key_events: SettlementEventPayload[];
+  timeline: SettlementEventPayload[];
   final_vote?: VoteResolvedEnvelope["data"] | null;
 }
 
@@ -142,8 +150,11 @@ export interface RequireInputEnvelope {
   type: "REQUIRE_INPUT";
   data: {
     action_type: "SPEAK" | "VOTE" | "WOLF_KILL" | "SEER_CHECK" | "HUNTER_SHOOT" | "WITCH_ACTION";
+    request_id: string;
     prompt: string;
     allowed_targets: number[];
+    available_actions?: Array<"WITCH_SAVE" | "WITCH_POISON" | "PASS">;
+    save_targets?: number[];
   };
 }
 
@@ -169,6 +180,7 @@ export interface SubmitActionPayload {
     | "PASS";
   target?: number;
   text?: string;
+  request_id?: string;
 }
 
 export interface ClientEnvelope {

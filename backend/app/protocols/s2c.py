@@ -96,17 +96,22 @@ class SettlementDayPayload(BaseModel):
 class SettlementRecapPayload(BaseModel):
     day_count: int = Field(ge=1)
     outcome_reason: str = Field(min_length=1)
+    role_reveal_summary: str = Field(min_length=1)
     players: list[SettlementPlayerPayload] = Field(default_factory=list)
     nights: list[SettlementNightPayload] = Field(default_factory=list)
     days: list[SettlementDayPayload] = Field(default_factory=list)
     key_events: list[SettlementEventPayload] = Field(default_factory=list)
+    timeline: list[SettlementEventPayload] = Field(default_factory=list)
     final_vote: VoteResolvedPayload | None = None
 
 
 class RequireInputPayload(BaseModel):
     action_type: Literal["SPEAK", "VOTE", "WOLF_KILL", "SEER_CHECK", "HUNTER_SHOOT", "WITCH_ACTION"]
+    request_id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     allowed_targets: list[int] = Field(default_factory=list)
+    available_actions: list[Literal["WITCH_SAVE", "WITCH_POISON", "PASS"]] | None = None
+    save_targets: list[int] | None = None
 
 
 class GameOverPayload(BaseModel):

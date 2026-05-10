@@ -86,6 +86,27 @@ describe("gameReducer", () => {
     expect(afterBanishment.players.find((player) => player.seatId === 2)?.isAlive).toBe(false);
   });
 
+  it("does not infer deaths from structured public speeches", () => {
+    const state = gameReducer(createInitialGameState(), {
+      type: "server-envelope",
+      envelope: {
+        type: "CHAT_UPDATE",
+        data: {
+          message: "3号发言：我觉得2号死亡这件事很蹊跷。",
+          speaker: "系统",
+          visibility: "public",
+        },
+        meta: {
+          message_kind: "speech",
+          event_type: "SPEECH",
+          actor_seat: 3,
+        },
+      },
+    });
+
+    expect(state.players.find((player) => player.seatId === 2)?.isAlive).toBe(true);
+  });
+
   it("tracks private night action feedback", () => {
     const state = gameReducer(createInitialGameState(), {
       type: "server-envelope",
@@ -204,6 +225,52 @@ describe("gameReducer", () => {
     });
   });
 
+  it("only clears pending action after submit ack", () => {
+    const waitingState = gameReducer(createInitialGameState(), {
+      type: "server-envelope",
+      envelope: {
+        type: "REQUIRE_INPUT",
+        data: {
+          action_type: "VOTE",
+          request_id: "input-1",
+          prompt: "pick a target",
+          allowed_targets: [2, 3],
+        },
+      },
+    });
+
+    const rejectedState = gameReducer(waitingState, {
+      type: "server-envelope",
+      envelope: {
+        type: "SYSTEM_MSG",
+        data: { message: "reject:VOTE" },
+        meta: { status: "reject", action_type: "VOTE", request_id: "input-1" },
+      },
+    });
+
+    const staleAckState = gameReducer(rejectedState, {
+      type: "server-envelope",
+      envelope: {
+        type: "SYSTEM_MSG",
+        data: { message: "ack:VOTE" },
+        meta: { status: "ack", action_type: "VOTE", request_id: "input-0" },
+      },
+    });
+
+    const ackedState = gameReducer(staleAckState, {
+      type: "server-envelope",
+      envelope: {
+        type: "SYSTEM_MSG",
+        data: { message: "ack:VOTE" },
+        meta: { status: "ack", action_type: "VOTE", request_id: "input-1" },
+      },
+    });
+
+    expect(rejectedState.pendingAction?.action_type).toBe("VOTE");
+    expect(staleAckState.pendingAction?.request_id).toBe("input-1");
+    expect(ackedState.pendingAction).toBeNull();
+  });
+
   it("clears pending action and reveals roles on game over", () => {
     const waitingState = gameReducer(createInitialGameState(), {
       type: "server-envelope",
@@ -211,6 +278,7 @@ describe("gameReducer", () => {
         type: "REQUIRE_INPUT",
         data: {
           action_type: "VOTE",
+          request_id: "input-game-over",
           prompt: "请选择投票目标",
           allowed_targets: [2, 3],
         },
@@ -258,6 +326,7 @@ describe("gameReducer", () => {
           recap: {
             day_count: 2,
             outcome_reason: "神职屠边。",
+            role_reveal_summary: "狼人：2号；神职：1号；平民：无。",
             players: [
               {
                 seat_id: 1,
@@ -275,6 +344,24 @@ describe("gameReducer", () => {
               },
             ],
             key_events: [
+              {
+                day_count: 2,
+                phase: "VOTE_RESULT",
+                event_type: "BANISHMENT",
+                message: "1号玩家被放逐出局。",
+                actor_seat: null,
+                target_seats: [1],
+              },
+            ],
+            timeline: [
+              {
+                day_count: 2,
+                phase: "DAY_SPEAKING",
+                event_type: "SPEECH",
+                message: "1号发言：我会归票2号。",
+                actor_seat: 1,
+                target_seats: [],
+              },
               {
                 day_count: 2,
                 phase: "VOTE_RESULT",
@@ -332,6 +419,7 @@ describe("gameReducer", () => {
     expect(state.settlementReview).toMatchObject({
       winningSide: "WOLF",
       outcomeReason: "神职屠边。",
+      roleRevealSummary: "狼人：2号；神职：1号；平民：无。",
       dayCount: 2,
       players: [
         {
@@ -346,6 +434,16 @@ describe("gameReducer", () => {
         },
       ],
       keyEvents: [
+        {
+          phase: "VOTE_RESULT",
+          message: "1号玩家被放逐出局。",
+        },
+      ],
+      timeline: [
+        {
+          phase: "DAY_SPEAKING",
+          message: "1号发言：我会归票2号。",
+        },
         {
           phase: "VOTE_RESULT",
           message: "1号玩家被放逐出局。",

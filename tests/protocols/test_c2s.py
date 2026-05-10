@@ -47,6 +47,27 @@ def test_pass_action_can_omit_target() -> None:
     assert payload.data == SubmitActionPayload(action_type="PASS")
 
 
+def test_untargeted_actions_reject_target() -> None:
+    with pytest.raises(ValidationError):
+        ClientEnvelope.model_validate(
+            {
+                "type": "SUBMIT_ACTION",
+                "data": {"action_type": "PASS", "target": 3},
+            }
+        )
+
+
+def test_submit_action_can_carry_request_id() -> None:
+    payload = ClientEnvelope.model_validate(
+        {
+            "type": "SUBMIT_ACTION",
+            "data": {"action_type": "VOTE", "target": 5, "request_id": "input-1"},
+        }
+    )
+
+    assert payload.data.request_id == "input-1"
+
+
 def test_hunter_shoot_requires_target() -> None:
     payload = ClientEnvelope.model_validate(
         {
@@ -72,5 +93,13 @@ def test_speak_action_rejects_empty_text() -> None:
             {
                 "type": "SUBMIT_ACTION",
                 "data": {"action_type": "SPEAK"},
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        ClientEnvelope.model_validate(
+            {
+                "type": "SUBMIT_ACTION",
+                "data": {"action_type": "SPEAK", "text": "   "},
             }
         )
