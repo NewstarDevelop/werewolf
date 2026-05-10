@@ -186,6 +186,26 @@ export const roleGuides: Record<string, RoleGuide> = {
   },
 };
 
+export const roleQuickTips: Record<string, string> = {
+  WOLF: "夜里找刀口，白天藏视角。",
+  VILLAGER: "盯发言矛盾，珍惜票权。",
+  SEER: "验人链是武器，报与藏都要有理由。",
+  WITCH: "解药保轮次，毒药改局势。",
+  HUNTER: "枪口是威慑，别急着交底。",
+};
+
+export type AIPace = "fast" | "normal" | "slow";
+
+export const aiPaceOptions: Array<{
+  value: AIPace;
+  label: string;
+  delayMs: number;
+}> = [
+  { value: "fast", label: "疾", delayMs: 0 },
+  { value: "normal", label: "稳", delayMs: 700 },
+  { value: "slow", label: "慢", delayMs: 1400 },
+];
+
 /** 不同行动类型的规则速记，落在 prompt 下方以作新手兜底。 */
 export const actionRuleHint: Record<string, string | undefined> = {
   WITCH_ACTION: "女巫解药与毒药各一瓶，全程仅此一用。不可用药自救。",

@@ -8,11 +8,14 @@ import { RoleGuide } from "./components/RoleGuide";
 import { SettlementReview } from "./components/SettlementReview";
 import { VoteBoard } from "./components/VoteBoard";
 import {
+  aiPaceOptions,
   connectionPhaseCopy,
   formatSeat,
   formatSeatList,
   gamePhaseCopy,
   identityStateCopy,
+  roleQuickTips,
+  type AIPace,
 } from "./copy";
 import {
   createInitialGameState,
@@ -33,6 +36,22 @@ const VALID_ENVELOPE_TYPES = new Set([
   "SYSTEM_MSG", "CHAT_UPDATE", "AI_THINKING", "PLAYER_STATE_PATCH",
   "PHASE_CHANGED", "DEATH_REVEALED", "VOTE_RESOLVED", "REQUIRE_INPUT", "GAME_OVER",
 ]);
+const AI_PACE_STORAGE_KEY = "werewolf.aiPace";
+
+function resolveInitialAIPace(): AIPace {
+  const stored = window.localStorage.getItem(AI_PACE_STORAGE_KEY);
+  return aiPaceOptions.some((option) => option.value === stored)
+    ? stored as AIPace
+    : "normal";
+}
+
+function aiDelayMsFor(pace: AIPace): number {
+  return aiPaceOptions.find((option) => option.value === pace)?.delayMs ?? 700;
+}
+
+function persistAIPace(pace: AIPace): void {
+  window.localStorage.setItem(AI_PACE_STORAGE_KEY, pace);
+}
 
 function formatPhaseTitle(dayCount: number, phase: string | null): string {
   if (!phase) {
@@ -54,6 +73,7 @@ export function App() {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [reconnectPending, setReconnectPending] = useState(false);
   const [theme, setTheme] = useState<Theme>(resolveInitialTheme);
+  const [aiPace, setAiPace] = useState<AIPace>(resolveInitialAIPace);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const shouldReconnectRef = useRef(true);
@@ -70,6 +90,7 @@ export function App() {
     settlementReview,
   } = gameState;
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
+  const humanRoleTip = humanPlayer?.roleCode ? roleQuickTips[humanPlayer.roleCode] : undefined;
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
     ? "轮到你落子"
@@ -136,6 +157,26 @@ export function App() {
     setConnectionAttempt((current) => current + 1);
   }, []);
 
+  const handleNewGame = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    shouldReconnectRef.current = false;
+    socketRef.current?.close();
+    socketRef.current = null;
+    dispatchGameState({ type: "reset" });
+    setReconnectPending(false);
+    setPhase("connecting");
+    shouldReconnectRef.current = true;
+    setConnectionAttempt((current) => current + 1);
+  }, []);
+
+  function handleAIPaceChange(nextPace: AIPace) {
+    persistAIPace(nextPace);
+    setAiPace(nextPace);
+  }
+
   useEffect(() => {
     let disposed = false;
     shouldReconnectRef.current = true;
@@ -143,7 +184,9 @@ export function App() {
     setReconnectPending(false);
     setPhase("connecting");
 
-    const socket = new WebSocket(createGameSocketUrl(window.location));
+    const socket = new WebSocket(
+      createGameSocketUrl(window.location, { aiDelayMs: aiDelayMsFor(aiPace) }),
+    );
     socketRef.current = socket;
 
     function scheduleReconnect() {
@@ -235,14 +278,17 @@ export function App() {
     if (!socket) {
       return;
     }
+    const requestId = payload.request_id ?? pendingAction?.request_id;
+    const data = requestId
+      ? { ...payload, request_id: requestId }
+      : payload;
 
     socket.send(
       JSON.stringify({
         type: "SUBMIT_ACTION",
-        data: payload,
+        data,
       }),
     );
-    dispatchGameState({ type: "clear-pending-action" });
   }
 
   function handleToggleTheme() {
@@ -274,9 +320,32 @@ export function App() {
                   <span className="identity-badge__state">
                     {humanPlayer.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
                   </span>
+                  {humanRoleTip ? (
+                    <span className="identity-badge__tip">{humanRoleTip}</span>
+                  ) : null}
                   <RoleGuide roleCode={humanPlayer.roleCode} />
                 </span>
               ) : null}
+              <button
+                type="button"
+                className="new-game-button"
+                onClick={handleNewGame}
+              >
+                新局
+              </button>
+              <div className="pace-control" role="group" aria-label="AI 节奏">
+                {aiPaceOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={option.value === aiPace ? "pace-control__button is-active" : "pace-control__button"}
+                    aria-pressed={option.value === aiPace}
+                    onClick={() => handleAIPaceChange(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="theme-toggle"

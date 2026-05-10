@@ -4,9 +4,21 @@ export type ConnectionPhase = "idle" | "connecting" | "open" | "closed" | "error
 export const RECONNECT_DELAY_MS = 1000;
 export const GAME_OVER_CLOSE_CODE = 4000;
 
-export function createGameSocketUrl(locationLike: Pick<Location, "protocol" | "hostname">): string {
+interface GameSocketOptions {
+  aiDelayMs?: number;
+}
+
+export function createGameSocketUrl(
+  locationLike: Pick<Location, "protocol" | "hostname">,
+  options: GameSocketOptions = {},
+): string {
   const protocol = locationLike.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${locationLike.hostname}:8000/ws/game`;
+  const params = new URLSearchParams();
+  if (options.aiDelayMs && options.aiDelayMs > 0) {
+    params.set("ai_delay_ms", String(options.aiDelayMs));
+  }
+  const query = params.toString();
+  return `${protocol}://${locationLike.hostname}:8000/ws/game${query ? `?${query}` : ""}`;
 }
 
 export function getReconnectDelayMs(): number {

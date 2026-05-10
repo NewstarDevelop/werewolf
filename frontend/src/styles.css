@@ -119,6 +119,63 @@ body::before {
   border-color: var(--color-amber);
 }
 
+.new-game-button,
+.pace-control__button,
+.chat-filter__button {
+  min-height: var(--header-control-min-height);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-page);
+  color: var(--color-ink-secondary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--motion-colors), transform var(--duration-fast) var(--ease-out-quart);
+}
+
+.new-game-button {
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+}
+
+.new-game-button:hover,
+.pace-control__button:hover,
+.chat-filter__button:hover {
+  color: var(--color-ink-primary);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.pace-control,
+.chat-filter {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-page);
+}
+
+.pace-control__button,
+.chat-filter__button {
+  border: 0;
+  border-right: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  min-width: 2.25rem;
+  padding: var(--space-1) var(--space-2);
+}
+
+.pace-control__button:last-child,
+.chat-filter__button:last-child {
+  border-right: 0;
+}
+
+.pace-control__button.is-active,
+.chat-filter__button.is-active {
+  background: var(--color-ink-primary);
+  color: var(--color-ink-inverse);
+}
+
 h1 {
   margin: 0;
   font-family: var(--font-family-serif);
@@ -212,6 +269,14 @@ h1 {
 .identity-badge__state {
   font-size: var(--font-size-xs);
   color: var(--color-ink-tertiary);
+}
+
+.identity-badge__tip {
+  flex-basis: 100%;
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
+  text-align: center;
 }
 
 .identity-badge .role-guide-drawer {
@@ -851,6 +916,14 @@ h1 {
   font-size: var(--font-size-lg);
   color: var(--color-ink-primary);
   letter-spacing: var(--letter-spacing-tight);
+}
+
+.chat-section-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .chat-section-stats {

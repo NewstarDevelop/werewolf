@@ -11,6 +11,7 @@ describe("SettlementReview", () => {
           winningSide: "GOOD",
           summary: "狼人已全部出局，好人阵营获胜。",
           outcomeReason: "狼人全灭。",
+          roleRevealSummary: "狼人：2号；神职：1号；平民：无。",
           dayCount: 2,
           players: [
             {
@@ -38,6 +39,24 @@ describe("SettlementReview", () => {
               message: "天亮了。昨夜死亡的是 3号。",
               actorSeat: null,
               targetSeats: [3],
+            },
+          ],
+          timeline: [
+            {
+              dayCount: 1,
+              phase: "DAY_START",
+              eventType: "NIGHT_DEATH",
+              message: "天亮了。昨夜死亡的是 3号。",
+              actorSeat: null,
+              targetSeats: [3],
+            },
+            {
+              dayCount: 1,
+              phase: "DAY_SPEAKING",
+              eventType: "SPEECH",
+              message: "1号发言：我查杀2号。",
+              actorSeat: 1,
+              targetSeats: [],
             },
           ],
           nights: [
@@ -87,13 +106,15 @@ describe("SettlementReview", () => {
     expect(screen.getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
     expect(screen.getByLabelText("结算复盘")).toHaveTextContent("第 2 日终局");
     expect(screen.getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
+    expect(screen.getByLabelText("结算复盘")).toHaveTextContent("狼人：2号；神职：1号；平民：无。");
     expect(within(screen.getByLabelText("阵营翻牌")).getByText("预言家")).toBeInTheDocument();
     expect(within(screen.getByLabelText("阵营翻牌")).getByText("狼人")).toBeInTheDocument();
     expect(within(screen.getByLabelText("夜间因果")).getByText("狼人刀向：3号玩家")).toBeInTheDocument();
     expect(within(screen.getByLabelText("夜间因果")).getByText("夜晚结果：平安夜")).toBeInTheDocument();
     expect(screen.getByLabelText("白天因果")).toHaveTextContent("1号发言：我查杀2号。");
     expect(screen.getByLabelText("白天因果")).toHaveTextContent("投票因果：2号以 3 票成为最高票，被放逐出局。");
-    expect(within(screen.getByLabelText("关键节点")).getByText("第 1 日 · 天明")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("完整时间线")).getByText("第 1 日 · 天明")).toBeInTheDocument();
+    expect(screen.getByLabelText("完整时间线")).toHaveTextContent("1号发言：我查杀2号。");
     expect(within(screen.getByLabelText("终局票型")).getByText("2号玩家被放逐出局。")).toBeInTheDocument();
     expect(within(screen.getByLabelText("终局票型")).getByText("3票")).toBeInTheDocument();
     expect(within(screen.getByLabelText("终局票型")).getByText("弃票：5号玩家")).toBeInTheDocument();

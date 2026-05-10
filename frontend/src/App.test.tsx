@@ -79,6 +79,46 @@ describe("App", () => {
     expect(within(view.container).getByRole("button", { name: "切换至亮色主题" })).toBeInTheDocument();
   });
 
+  it("starts a new game from the header controls", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    act(() => {
+      MockWebSocket.instances[0]?.emit("message", {
+        type: "SYSTEM_MSG",
+        data: { message: "old marker" },
+      });
+    });
+
+    expect(screen.getAllByText("old marker")).toHaveLength(1);
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "新局" }));
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(screen.queryAllByText("old marker")).toHaveLength(0);
+    });
+  });
+
+  it("persists AI pace and sends it on the next game socket", async () => {
+    MockWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const view = render(<App />);
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "疾" }));
+    expect(window.localStorage.getItem("werewolf.aiPace")).toBe("fast");
+
+    fireEvent.click(within(view.container).getByRole("button", { name: "新局" }));
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(MockWebSocket.instances[1]?.url).toBe("ws://localhost:8000/ws/game");
+    });
+  });
+
   it("updates player thinking status from websocket events", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -535,6 +575,7 @@ describe("App", () => {
         recap: {
           day_count: 2,
           outcome_reason: "狼人全灭。",
+          role_reveal_summary: "狼人：1号；神职：2号；平民：无。",
           players: [
             {
               seat_id: 1,
@@ -552,6 +593,24 @@ describe("App", () => {
             },
           ],
           key_events: [
+            {
+              day_count: 2,
+              phase: "VOTE_RESULT",
+              event_type: "BANISHMENT",
+              message: "1号玩家被放逐出局。",
+              actor_seat: null,
+              target_seats: [1],
+            },
+          ],
+          timeline: [
+            {
+              day_count: 1,
+              phase: "NIGHT_END",
+              event_type: "PEACEFUL_NIGHT",
+              message: "昨夜平安夜。",
+              actor_seat: null,
+              target_seats: [],
+            },
             {
               day_count: 2,
               phase: "VOTE_RESULT",
@@ -612,9 +671,11 @@ describe("App", () => {
       expect(within(view.container).getByLabelText("2号玩家")).toHaveTextContent("预言家");
       expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
       expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
+      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("狼人：1号；神职：2号；平民：无。");
       expect(within(view.container).getByLabelText("夜间因果")).toHaveTextContent("狼人刀向：2号玩家");
       expect(within(view.container).getByLabelText("白天因果")).toHaveTextContent("1号以 3 票成为最高票，被放逐出局。");
-      expect(within(view.container).getByLabelText("关键节点")).toHaveTextContent("1号玩家被放逐出局。");
+      expect(within(view.container).getByLabelText("完整时间线")).toHaveTextContent("昨夜平安夜。");
+      expect(within(view.container).getByLabelText("完整时间线")).toHaveTextContent("1号玩家被放逐出局。");
       expect(within(view.container).getByLabelText("终局票型")).toHaveTextContent("3票");
     });
   });
@@ -651,7 +712,7 @@ describe("App", () => {
     });
   });
 
-  it("unlocks action panel on require input and relocks after submit", async () => {
+  it("unlocks action panel on require input and relocks after submit ack", async () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
 
@@ -662,6 +723,7 @@ describe("App", () => {
       type: "REQUIRE_INPUT",
       data: {
         action_type: "VOTE",
+        request_id: "input-vote",
         prompt: "请选择投票目标",
         allowed_targets: [2, 4, 7],
       },
@@ -680,7 +742,26 @@ describe("App", () => {
 
     expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"VOTE\"");
     expect(socket?.sentPayloads[0]).toContain("\"target\":4");
-    expect(within(view.container).getByText(getIdleCopy().heading)).toBeInTheDocument();
+    expect(socket?.sentPayloads[0]).toContain("\"request_id\":\"input-vote\"");
+    expect(view.container.querySelector(".action-idle")).toBeNull();
+
+    socket?.emit("message", {
+      type: "SYSTEM_MSG",
+      data: { message: "ack:VOTE" },
+      meta: { status: "ack", action_type: "VOTE", request_id: "input-stale" },
+    });
+
+    expect(view.container.querySelector(".action-idle")).toBeNull();
+
+    socket?.emit("message", {
+      type: "SYSTEM_MSG",
+      data: { message: "ack:VOTE" },
+      meta: { status: "ack", action_type: "VOTE", request_id: "input-vote" },
+    });
+
+    await waitFor(() => {
+      expect(within(view.container).getByText(getIdleCopy().heading)).toBeInTheDocument();
+    });
   });
   it("submits hunter shoot actions through the app websocket bridge", async () => {
     MockWebSocket.instances = [];
@@ -693,6 +774,7 @@ describe("App", () => {
       type: "REQUIRE_INPUT",
       data: {
         action_type: "HUNTER_SHOOT",
+        request_id: "input-hunter",
         prompt: "请选择开枪目标",
         allowed_targets: [2, 5],
       },
@@ -718,6 +800,17 @@ describe("App", () => {
 
     expect(socket?.sentPayloads[0]).toContain("\"action_type\":\"HUNTER_SHOOT\"");
     expect(socket?.sentPayloads[0]).toContain("\"target\":5");
-    expect(view.container.querySelector(".action-idle")).not.toBeNull();
+    expect(socket?.sentPayloads[0]).toContain("\"request_id\":\"input-hunter\"");
+    expect(view.container.querySelector(".action-idle")).toBeNull();
+
+    socket?.emit("message", {
+      type: "SYSTEM_MSG",
+      data: { message: "ack:HUNTER_SHOOT" },
+      meta: { status: "ack", action_type: "HUNTER_SHOOT", request_id: "input-hunter" },
+    });
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".action-idle")).not.toBeNull();
+    });
   });
 });

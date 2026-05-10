@@ -153,6 +153,7 @@ export function SettlementReview({ review }: SettlementReviewProps) {
   const wolves = review.players
     .filter((player) => player.side === "WOLF")
     .map((player) => player.seatId);
+  const timelineEvents = review.timeline.length > 0 ? review.timeline : review.keyEvents;
 
   return (
     <section
@@ -170,6 +171,7 @@ export function SettlementReview({ review }: SettlementReviewProps) {
       <div className="settlement-review__stats">
         <span>{review.dayCount === null ? "终局" : `第 ${review.dayCount} 日终局`}</span>
         <span>原因：{review.outcomeReason}</span>
+        <span>{review.roleRevealSummary}</span>
         <span>存活：{survivors.length > 0 ? formatSeatList(survivors) : "无人"}</span>
         <span>狼队：{wolves.length > 0 ? formatSeatList(wolves) : "无"}</span>
       </div>
@@ -210,11 +212,11 @@ export function SettlementReview({ review }: SettlementReviewProps) {
           <DayCausality days={review.days} />
         </section>
 
-        <section className="settlement-review__block" aria-label="关键节点">
-          <h3>关键节点</h3>
-          {review.keyEvents.length > 0 ? (
+        <section className="settlement-review__block" aria-label="完整时间线">
+          <h3>完整时间线</h3>
+          {timelineEvents.length > 0 ? (
             <ol className="settlement-timeline">
-              {review.keyEvents.map((event, index) => (
+              {timelineEvents.map((event, index) => (
                 <li key={`${event.eventType}-${index}`}>
                   <span>{formatPhase(event.dayCount, event.phase)}</span>
                   <p>{event.message}</p>
