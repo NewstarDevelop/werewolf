@@ -1,8 +1,12 @@
 .pytest_cache/
+.coverage
+htmlcov/
 .venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.cover
+*,cover
 .env
 .env.*
 !.env.example
@@ -10,6 +14,7 @@ __pycache__/
 node_modules/
 dist/
 coverage/
+.vite/
 *.tsbuildinfo
 
 AGENTS.md
