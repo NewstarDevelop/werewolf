@@ -7,13 +7,14 @@ from app.llm.schemas import PromptEnvelope, SpeechResponse, TargetedActionRespon
 def build_prompt(
     *,
     known_role: str = "SEER",
+    day_count: int = 2,
     killed_tonight: list[int] | None = None,
     private_log: list[str] | None = None,
     stance_summary: str = "怀疑：无；信任：无",
     tactic_summary: str | None = None,
 ) -> PromptEnvelope:
     view = {
-        "day_count": 2,
+        "day_count": day_count,
         "phase": "NIGHT_ACTION",
         "players": [
             {"seat_id": 1, "is_alive": True, "is_self": True, "known_role": known_role},
@@ -35,7 +36,7 @@ def build_prompt(
         system_prompt="系统规则",
         context_prompt=(
             "当前阶段：NIGHT_ACTION\n"
-            "当前天数：第 2 天\n"
+            f"当前天数：第 {day_count} 天\n"
             "你的性格：谨慎分析\n"
             f"{f'本轮战术目标：{tactic_summary}\n' if tactic_summary is not None else ''}"
             f"立场摘要：{stance_summary}\n"
@@ -94,7 +95,8 @@ def test_local_provider_speech_follows_suspicion_stance() -> None:
         response_schema=SpeechResponse,
     )
 
-    assert "怀疑3号" in str(payload["speech_text"])
+    assert "3号" in str(payload["speech_text"])
+    assert "狼坑" in str(payload["speech_text"])
 
 
 def test_local_provider_speech_uses_fake_claim_tactic() -> None:
@@ -108,7 +110,7 @@ def test_local_provider_speech_uses_fake_claim_tactic() -> None:
         response_schema=SpeechResponse,
     )
 
-    assert "跳预言家" in str(payload["speech_text"])
+    assert "查杀口径" in str(payload["speech_text"])
     assert "3号" in str(payload["speech_text"])
 
 
@@ -124,6 +126,48 @@ def test_local_provider_speech_uses_vote_push_tactic() -> None:
     )
 
     assert "归3号" in str(payload["speech_text"])
+
+
+def test_local_provider_default_speech_varies_by_day_context() -> None:
+    provider = LocalRuleBasedProvider()
+
+    day_two = provider.complete(
+        prompt=build_prompt(known_role="VILLAGER", day_count=2),
+        response_schema=SpeechResponse,
+    )
+    day_three = provider.complete(
+        prompt=build_prompt(known_role="VILLAGER", day_count=3),
+        response_schema=SpeechResponse,
+    )
+
+    assert day_two["speech_text"] != day_three["speech_text"]
+    assert "抗推" in str(day_two["speech_text"])
+    assert "票型" in str(day_three["speech_text"])
+
+
+def test_local_provider_tactic_speech_varies_by_day_context() -> None:
+    provider = LocalRuleBasedProvider()
+
+    day_two = provider.complete(
+        prompt=build_prompt(
+            known_role="WOLF",
+            day_count=2,
+            tactic_summary="悍跳；目标：3号；公开打法：伪装成有信息的一方。",
+        ),
+        response_schema=SpeechResponse,
+    )
+    day_three = provider.complete(
+        prompt=build_prompt(
+            known_role="WOLF",
+            day_count=3,
+            tactic_summary="悍跳；目标：3号；公开打法：伪装成有信息的一方。",
+        ),
+        response_schema=SpeechResponse,
+    )
+
+    assert day_two["speech_text"] != day_three["speech_text"]
+    assert "3号" in str(day_two["speech_text"])
+    assert "3号" in str(day_three["speech_text"])
 
 
 def test_local_provider_vote_uses_tactic_target() -> None:
@@ -506,8 +550,8 @@ def test_local_provider_speech_non_seer() -> None:
         task_prompt="x",
     )
     payload = provider.complete(prompt=prompt, response_schema=SpeechResponse)
-    assert "先听后置位" in str(payload["speech_text"])
     assert "狼坑" in str(payload["speech_text"])
+    assert "金水" in str(payload["speech_text"])
 
 
 def test_local_provider_vote_seer_no_checked_wolf() -> None:

@@ -38,6 +38,8 @@ def test_evaluate_replay_seeds_passes_fixed_full_games() -> None:
     assert summary.quality.speech_count > 0
     assert summary.quality.vote_rounds > 0
     assert summary.quality.wolf_kill_attempts > 0
+    assert summary.quality.repetition_rate < 0.38
+    assert summary.quality.table_talk_term_hits > 0
 
 
 def test_analyze_replay_quality_detects_repetition_and_table_terms() -> None:

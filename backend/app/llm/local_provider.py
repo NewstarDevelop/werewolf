@@ -118,6 +118,18 @@ def _extract_self_role(prompt: PromptEnvelope) -> str | None:
     return None
 
 
+def _extract_self_seat(prompt: PromptEnvelope) -> int | None:
+    for player in _extract_players(prompt):
+        if player.get("is_self") is True and isinstance(player.get("seat_id"), int):
+            return int(player["seat_id"])
+    return None
+
+
+def _extract_day_count(prompt: PromptEnvelope) -> int | None:
+    day_count = _extract_view(prompt).get("day_count")
+    return day_count if isinstance(day_count, int) else None
+
+
 def _extract_checked_wolf_targets(prompt: PromptEnvelope) -> list[int]:
     checked_targets: list[int] = []
     for message in _extract_private_log(prompt):
@@ -233,6 +245,7 @@ class LocalRuleBasedProvider(LLMProvider):
     ) -> dict[str, object]:
         if response_schema is SpeechResponse:
             self_role = _extract_self_role(prompt)
+            self_seat = _extract_self_seat(prompt)
             tactic_label = _extract_tactic_label(prompt)
             tactic_target = _pick_tactic_target(prompt)
             checked_wolf = _pick_checked_wolf_target(prompt)
@@ -250,7 +263,12 @@ class LocalRuleBasedProvider(LLMProvider):
                         "speech_text": render_checked_chain_speech(checked_results[-3:]),
                     }
 
-            tactic_speech = render_tactic_speech(tactic_label, tactic_target)
+            tactic_speech = render_tactic_speech(
+                tactic_label,
+                tactic_target,
+                speaker_seat=self_seat,
+                variant_key=_extract_day_count(prompt),
+            )
             if tactic_speech is not None:
                 return {
                     "inner_thought": "按本轮战术目标组织局内话术。",
@@ -260,12 +278,19 @@ class LocalRuleBasedProvider(LLMProvider):
             if suspected_target is not None:
                 return {
                     "inner_thought": "延续已有怀疑对象，给出可被票型验证的公开压力。",
-                    "speech_text": render_suspicion_speech(suspected_target),
+                    "speech_text": render_suspicion_speech(
+                        suspected_target,
+                        speaker_seat=self_seat,
+                        variant_key=_extract_day_count(prompt),
+                    ),
                 }
 
             return {
                 "inner_thought": "先给出保守公开发言。",
-                "speech_text": render_default_speech(),
+                "speech_text": render_default_speech(
+                    speaker_seat=self_seat,
+                    variant_key=_extract_day_count(prompt),
+                ),
             }
 
         if response_schema is VoteResponse:

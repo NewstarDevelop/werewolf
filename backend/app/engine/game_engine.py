@@ -15,6 +15,7 @@ from app.engine.night.wolf_action import resolve_wolf_action
 from app.engine.states.phase import GamePhase
 from app.llm.builders import build_night_prompt, build_speech_prompt, build_vote_prompt
 from app.llm.fallback import FallbackLLMClient
+from app.llm.phrasebook import render_default_speech
 
 
 class GameEngine:
@@ -29,6 +30,7 @@ class GameEngine:
         self._llm_client = llm_client
         self._human_speech_timeout_seconds = human_speech_timeout_seconds
         self._witch_resources: dict[int, WitchResources] = {}
+        self._ai_speech_counter = 0
 
     def _ensure_witch_resources(self, context: GameContext) -> None:
         for seat_id, player in context.players.items():
@@ -309,7 +311,11 @@ class GameEngine:
         return allowed_targets[0] if allowed_targets else None
 
     async def _ai_speaker(self, seat_id: int) -> str:
-        return f"{seat_id}号正在陈述自己的判断。"
+        self._ai_speech_counter += 1
+        return render_default_speech(
+            speaker_seat=seat_id,
+            variant_key=self._ai_speech_counter,
+        )
 
     async def _llm_speaker(self, context: GameContext, seat_id: int) -> str:
         player = context.players[seat_id]
