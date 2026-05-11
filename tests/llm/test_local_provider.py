@@ -10,6 +10,7 @@ def build_prompt(
     killed_tonight: list[int] | None = None,
     private_log: list[str] | None = None,
     stance_summary: str = "怀疑：无；信任：无",
+    tactic_summary: str | None = None,
 ) -> PromptEnvelope:
     view = {
         "day_count": 2,
@@ -36,6 +37,7 @@ def build_prompt(
             "当前阶段：NIGHT_ACTION\n"
             "当前天数：第 2 天\n"
             "你的性格：谨慎分析\n"
+            f"{f'本轮战术目标：{tactic_summary}\n' if tactic_summary is not None else ''}"
             f"立场摘要：{stance_summary}\n"
             '公开历史：["1号发言：先听后置位"]\n'
             f"私有记忆：{json.dumps(private_log or [], ensure_ascii=False)}\n"
@@ -95,6 +97,63 @@ def test_local_provider_speech_follows_suspicion_stance() -> None:
     assert "怀疑3号" in str(payload["speech_text"])
 
 
+def test_local_provider_speech_uses_fake_claim_tactic() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="WOLF",
+            tactic_summary="悍跳；目标：3号；公开打法：伪装成有信息的一方。",
+        ),
+        response_schema=SpeechResponse,
+    )
+
+    assert "跳预言家" in str(payload["speech_text"])
+    assert "3号" in str(payload["speech_text"])
+
+
+def test_local_provider_speech_uses_vote_push_tactic() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="VILLAGER",
+            tactic_summary="归票；目标：3号；公开打法：明确建议大家集中票型。",
+        ),
+        response_schema=SpeechResponse,
+    )
+
+    assert "归3号" in str(payload["speech_text"])
+
+
+def test_local_provider_vote_uses_tactic_target() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="VILLAGER",
+            tactic_summary="归票；目标：3号；公开打法：明确建议大家集中票型。",
+        ),
+        response_schema=VoteResponse,
+    )
+
+    assert payload["vote_target"] == 3
+
+
+def test_local_provider_targeted_action_uses_tactic_target() -> None:
+    provider = LocalRuleBasedProvider()
+
+    payload = provider.complete(
+        prompt=build_prompt(
+            known_role="WOLF",
+            tactic_summary="冲锋；目标：3号；公开打法：集中火力。",
+        ),
+        response_schema=TargetedActionResponse,
+    )
+
+    assert payload["target"] == 3
+
+
 def test_local_provider_seer_pushes_checked_wolf_in_speech_and_vote() -> None:
     provider = LocalRuleBasedProvider()
     prompt = build_prompt(
@@ -105,7 +164,7 @@ def test_local_provider_seer_pushes_checked_wolf_in_speech_and_vote() -> None:
     speech_payload = provider.complete(prompt=prompt, response_schema=SpeechResponse)
     vote_payload = provider.complete(prompt=prompt, response_schema=VoteResponse)
 
-    assert "3号是狼人" in str(speech_payload["speech_text"])
+    assert "3号查杀" in str(speech_payload["speech_text"])
     assert "警徽流" in str(speech_payload["speech_text"])
     assert vote_payload["vote_target"] == 3
 
@@ -447,7 +506,8 @@ def test_local_provider_speech_non_seer() -> None:
         task_prompt="x",
     )
     payload = provider.complete(prompt=prompt, response_schema=SpeechResponse)
-    assert payload["speech_text"] == "信息还不够，我先听后置位怎么聊。"
+    assert "先听后置位" in str(payload["speech_text"])
+    assert "狼坑" in str(payload["speech_text"])
 
 
 def test_local_provider_vote_seer_no_checked_wolf() -> None:

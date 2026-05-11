@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import { uiCopy } from "../copy";
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
@@ -28,11 +30,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <main className="app-shell">
           <div className="app-frame">
             <div className="error-fallback">
-              <strong>棋局暂断</strong>
-              <p>
-                对局面板遇到了意料之外的问题。
-                请刷新页面重新入局。
-              </p>
+              <strong>{uiCopy.errorBoundary.title}</strong>
+              <p>{uiCopy.errorBoundary.detail}</p>
               <button
                 type="button"
                 onClick={() => {
@@ -40,7 +39,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   window.location.reload();
                 }}
               >
-                重新入席
+                {uiCopy.errorBoundary.reload}
               </button>
             </div>
           </div>

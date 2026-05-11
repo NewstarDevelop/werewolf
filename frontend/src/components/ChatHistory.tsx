@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { chatTagCopy, narratorSpeaker } from "../copy";
+import { chatTagCopy, formatGameMessage, narratorSpeaker, uiCopy } from "../copy";
 
 export interface ChatEntry {
   id: string;
@@ -19,7 +19,7 @@ const chatFilterOptions: Array<{
   value: ChatFilter;
   label: string;
 }> = [
-  { value: "all", label: "全部" },
+  { value: "all", label: uiCopy.chat.all },
   { value: "speech", label: chatTagCopy.speech },
   { value: "private", label: chatTagCopy.private },
   { value: "system", label: chatTagCopy.system },
@@ -44,9 +44,9 @@ export function ChatHistory({ entries }: ChatHistoryProps) {
   return (
     <section className="chat-section" aria-labelledby="chat-section-title">
       <header className="chat-section-header">
-        <h2 id="chat-section-title">对局日志</h2>
+        <h2 id="chat-section-title">{uiCopy.chat.title}</h2>
         <div className="chat-section-tools">
-          <div className="chat-filter" role="group" aria-label="日志筛选">
+          <div className="chat-filter" role="group" aria-label={uiCopy.chat.filterAria}>
             {chatFilterOptions.map((option) => (
               <button
                 key={option.value}
@@ -60,11 +60,13 @@ export function ChatHistory({ entries }: ChatHistoryProps) {
             ))}
           </div>
           <p className="chat-section-stats">
-            {entries.length === 0 ? "暂无消息" : `${visibleEntries.length}/${entries.length} 条`}
+            {entries.length === 0
+              ? uiCopy.chat.empty
+              : uiCopy.chat.formatStats(visibleEntries.length, entries.length)}
           </p>
         </div>
       </header>
-      <ol className="chat-feed" aria-label="对局日志列表" aria-live="polite" aria-relevant="additions">
+      <ol className="chat-feed" aria-label={uiCopy.chat.listAria} aria-live="polite" aria-relevant="additions">
         {visibleEntries.map((entry) => (
           <li key={entry.id} className={`chat-row is-${entry.kind}`}>
             <div className="chat-meta">
@@ -73,7 +75,7 @@ export function ChatHistory({ entries }: ChatHistoryProps) {
                 <strong className="chat-speaker">{entry.speaker ?? narratorSpeaker}</strong>
               </div>
             </div>
-            <p>{entry.message}</p>
+            <p>{entry.kind === "speech" ? entry.message : formatGameMessage(entry.message)}</p>
           </li>
         ))}
         <li ref={bottomRef} aria-hidden="true" className="chat-anchor" />

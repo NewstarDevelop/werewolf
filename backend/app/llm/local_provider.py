@@ -5,11 +5,21 @@ import re
 
 from app.llm.client import JSONModeClient, LLMProvider
 from app.llm.fallback import FallbackLLMClient
+from app.llm.phrasebook import (
+    render_checked_chain_speech,
+    render_checked_wolf_speech,
+    render_default_speech,
+    render_suspicion_speech,
+    render_tactic_speech,
+)
 from app.llm.schemas import PromptEnvelope, SpeechResponse, TargetedActionResponse, VoteResponse
 
 _SEER_CHECK_PATTERN = re.compile(r"查验结果：\s*(\d+)\s*号是\s*(狼人|好人)")
 _SEER_WOLF_CHECK_PATTERN = re.compile(r"查验结果：\s*(\d+)\s*号是\s*狼人")
 _STANCE_ITEM_PATTERN = re.compile(r"(\d+)号\((\d+)\)")
+_TACTIC_LABEL_PATTERN = re.compile(r"本轮战术目标：([^；\n]+)")
+_TACTIC_TARGET_PATTERN = re.compile(r"(?:^|；)目标：([^；\n]+)")
+_SEAT_PATTERN = re.compile(r"(\d+)号")
 
 
 def _extract_section(prompt: PromptEnvelope, label: str) -> str | None:
@@ -17,6 +27,28 @@ def _extract_section(prompt: PromptEnvelope, label: str) -> str | None:
         prefix = f"{label}："
         if line.startswith(prefix):
             return line[len(prefix):].strip()
+    return None
+
+
+def _extract_tactic_label(prompt: PromptEnvelope) -> str | None:
+    match = _TACTIC_LABEL_PATTERN.search(prompt.context_prompt)
+    if match is None:
+        return None
+    return match.group(1).strip()
+
+
+def _extract_tactic_targets(prompt: PromptEnvelope) -> list[int]:
+    match = _TACTIC_TARGET_PATTERN.search(prompt.context_prompt)
+    if match is None:
+        return []
+    return [int(seat_match.group(1)) for seat_match in _SEAT_PATTERN.finditer(match.group(1))]
+
+
+def _pick_tactic_target(prompt: PromptEnvelope) -> int | None:
+    alive_targets = set(_extract_alive_targets(prompt))
+    for seat_id in _extract_tactic_targets(prompt):
+        if seat_id in alive_targets:
+            return seat_id
     return None
 
 
@@ -201,34 +233,39 @@ class LocalRuleBasedProvider(LLMProvider):
     ) -> dict[str, object]:
         if response_schema is SpeechResponse:
             self_role = _extract_self_role(prompt)
+            tactic_label = _extract_tactic_label(prompt)
+            tactic_target = _pick_tactic_target(prompt)
             checked_wolf = _pick_checked_wolf_target(prompt)
             suspected_target = _pick_stance_target(prompt)
             if self_role == "SEER" and checked_wolf is not None:
                 return {
                     "inner_thought": "预言家已有查杀，公开推动白天放逐。",
-                    "speech_text": f"我是预言家，验人链先报清：{checked_wolf}号是狼人。今天先出{checked_wolf}号，警徽流往外置位顺验，票型别被冲散。",
+                    "speech_text": render_checked_wolf_speech(checked_wolf),
                 }
             if self_role == "SEER":
                 checked_results = _extract_checked_results(prompt)
                 if checked_results:
-                    chain = "；".join(
-                        f"{seat_id}号是{result}"
-                        for seat_id, result in checked_results[-3:]
-                    )
                     return {
                         "inner_thought": "预言家需要稳定复述验人链和后续查验顺序。",
-                        "speech_text": f"我是预言家，验人链是：{chain}。今天先按发言和票型找狼，警徽流留给外置位压力最大的牌。",
+                        "speech_text": render_checked_chain_speech(checked_results[-3:]),
                     }
+
+            tactic_speech = render_tactic_speech(tactic_label, tactic_target)
+            if tactic_speech is not None:
+                return {
+                    "inner_thought": "按本轮战术目标组织局内话术。",
+                    "speech_text": tactic_speech,
+                }
 
             if suspected_target is not None:
                 return {
                     "inner_thought": "延续已有怀疑对象，给出可被票型验证的公开压力。",
-                    "speech_text": f"我现在更怀疑{suspected_target}号，前后发言和票型需要对齐。今天先把他的逻辑问清楚，别让焦点散掉。",
+                    "speech_text": render_suspicion_speech(suspected_target),
                 }
 
             return {
                 "inner_thought": "先给出保守公开发言。",
-                "speech_text": "信息还不够，我先听后置位怎么聊。",
+                "speech_text": render_default_speech(),
             }
 
         if response_schema is VoteResponse:
@@ -237,6 +274,13 @@ class LocalRuleBasedProvider(LLMProvider):
                 return {
                     "inner_thought": "优先投给自己查验到的狼人。",
                     "vote_target": checked_wolf,
+                }
+
+            tactic_target = _pick_tactic_target(prompt)
+            if _extract_tactic_label(prompt) in {"归票", "冲锋", "倒钩"} and tactic_target is not None:
+                return {
+                    "inner_thought": "按本轮战术目标集中票型。",
+                    "vote_target": tactic_target,
                 }
 
             suspected_target = _pick_stance_target(prompt)
@@ -264,9 +308,16 @@ class LocalRuleBasedProvider(LLMProvider):
 
             targets = _extract_alive_targets(prompt)
             suspected_target = _pick_stance_target(prompt)
+            tactic_target = _pick_tactic_target(prompt)
             return {
                 "inner_thought": "优先选择当前最有压力的合法目标。",
-                "target": suspected_target if suspected_target is not None else (targets[0] if targets else None),
+                "target": (
+                    tactic_target
+                    if tactic_target is not None
+                    else suspected_target
+                    if suspected_target is not None
+                    else targets[0] if targets else None
+                ),
                 "use_antidote": False,
                 "use_poison": False,
             }

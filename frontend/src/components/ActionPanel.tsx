@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   actionRuleHint,
@@ -6,6 +6,7 @@ import {
   getIdleCopy,
   speechPlaceholder,
   submitActionCopy,
+  uiCopy,
   type ActionCopy,
 } from "../copy";
 import { useKeyboard } from "../hooks/useKeyboard";
@@ -18,6 +19,7 @@ type TargetSelection = number | "PASS" | null;
 interface ActionPanelProps {
   request: PendingAction;
   onSubmit: (payload: SubmitActionPayload) => void;
+  children?: ReactNode;
 }
 
 const CONFIRM_RESET_MS = 4000;
@@ -46,7 +48,7 @@ function availableWitchActions(request: PendingAction): WitchActionType[] {
   return request.available_actions ?? ["WITCH_SAVE", "WITCH_POISON", "PASS"];
 }
 
-export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
+export function ActionPanel({ request, onSubmit, children }: ActionPanelProps) {
   const [speechText, setSpeechText] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<TargetSelection>(null);
   const [selectedWitchAction, setSelectedWitchAction] = useState<WitchActionType | null>(null);
@@ -57,6 +59,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const canSubmitTarget = typeof selectedTarget === "number";
   const canSubmitVote = selectedTarget === "PASS" || canSubmitTarget;
   const witchActions = availableWitchActions(request);
+  const hasSupplementalContent = Boolean(children);
   const selectedWitchActionIsAvailable = selectedWitchAction !== null
     && witchActions.includes(selectedWitchAction);
   const canSubmitWitchAction =
@@ -85,6 +88,12 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   useEffect(() => {
     setIsPanelHidden(false);
   }, [request?.action_type, request?.prompt]);
+
+  useEffect(() => {
+    if (hasSupplementalContent) {
+      setIsPanelHidden(false);
+    }
+  }, [hasSupplementalContent]);
 
   // Auto-release confirmation after a pause so a stale arm never fires.
   useEffect(() => {
@@ -212,7 +221,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
             : !canSubmitTarget;
 
   const submitLabel = confirmingDanger
-    ? `再按一次 · ${copy.submitLabel}`
+    ? uiCopy.actionPanel.confirmAgain(copy.submitLabel)
     : copy.submitLabel;
 
   const submitClasses = [
@@ -226,19 +235,27 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
   const panelClasses = [
     "action-panel",
     request ? "is-active" : "is-idle",
+    hasSupplementalContent ? "has-supplemental" : "",
     isPanelHidden ? "is-collapsed" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
+  const supplementalPanel = hasSupplementalContent ? (
+    <div className="action-panel__supplemental" aria-label={uiCopy.actionPanel.supplementalLabel}>
+      {children}
+    </div>
+  ) : null;
+
   return (
     <section className={panelClasses} aria-labelledby="action-panel-title">
       <header className="panel-header">
         <div className="panel-title-block">
-          <h2 id="action-panel-title">操作面板</h2>
+          <h2 id="action-panel-title">{uiCopy.actionPanel.title}</h2>
           {isPanelHidden ? (
             <p className="panel-collapsed-summary">
-              当前 · {copy.title}
+              {uiCopy.actionPanel.collapsedPrefix} · {copy.title}
+              {hasSupplementalContent ? ` · ${uiCopy.actionPanel.supplementalLabel}` : ""}
             </p>
           ) : null}
         </div>
@@ -247,35 +264,40 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
           className="panel-visibility-button"
           aria-expanded={!isPanelHidden}
           aria-controls="action-panel-body"
-          aria-label={isPanelHidden ? "展开操作面板" : "隐藏操作面板"}
+          aria-label={isPanelHidden
+            ? uiCopy.actionPanel.toggleExpandAria
+            : uiCopy.actionPanel.toggleCollapseAria}
           onClick={() => setIsPanelHidden((current) => !current)}
         >
-          {isPanelHidden ? "展开" : "隐藏"}
+          {isPanelHidden ? uiCopy.actionPanel.toggleExpandText : uiCopy.actionPanel.toggleCollapseText}
         </button>
       </header>
 
       {!isPanelHidden ? (
         <div id="action-panel-body" className="action-shell">
           <div className="action-status-bar">
-            <span className="action-status-label">当前</span>
+            <span className="action-status-label">{uiCopy.actionPanel.currentLabel}</span>
             <strong>{copy.title}</strong>
           </div>
 
-        {!request ? (
-          <div className="action-idle">
-            <strong>{copy.heading}</strong>
-            <p>{copy.instruction}</p>
-            <div className="idle-pulse" aria-hidden="true">
-              <span />
-              <span />
-              <span />
+          {!request && !hasSupplementalContent ? (
+            <div className="action-idle">
+              <strong>{copy.heading}</strong>
+              <p>{copy.instruction}</p>
+              <div className="idle-pulse" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+
+          {!request && hasSupplementalContent ? supplementalPanel : null}
 
         {request ? (
           <>
-            <p className="action-prompt">{request.prompt}</p>
+            <p className="action-prompt">{copy.instruction}</p>
+            <p className="action-rule">{request.prompt}</p>
             {actionRuleHint[request.action_type] ? (
               <p className="action-rule">{actionRuleHint[request.action_type]}</p>
             ) : null}
@@ -302,7 +324,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                 />
                 <small>
                   <span aria-live="polite">{speechText.trim().length}/200</span>
-                  <span className="hint-key">Ctrl/⌘ + Enter 发送</span>
+                  <span className="hint-key">{uiCopy.actionPanel.shortcutHint}</span>
                 </small>
               </label>
             ) : null}
@@ -311,7 +333,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
               <div
                 className="target-grid target-grid--triad"
                 role="group"
-                aria-label="女巫行动"
+                aria-label={uiCopy.actionPanel.witchActionAria}
               >
                 {witchActions.includes("WITCH_SAVE") ? (
                   <button
@@ -323,7 +345,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                       setSelectedTarget(null);
                     }}
                   >
-                    救人
+                    {uiCopy.actionPanel.witchSave}
                   </button>
                 ) : null}
                 {witchActions.includes("WITCH_POISON") ? (
@@ -336,7 +358,7 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                       setSelectedTarget(null);
                     }}
                   >
-                    毒人
+                    {uiCopy.actionPanel.witchPoison}
                   </button>
                 ) : null}
                 {witchActions.includes("PASS") ? (
@@ -349,14 +371,14 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
                       setSelectedTarget(null);
                     }}
                   >
-                    跳过
+                    {uiCopy.actionPanel.witchPass}
                   </button>
                 ) : null}
               </div>
             ) : null}
 
             {request.action_type === "WITCH_ACTION" && selectedWitchAction === "WITCH_POISON" ? (
-              <div className="target-grid" role="group" aria-label="毒药目标">
+              <div className="target-grid" role="group" aria-label={uiCopy.actionPanel.poisonTargetAria}>
                 {request.allowed_targets.map((target) => (
                   <button
                     key={target}
@@ -373,20 +395,20 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
             ) : null}
 
             {request.action_type === "VOTE" ? (
-              <div className="target-grid target-grid--single" role="group" aria-label="投票操作">
+              <div className="target-grid target-grid--single" role="group" aria-label={uiCopy.actionPanel.voteActionAria}>
                 <button
                   type="button"
                   className={selectedTarget === "PASS" ? "target-button is-selected" : "target-button"}
                   aria-pressed={selectedTarget === "PASS"}
                   onClick={() => setSelectedTarget("PASS")}
                 >
-                  弃票
+                  {uiCopy.actionPanel.votePass}
                 </button>
               </div>
             ) : null}
 
             {isTargetedAction(request.action_type) ? (
-              <div className="target-grid" role="group" aria-label="合法目标">
+              <div className="target-grid" role="group" aria-label={uiCopy.actionPanel.allowedTargetAria}>
                 {request.allowed_targets.map((target) => (
                   <button
                     key={target}
@@ -418,14 +440,16 @@ export function ActionPanel({ request, onSubmit }: ActionPanelProps) {
             {copy.tone === "danger" && !submitDisabled ? (
               <p className="action-hint">
                 {confirmingDanger
-                  ? "再次按下以落定；按 Esc 取消。"
-                  : "此举关乎生死，按下后需再按一次确认。"}
+                  ? uiCopy.actionPanel.dangerArmedHint
+                  : uiCopy.actionPanel.dangerIdleHint}
               </p>
             ) : null}
 
             {isTargetedAction(request.action_type) ? (
-              <p className="action-hint action-hint--muted">数字键 1–9 可快速挑选座位。</p>
+              <p className="action-hint action-hint--muted">{uiCopy.actionPanel.targetedHint}</p>
             ) : null}
+
+            {supplementalPanel}
           </>
         ) : null}
         </div>

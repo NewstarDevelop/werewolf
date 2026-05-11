@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { getIdleCopy, submitActionCopy } from "./copy";
+import { getIdleCopy, submitActionCopy, uiCopy } from "./copy";
 import { GAME_OVER_CLOSE_CODE, RECONNECT_DELAY_MS, createGameSocketUrl } from "./ws/client";
 
 type MockSocketEvent = MessageEvent | CloseEvent;
@@ -108,7 +108,7 @@ describe("App", () => {
 
     const view = render(<App />);
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "疾" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: "快" }));
     expect(window.localStorage.getItem("werewolf.aiPace")).toBe("fast");
 
     fireEvent.click(within(view.container).getByRole("button", { name: "新局" }));
@@ -131,7 +131,7 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("3号状态")).toHaveTextContent("推演中");
+      expect(within(view.container).getByLabelText("3号状态")).toHaveTextContent("思考中");
     });
   });
 
@@ -302,7 +302,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(view.container.querySelector("[data-game-phase=\"NIGHT_START\"]")).not.toBeNull();
-      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("第 2 日 · 入夜");
+      expect(within(view.container).getByLabelText("游戏状态提示")).toHaveTextContent("第 2 天 · 夜晚开始");
     });
   });
 
@@ -323,8 +323,8 @@ describe("App", () => {
 
     await waitFor(() => {
       const logList = within(view.container).getByLabelText("对局日志列表");
-      expect(within(logList).getByText("你的查验结果是：5号是狼人。")).toBeInTheDocument();
-      expect(within(logList).getByText("私见")).toBeInTheDocument();
+      expect(within(logList).getByText("你的查验结果是：5号玩家是狼人。")).toBeInTheDocument();
+      expect(within(logList).getByText("私信")).toBeInTheDocument();
     });
   });
 
@@ -348,8 +348,8 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("夜晚回执");
-      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 5 号。");
+      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent(uiCopy.app.nightFeedbackLabel);
+      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 5号玩家。");
     });
   });
 
@@ -379,7 +379,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const rows = Array.from(view.container.querySelectorAll(".chat-row"));
-      expect(rows.some((row) => row.classList.contains("is-system") && row.textContent?.includes("天黑请闭眼。"))).toBe(true);
+      expect(rows.some((row) => row.classList.contains("is-system") && row.textContent?.includes("天黑，请闭眼。"))).toBe(true);
       expect(rows.some((row) => row.classList.contains("is-speech") && row.textContent?.includes("3号玩家") && row.textContent?.includes("3号发言：我先听后置位。"))).toBe(true);
     });
   });
@@ -401,7 +401,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 预言家");
-      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("局外人");
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("身份未知");
     });
   });
 
@@ -428,7 +428,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 女巫");
-      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("局外人");
+      expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("身份未知");
     });
   });
 
@@ -448,7 +448,7 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("墓碑");
+      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("已出局");
     });
   });
 
@@ -515,9 +515,9 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      const banner = within(view.container).getByLabelText("战局提示");
-      expect(banner).toHaveTextContent("昨夜有名");
-      expect(banner).toHaveTextContent("4号玩家 已成墓碑，4号玩家 尚有遗言。");
+      const banner = within(view.container).getByLabelText("游戏状态提示");
+      expect(banner).toHaveTextContent("昨夜死亡");
+      expect(banner).toHaveTextContent("4号玩家 已出局，4号玩家 可以发表遗言。");
     });
   });
 
@@ -548,12 +548,14 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("4号状态")).toHaveTextContent("墓碑");
-      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("墓碑");
-      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("票落成局");
-      expect(within(view.container).getByLabelText("战局提示")).toHaveTextContent("刚刚开票：2号玩家被放逐出局。");
-      expect(within(view.container).getByLabelText("投票票型")).toHaveTextContent("2号玩家被放逐出局。");
-      expect(within(view.container).getByLabelText("2号玩家得票来源")).toHaveTextContent("1号玩家");
+      const actionPanel = view.container.querySelector(".action-panel");
+      expect(actionPanel).not.toBeNull();
+      expect(within(view.container).getByLabelText("4号状态")).toHaveTextContent("已出局");
+      expect(within(view.container).getByLabelText("2号状态")).toHaveTextContent("已出局");
+      expect(within(view.container).getByLabelText("游戏状态提示")).toHaveTextContent("投票已结算");
+      expect(within(view.container).getByLabelText("游戏状态提示")).toHaveTextContent("投票结果：2号玩家被放逐出局。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("投票票型")).toHaveTextContent("2号玩家被放逐出局。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("2号玩家得票来源")).toHaveTextContent("1号玩家");
     });
   });
 
@@ -665,18 +667,20 @@ describe("App", () => {
     });
 
     await waitFor(() => {
+      const actionPanel = view.container.querySelector(".action-panel");
+      expect(actionPanel).not.toBeNull();
       const logList = within(view.container).getByLabelText("对局日志列表");
       expect(within(logList).getByText("狼人已全部出局，好人阵营获胜。")).toBeInTheDocument();
       expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("狼人");
       expect(within(view.container).getByLabelText("2号玩家")).toHaveTextContent("预言家");
-      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
-      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
-      expect(within(view.container).getByLabelText("结算复盘")).toHaveTextContent("狼人：1号；神职：2号；平民：无。");
-      expect(within(view.container).getByLabelText("夜间因果")).toHaveTextContent("狼人刀向：2号玩家");
-      expect(within(view.container).getByLabelText("白天因果")).toHaveTextContent("1号以 3 票成为最高票，被放逐出局。");
-      expect(within(view.container).getByLabelText("完整时间线")).toHaveTextContent("昨夜平安夜。");
-      expect(within(view.container).getByLabelText("完整时间线")).toHaveTextContent("1号玩家被放逐出局。");
-      expect(within(view.container).getByLabelText("终局票型")).toHaveTextContent("3票");
+      expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
+      expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("狼人：1号；神职：2号；平民：无。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("夜间因果")).toHaveTextContent("狼人击杀目标：2号玩家");
+      expect(within(actionPanel as HTMLElement).getByLabelText("白天因果")).toHaveTextContent("1号玩家以 3 票成为最高票，被放逐出局。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("完整时间线")).toHaveTextContent("昨夜平安夜。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("完整时间线")).toHaveTextContent("1号玩家被放逐出局。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("终局票型")).toHaveTextContent("3票");
     });
   });
 
@@ -794,7 +798,7 @@ describe("App", () => {
     expect(socket?.sentPayloads).toHaveLength(0);
     fireEvent.click(
       within(view.container).getByRole("button", {
-        name: `再按一次 · ${submitActionCopy.HUNTER_SHOOT.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.HUNTER_SHOOT.submitLabel),
       }),
     );
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { roleGuides } from "../copy";
+import { roleGuides, uiCopy } from "../copy";
 
 interface RoleGuideProps {
   roleCode?: string;
@@ -23,9 +23,9 @@ export function RoleGuide({ roleCode }: RoleGuideProps) {
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="role-guide__summary">
-        <span className="role-guide__label">{guide.name}技能</span>
+        <span className="role-guide__label">{guide.name}{uiCopy.roleGuide.suffix}</span>
         <span className="role-guide__chevron" aria-hidden="true">
-          {open ? "收起" : "展开"}
+          {open ? uiCopy.roleGuide.collapse : uiCopy.roleGuide.expand}
         </span>
       </summary>
       <p className="role-guide__one-liner">{guide.oneLiner}</p>

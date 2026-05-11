@@ -10,11 +10,12 @@ import { VoteBoard } from "./components/VoteBoard";
 import {
   aiPaceOptions,
   connectionPhaseCopy,
+  formatGameMessage,
   formatSeat,
-  formatSeatList,
-  gamePhaseCopy,
+  formatPhaseTitle,
   identityStateCopy,
   roleQuickTips,
+  uiCopy,
   type AIPace,
 } from "./copy";
 import {
@@ -53,14 +54,6 @@ function persistAIPace(pace: AIPace): void {
   window.localStorage.setItem(AI_PACE_STORAGE_KEY, pace);
 }
 
-function formatPhaseTitle(dayCount: number, phase: string | null): string {
-  if (!phase) {
-    return "战局未定";
-  }
-  const phaseLabel = gamePhaseCopy[phase] ?? "局中";
-  return `第 ${dayCount} 日 · ${phaseLabel}`;
-}
-
 interface BattleSignal {
   title: string;
   detail: string;
@@ -93,17 +86,17 @@ export function App() {
   const humanRoleTip = humanPlayer?.roleCode ? roleQuickTips[humanPlayer.roleCode] : undefined;
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
-    ? "轮到你落子"
+    ? uiCopy.app.spotlight.pending
     : latestOutcome
-      ? "帷幕落下"
+      ? uiCopy.app.spotlight.terminal
       : phase === "open"
-        ? "桌上正在推演"
-        : "等候入席";
+        ? uiCopy.app.spotlight.open
+        : uiCopy.app.spotlight.idle;
 
   const connectionLabel = isTerminal
-    ? "本局已散场"
+    ? uiCopy.app.connection.terminal
     : reconnectPending
-      ? "连接已断，正在接续"
+      ? uiCopy.app.connection.reconnecting
       : connectionPhaseCopy[phase];
 
   const canManualReconnect = !isTerminal
@@ -111,39 +104,42 @@ export function App() {
 
   const battleSignal: BattleSignal = latestOutcome
     ? {
-        title: latestOutcome.message,
-        detail: "一局终章，身份尽数揭示。",
+        title: formatGameMessage(latestOutcome.message),
+        detail: uiCopy.app.battle.terminalDetail,
         tone: "terminal",
       }
     : pendingAction
       ? {
-          title: "轮到你落子",
-          detail: "轮到你了，下方落下你的决定。",
+          title: uiCopy.app.battle.pendingTitle,
+          detail: uiCopy.app.battle.pendingDetail,
           tone: "danger",
         }
       : lastVoteResult
         ? {
-            title: lastVoteResult.banishedSeat === null ? "票归无声" : "票落成局",
-            detail: `刚刚开票：${lastVoteResult.summary}`,
+            title: lastVoteResult.banishedSeat === null
+              ? uiCopy.app.battle.voteMutedTitle
+              : uiCopy.app.battle.voteDangerTitle,
+            detail: uiCopy.app.battle.formatVoteDetail(lastVoteResult.summary),
             tone: lastVoteResult.banishedSeat === null ? "muted" : "danger",
           }
         : lastDeathReveal
           ? {
-              title: lastDeathReveal.deadSeats.length > 0 ? "昨夜有名" : "平安夜",
+              title: lastDeathReveal.deadSeats.length > 0
+                ? uiCopy.app.battle.deathTitle
+                : uiCopy.app.battle.peaceTitle,
               detail: lastDeathReveal.deadSeats.length > 0
-                ? `${formatSeatList(lastDeathReveal.deadSeats)} 已成墓碑${
-                    lastDeathReveal.eligibleLastWords.length > 0
-                      ? `，${formatSeatList(lastDeathReveal.eligibleLastWords)} 尚有遗言。`
-                      : "。"
-                  }`
-                : "天亮之后，桌上无人倒下。",
+                ? uiCopy.app.battle.formatDeathDetail(
+                    lastDeathReveal.deadSeats,
+                    lastDeathReveal.eligibleLastWords,
+                  )
+                : uiCopy.app.battle.peaceDetail,
               tone: lastDeathReveal.deadSeats.length > 0 ? "danger" : "muted",
             }
           : {
               title: currentPhase ? formatPhaseTitle(dayCount, currentPhase) : spotlightText,
               detail: currentPhase
-                ? "桌上仍在推演，消息会持续涌入。"
-                : "等候第一条局内消息落下。",
+                ? uiCopy.app.battle.phaseDetail
+                : uiCopy.app.battle.idleDetail,
               tone: "muted",
             };
 
@@ -307,7 +303,7 @@ export function App() {
       >
         <div className="app-frame">
           <header className="app-header">
-            <h1>狼人杀对局面板</h1>
+            <h1>{uiCopy.app.title}</h1>
             <div className="app-header__actions">
               {humanPlayer ? (
                 <span className="identity-badge">
@@ -331,9 +327,9 @@ export function App() {
                 className="new-game-button"
                 onClick={handleNewGame}
               >
-                新局
+                {uiCopy.app.newGame}
               </button>
-              <div className="pace-control" role="group" aria-label="AI 节奏">
+              <div className="pace-control" role="group" aria-label={uiCopy.app.aiPaceAria}>
                 {aiPaceOptions.map((option) => (
                   <button
                     key={option.value}
@@ -350,9 +346,9 @@ export function App() {
                 type="button"
                 className="theme-toggle"
                 onClick={handleToggleTheme}
-                aria-label={theme === "light" ? "切换至暗色主题" : "切换至亮色主题"}
+                aria-label={theme === "light" ? uiCopy.app.themeToDark : uiCopy.app.themeToLight}
               >
-                {theme === "light" ? "暗" : "亮"}
+                {theme === "light" ? uiCopy.app.themeDarkText : uiCopy.app.themeLightText}
               </button>
             </div>
             <p className="app-status" role="status" aria-live="polite">
@@ -369,7 +365,7 @@ export function App() {
                   className="app-status__retry"
                   onClick={handleManualReconnect}
                 >
-                  立即重连
+                  {uiCopy.app.reconnectNow}
                 </button>
               ) : null}
             </p>
@@ -377,23 +373,17 @@ export function App() {
 
           <section
             className={`battle-signal is-${battleSignal.tone}`}
-            aria-label={latestOutcome ? "终局提示" : "战局提示"}
+            aria-label={latestOutcome ? uiCopy.app.terminalAria : uiCopy.app.battleAria}
           >
             <strong>{battleSignal.title}</strong>
             <span>{battleSignal.detail}</span>
           </section>
 
           {lastNightActionFeedback ? (
-            <section className="night-feedback" aria-label="夜晚行动反馈">
-              <span>夜晚回执</span>
-              <strong>{lastNightActionFeedback.message}</strong>
+            <section className="night-feedback" aria-label={uiCopy.app.nightFeedbackAria}>
+              <span>{uiCopy.app.nightFeedbackLabel}</span>
+              <strong>{formatGameMessage(lastNightActionFeedback.message)}</strong>
             </section>
-          ) : null}
-
-          {settlementReview ? (
-            <SettlementReview review={settlementReview} />
-          ) : lastVoteResult ? (
-            <VoteBoard result={lastVoteResult} />
           ) : null}
 
           <PlayerList players={players} />
@@ -404,7 +394,13 @@ export function App() {
             key={connectionAttempt}
             request={pendingAction}
             onSubmit={handleSubmitAction}
-          />
+          >
+            {settlementReview ? (
+              <SettlementReview review={settlementReview} />
+            ) : lastVoteResult ? (
+              <VoteBoard result={lastVoteResult} />
+            ) : null}
+          </ActionPanel>
         </div>
       </main>
     </ErrorBoundary>

@@ -2,13 +2,24 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ActionPanel } from "./ActionPanel";
-import { getIdleCopy, speechPlaceholder, submitActionCopy } from "../copy";
+import { getIdleCopy, speechPlaceholder, submitActionCopy, uiCopy } from "../copy";
 
 describe("ActionPanel", () => {
   it("renders waiting state when no input is required", () => {
     render(<ActionPanel request={null} onSubmit={vi.fn()} />);
 
     expect(screen.getByText(getIdleCopy().heading)).toBeInTheDocument();
+  });
+
+  it("renders supplemental match review content in the panel", () => {
+    const view = render(
+      <ActionPanel request={null} onSubmit={vi.fn()}>
+        <section aria-label="对局回看测试">复盘内容</section>
+      </ActionPanel>,
+    );
+
+    expect(screen.getByLabelText("对局回看")).toHaveTextContent("复盘内容");
+    expect(view.container.querySelector(".action-idle")).toBeNull();
   });
 
   it("submits speech payload", () => {
@@ -120,7 +131,7 @@ describe("ActionPanel", () => {
 
     fireEvent.click(
       within(view.container).getByRole("button", {
-        name: `再按一次 · ${submitActionCopy.HUNTER_SHOOT.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.HUNTER_SHOOT.submitLabel),
       }),
     );
 
@@ -186,7 +197,7 @@ describe("ActionPanel", () => {
     // WITCH_POISON is destructive → second click commits.
     fireEvent.click(
       within(view.container).getByRole("button", {
-        name: `再按一次 · ${submitActionCopy.WITCH_POISON.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.WITCH_POISON.submitLabel),
       }),
     );
     expect(onSubmit).toHaveBeenLastCalledWith({
@@ -229,7 +240,7 @@ describe("ActionPanel", () => {
     );
     fireEvent.click(
       within(view.container).getByRole("button", {
-        name: `再按一次 · ${submitActionCopy.WITCH_POISON.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.WITCH_POISON.submitLabel),
       }),
     );
 
@@ -263,7 +274,7 @@ describe("ActionPanel", () => {
 
     fireEvent.click(
       within(view.container).getByRole("button", {
-        name: `再按一次 · ${submitActionCopy.WOLF_KILL.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.WOLF_KILL.submitLabel),
       }),
     );
     expect(onSubmit).toHaveBeenCalledWith({
@@ -296,7 +307,7 @@ describe("ActionPanel", () => {
 
     expect(
       within(view.container).queryByRole("button", {
-        name: `再按一次 · ${submitActionCopy.WOLF_KILL.submitLabel}`,
+        name: uiCopy.actionPanel.confirmAgain(submitActionCopy.WOLF_KILL.submitLabel),
       }),
     ).toBeNull();
     expect(onSubmit).not.toHaveBeenCalled();

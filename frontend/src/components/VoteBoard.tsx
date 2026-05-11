@@ -1,4 +1,4 @@
-import { formatSeat } from "../copy";
+import { formatGameMessage, formatSeat, uiCopy } from "../copy";
 
 export interface VoteBoardResult {
   votes: Record<number, number>;
@@ -17,7 +17,7 @@ function numberEntries(record: Record<number, number>) {
 }
 
 function formatVoteCount(count: number) {
-  return `${count}票`;
+  return uiCopy.voteBoard.formatCount(count);
 }
 
 export function VoteBoard({ result }: VoteBoardProps) {
@@ -36,13 +36,13 @@ export function VoteBoard({ result }: VoteBoardProps) {
   const totalParticipants = totalVotes + result.abstentions.length;
 
   return (
-    <section className="vote-board" aria-label="投票票型">
+    <section className="vote-board" aria-label={uiCopy.voteBoard.aria}>
       <header className="vote-board__header">
         <div>
-          <h2>开票票型</h2>
-          <p>{result.summary}</p>
+          <h2>{uiCopy.voteBoard.title}</h2>
+          <p>{formatGameMessage(result.summary)}</p>
         </div>
-        <span className="vote-board__count">{totalParticipants} 人计票</span>
+        <span className="vote-board__count">{uiCopy.voteBoard.formatParticipantCount(totalParticipants)}</span>
       </header>
 
       <div className="vote-board__rows">
@@ -65,14 +65,14 @@ export function VoteBoard({ result }: VoteBoardProps) {
               <div
                 className="vote-meter"
                 role="meter"
-                aria-label={`${formatSeat(row.targetSeat)}得票`}
+                aria-label={uiCopy.voteBoard.formatMeterAria(row.targetSeat)}
                 aria-valuemin={0}
                 aria-valuemax={maxVotes}
                 aria-valuenow={row.count}
               >
                 <span className="vote-meter__fill" style={{ width }} />
               </div>
-              <div className="vote-voters" aria-label={`${formatSeat(row.targetSeat)}得票来源`}>
+              <div className="vote-voters" aria-label={uiCopy.voteBoard.formatSourceAria(row.targetSeat)}>
                 {row.voters.map((voterSeat) => (
                   <span key={voterSeat}>{formatSeat(voterSeat)}</span>
                 ))}
@@ -84,10 +84,10 @@ export function VoteBoard({ result }: VoteBoardProps) {
         {result.abstentions.length > 0 ? (
           <div className="vote-row is-muted">
             <div className="vote-row__label">
-              <strong>弃票</strong>
+              <strong>{uiCopy.voteBoard.abstain}</strong>
               <span>{formatVoteCount(result.abstentions.length)}</span>
             </div>
-            <div className="vote-voters" aria-label="弃票玩家">
+            <div className="vote-voters" aria-label={uiCopy.voteBoard.abstainAria}>
               {result.abstentions.map((seatId) => (
                 <span key={seatId}>{formatSeat(seatId)}</span>
               ))}

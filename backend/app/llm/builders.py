@@ -15,6 +15,8 @@ from app.llm.prompts import (
     WOLF_SIDE_OBJECTIVE,
 )
 from app.llm.schemas import PromptEnvelope
+from app.llm.tactics import select_ai_tactic
+from app.llm.phrasebook import phrasebook_prompt_guide
 
 
 def _objective_for_role(role: Role) -> str:
@@ -208,6 +210,7 @@ def _context_section(
         f"当前天数：第 {view['day_count']} 天\n"
         f"你的性格：{personality}\n"
         f"局势摘要：{_situation_summary(view)}\n"
+        f"本轮战术目标：{select_ai_tactic(context, seat_id).to_prompt_line()}\n"
         f"战术连续性提示：{_strategic_continuity(context, seat_id)}\n"
         f"立场摘要：{_ai_stance_summary(context, seat_id)}\n"
         f"你的既往公开发言：{_stable_json(_own_public_statements(view, seat_id))}\n"
@@ -232,7 +235,8 @@ def build_speech_prompt(context: GameContext, *, seat_id: int) -> PromptEnvelope
             f"{SYSTEM_GUARDRAILS}\n"
             f"{_objective_for_role(player.role)}\n"
             f"{ROLE_STRATEGY_GUIDE}\n"
-            f"{TACTICAL_REASONING_GUIDE}"
+            f"{TACTICAL_REASONING_GUIDE}\n"
+            f"{phrasebook_prompt_guide()}"
         ),
         context_prompt=_context_section(context, view, personality, seat_id=seat_id),
         task_prompt=SPEECH_TASK_TEMPLATE.format(seat_label=f"{seat_id}号"),
@@ -253,7 +257,8 @@ def build_vote_prompt(
             f"{SYSTEM_GUARDRAILS}\n"
             f"{_objective_for_role(player.role)}\n"
             f"{ROLE_STRATEGY_GUIDE}\n"
-            f"{TACTICAL_REASONING_GUIDE}"
+            f"{TACTICAL_REASONING_GUIDE}\n"
+            f"{phrasebook_prompt_guide()}"
         ),
         context_prompt=_context_section(context, view, personality, seat_id=seat_id),
         task_prompt=_task_with_allowed_targets(VOTE_TASK_TEMPLATE, allowed_targets),
@@ -274,7 +279,8 @@ def build_night_prompt(
             f"{SYSTEM_GUARDRAILS}\n"
             f"{_objective_for_role(player.role)}\n"
             f"{ROLE_STRATEGY_GUIDE}\n"
-            f"{TACTICAL_REASONING_GUIDE}"
+            f"{TACTICAL_REASONING_GUIDE}\n"
+            f"{phrasebook_prompt_guide()}"
         ),
         context_prompt=_context_section(context, view, personality, seat_id=seat_id),
         task_prompt=_task_with_allowed_targets(NIGHT_TASK_TEMPLATE, allowed_targets),

@@ -1,7 +1,7 @@
 /* ==========================================================================
    Werewolf — Main stylesheet (token-driven)
    Tokens: ./styles/tokens.css (single source of truth)
-   布局：单焦点 · 桌面中心 · 环形座位 · 文稿式聊天流
+   布局：单焦点 · 桌面中心 · 环形座位 · 日志流
    ========================================================================== */
 
 @import "./styles/tokens.css";
@@ -284,7 +284,7 @@ h1 {
 }
 
 /* --------------------------------------------------------------------------
-   Battle signal — 战局提示（无卡片）
+   Battle signal — 游戏状态提示（无卡片）
    -------------------------------------------------------------------------- */
 
 .battle-signal {
@@ -320,7 +320,7 @@ h1 {
 }
 
 /* --------------------------------------------------------------------------
-   Night feedback — 私有夜晚回执
+   Night feedback — 私有夜晚操作结果
    -------------------------------------------------------------------------- */
 
 .night-feedback {
@@ -380,7 +380,7 @@ h1 {
   letter-spacing: var(--letter-spacing-base);
 }
 
-/* 环形座位 — 每卡片靠墨色浓淡与位移构成桌游感 */
+/* 环形座位 — 每个座位用层级和位移区分状态 */
 .player-ring {
   list-style: none;
   display: flex;
@@ -459,7 +459,7 @@ h1 {
   line-height: 1.4;
 }
 
-/* 死亡 — 墓碑仪式 */
+/* 出局状态 */
 .seat.is-dead {
   opacity: 0.45;
   filter: saturate(0.25);
@@ -891,7 +891,7 @@ h1 {
 }
 
 /* --------------------------------------------------------------------------
-   Chat — 文稿式日志流（无卡片）
+   Chat — 对局日志流（无卡片）
    -------------------------------------------------------------------------- */
 
 .chat-section {
@@ -1069,6 +1069,10 @@ h1 {
   box-shadow: var(--shadow-sm);
 }
 
+.action-panel.has-supplemental {
+  max-width: var(--chat-max-width);
+}
+
 .action-panel.is-idle {
   position: static;
   bottom: auto;
@@ -1079,6 +1083,22 @@ h1 {
 
 .action-shell {
   min-width: 0;
+}
+
+.action-panel__supplemental {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.action-panel__supplemental > .settlement-review,
+.action-panel__supplemental > .vote-board {
+  max-width: none;
+  padding: 0;
+  border: 0;
+  animation: none;
 }
 
 .panel-header {
@@ -1376,7 +1396,7 @@ h1 {
 }
 
 /* --------------------------------------------------------------------------
-   Error boundary — 文人式的崩溃兜底
+   Error boundary — 页面错误兜底
    -------------------------------------------------------------------------- */
 
 .error-fallback {

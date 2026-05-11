@@ -8,6 +8,7 @@ from app.llm.prompts import (
     VOTE_TASK_TEMPLATE,
     WOLF_SIDE_OBJECTIVE,
 )
+from app.llm.phrasebook import phrasebook_prompt_guide
 
 
 def test_system_guardrails_include_fourth_wall_and_length_limits() -> None:
@@ -27,3 +28,11 @@ def test_task_templates_keep_current_stage_focus() -> None:
     assert "{seat_label}" in SPEECH_TASK_TEMPLATE
     assert "投票阶段" in VOTE_TASK_TEMPLATE
     assert "夜晚行动阶段" in NIGHT_TASK_TEMPLATE
+
+
+def test_phrasebook_guide_is_prompt_ready() -> None:
+    guide = phrasebook_prompt_guide()
+
+    assert "局内话术偏好" in guide
+    assert "查杀" in guide
+    assert "倒钩" in guide

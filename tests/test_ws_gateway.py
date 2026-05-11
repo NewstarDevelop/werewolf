@@ -959,7 +959,7 @@ def test_websocket_game_engine_uses_default_llm_client_for_ai_speech() -> None:
     speech = asyncio.run(engine._llm_speaker(context, 2))
 
     assert speech
-    assert "听" in speech
+    assert "狼坑" in speech
 
 
 def test_websocket_game_engine_run_loop_emits_local_llm_speech() -> None:
@@ -987,7 +987,7 @@ def test_websocket_game_engine_run_loop_emits_local_llm_speech() -> None:
         if payload["type"] == "CHAT_UPDATE" and payload["data"]["visibility"] == "public"
     ]
 
-    assert any("信息还不够，我先听后置位怎么聊。" in message for message in public_messages)
+    assert any("狼坑" in message for message in public_messages)
 
 
 def test_websocket_game_engine_requests_and_consumes_human_speech() -> None:

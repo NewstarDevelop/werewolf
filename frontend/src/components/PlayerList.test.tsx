@@ -30,8 +30,8 @@ describe("PlayerList", () => {
     render(<PlayerList players={players} />);
 
     expect(screen.getByText("真人 · 预言家")).toBeInTheDocument();
-    expect(screen.getByLabelText("2号状态")).toHaveTextContent("墓碑");
-    expect(screen.getByLabelText("3号状态")).toHaveTextContent("推演中");
+    expect(screen.getByLabelText("2号状态")).toHaveTextContent("已出局");
+    expect(screen.getByLabelText("3号状态")).toHaveTextContent("思考中");
   });
 
   it("renders revealed non-human wolf teammates", () => {

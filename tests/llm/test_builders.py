@@ -33,8 +33,11 @@ def test_build_speech_prompt_includes_role_goal_and_private_view() -> None:
 
     assert "隐藏同伴身份" in prompt.system_prompt
     assert "不要主动暴露狼同伴" in prompt.system_prompt
+    assert "局内话术偏好" in prompt.system_prompt
+    assert "查杀" in prompt.system_prompt
     assert "激进悍跳" in prompt.context_prompt
     assert "局势摘要" in prompt.context_prompt
+    assert "本轮战术目标" in prompt.context_prompt
     assert "立场摘要" in prompt.context_prompt
     assert "2号发言：我先站边自己听后置位。" in prompt.context_prompt
     assert "你的狼同伴是 6号 和 8号。" in prompt.context_prompt
@@ -64,6 +67,16 @@ def test_build_speech_prompt_includes_wolf_team_strategy_hint() -> None:
     assert "战术连续性提示" in prompt.context_prompt
     assert "狼队友存活：5号" in prompt.context_prompt
     assert "倒钩" in prompt.context_prompt
+
+
+def test_build_speech_prompt_includes_explicit_wolf_tactic() -> None:
+    context = build_context()
+    context.add_player(Player(seat_id=5, role=Role.WOLF))
+
+    prompt = build_speech_prompt(context, seat_id=2)
+
+    assert "本轮战术目标：悍跳" in prompt.context_prompt
+    assert "公开打法" in prompt.context_prompt
 
 
 def test_build_vote_prompt_includes_previous_vote_continuity() -> None:
@@ -100,6 +113,7 @@ def test_build_speech_prompt_includes_seer_check_chain_and_badge_flow() -> None:
     prompt = build_speech_prompt(context, seat_id=1)
 
     assert "第1夜验2号=狼人" in prompt.context_prompt
+    assert "本轮战术目标：报验人；目标：2号" in prompt.context_prompt
     assert "警徽流" in prompt.context_prompt
 
 

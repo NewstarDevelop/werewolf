@@ -5,6 +5,7 @@ import {
   identityStateCopy,
   narratorSpeaker,
   toRoleLabel,
+  uiCopy,
 } from "../copy";
 import type {
   ChatUpdateEnvelope,
@@ -472,7 +473,7 @@ function buildSettlementReview(payload: GameOverEnvelope["data"]): SettlementRev
     winningSide: payload.winning_side,
     summary: payload.summary,
     outcomeReason: recap?.outcome_reason ?? payload.summary,
-    roleRevealSummary: recap?.role_reveal_summary ?? "身份揭示暂不可用。",
+    roleRevealSummary: recap?.role_reveal_summary ?? uiCopy.settlement.roleRevealMissing,
     dayCount: recap?.day_count ?? null,
     players,
     nights: (recap?.nights ?? []).map((night) => ({
@@ -518,6 +519,9 @@ function buildSettlementReview(payload: GameOverEnvelope["data"]): SettlementRev
 
 function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
   if (payload.type === "SYSTEM_MSG") {
+    if (payload.meta?.status === "ack" || payload.meta?.status === "reject") {
+      return null;
+    }
     return {
       id: `system-${crypto.randomUUID()}`,
       kind: "system",
@@ -549,12 +553,12 @@ function buildChatEntry(payload: ServerEnvelope): ChatEntry | null {
           : "system",
       message: payload.data.message,
       speaker: payload.data.visibility === "private"
-        ? payload.data.speaker ?? "你的视角"
+        ? uiCopy.chat.privateSpeaker
         : structuredSpeaker
           ? structuredSpeaker
           : publicSpeechMatch
           ? formatSeat(Number(publicSpeechMatch[1]))
-          : payload.data.speaker ?? narratorSpeaker,
+          : narratorSpeaker,
     };
   }
 

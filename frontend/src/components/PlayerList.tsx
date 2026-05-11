@@ -1,4 +1,4 @@
-import { formatSeat, identityStateCopy } from "../copy";
+import { formatSeat, identityStateCopy, uiCopy } from "../copy";
 
 export interface PlayerListItem {
   seatId: number;
@@ -18,14 +18,14 @@ export function PlayerList({ players }: PlayerListProps) {
   const thinkingCount = players.filter((player) => player.isThinking).length;
 
   return (
-    <section className="desk" aria-label="桌面座位">
-      <ol className="player-ring" aria-label="玩家状态列表">
+    <section className="desk" aria-label={uiCopy.playerList.deskAria}>
+      <ol className="player-ring" aria-label={uiCopy.playerList.listAria}>
         {players.map((player) => {
           const statusText = player.isAlive
             ? player.isThinking
-              ? "仍在局内 · 推演中"
-              : "仍在局内"
-            : "墓碑";
+              ? uiCopy.playerList.thinking
+              : uiCopy.playerList.alive
+            : uiCopy.playerList.dead;
 
           return (
             <li
@@ -45,10 +45,10 @@ export function PlayerList({ players }: PlayerListProps) {
               <span className="seat-name">{formatSeat(player.seatId)}</span>
               <span className="seat-role">
                 {player.isHuman
-                  ? `真人 · ${player.roleLabel ?? identityStateCopy.unknownRole}`
-                  : player.roleLabel ?? "局外人"}
+                  ? `${uiCopy.playerList.humanPrefix} · ${player.roleLabel ?? identityStateCopy.unknownRole}`
+                  : player.roleLabel ?? uiCopy.playerList.hiddenRole}
               </span>
-              <span className="seat-status" aria-label={`${player.seatId}号状态`}>
+              <span className="seat-status" aria-label={uiCopy.playerList.formatSeatStatusAria(player.seatId)}>
                 {statusText}
               </span>
             </li>
@@ -56,8 +56,7 @@ export function PlayerList({ players }: PlayerListProps) {
         })}
       </ol>
       <p className="desk-stats" aria-live="polite">
-        {aliveCount} 人在局
-        {thinkingCount > 0 ? ` · ${thinkingCount} 人推演中` : ""}
+        {uiCopy.playerList.formatStats(aliveCount, thinkingCount)}
       </p>
     </section>
   );

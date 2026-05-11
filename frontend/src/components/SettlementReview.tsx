@@ -1,7 +1,10 @@
 import {
+  formatGameMessage,
   formatSeat,
   formatSeatList,
   gamePhaseCopy,
+  identityStateCopy,
+  uiCopy,
 } from "../copy";
 import type {
   SettlementReviewData,
@@ -16,34 +19,34 @@ interface SettlementReviewProps {
 
 function outcomeLabel(side: SettlementReviewData["winningSide"]) {
   if (side === "GOOD") {
-    return "好人胜利";
+    return uiCopy.settlement.outcomeGood;
   }
   if (side === "WOLF") {
-    return "狼人胜利";
+    return uiCopy.settlement.outcomeWolf;
   }
-  return "平局暂止";
+  return uiCopy.settlement.outcomeDraw;
 }
 
 function sideLabel(side: "GOOD" | "WOLF") {
-  return side === "WOLF" ? "狼人阵营" : "好人阵营";
+  return side === "WOLF" ? uiCopy.settlement.sideWolf : uiCopy.settlement.sideGood;
 }
 
 function formatPhase(dayCount: number, phase: string) {
-  return `第 ${dayCount} 日 · ${gamePhaseCopy[phase] ?? phase}`;
+  return `第 ${dayCount} 天 · ${gamePhaseCopy[phase] ?? phase}`;
 }
 
 function resultLabel(result: "GOOD" | "WOLF" | null) {
   if (result === "WOLF") {
-    return "狼人";
+    return uiCopy.settlement.resultWolf;
   }
   if (result === "GOOD") {
-    return "好人";
+    return uiCopy.settlement.resultGood;
   }
-  return "未知";
+  return uiCopy.settlement.resultUnknown;
 }
 
 function seatOrNone(seatId: number | null) {
-  return seatId === null ? "无" : formatSeat(seatId);
+  return seatId === null ? uiCopy.settlement.none : formatSeat(seatId);
 }
 
 function numberEntries(record: Record<number, number>) {
@@ -52,7 +55,7 @@ function numberEntries(record: Record<number, number>) {
 
 function FinalVote({ vote }: { vote: VoteResultView | null }) {
   if (!vote) {
-    return <p className="settlement-empty">终局未经过放逐票。</p>;
+    return <p className="settlement-empty">{uiCopy.settlement.finalVoteEmpty}</p>;
   }
 
   const rows = numberEntries(vote.votes)
@@ -60,20 +63,20 @@ function FinalVote({ vote }: { vote: VoteResultView | null }) {
 
   return (
     <div className="settlement-final-vote">
-      <p>{vote.summary}</p>
+      <p>{formatGameMessage(vote.summary)}</p>
       {rows.length > 0 ? (
         <ol>
           {rows.map(([targetSeat, count]) => (
             <li key={targetSeat}>
               <strong>{formatSeat(targetSeat)}</strong>
-              <span>{count}票</span>
+              <span>{uiCopy.voteBoard.formatCount(count)}</span>
             </li>
           ))}
         </ol>
       ) : null}
       {vote.abstentions.length > 0 ? (
         <span className="settlement-final-vote__abstain">
-          弃票：{formatSeatList(vote.abstentions)}
+          {uiCopy.settlement.voteAbstainPrefix}：{formatSeatList(vote.abstentions)}
         </span>
       ) : null}
     </div>
@@ -82,35 +85,38 @@ function FinalVote({ vote }: { vote: VoteResultView | null }) {
 
 function NightCausality({ nights }: { nights: SettlementReviewNight[] }) {
   if (nights.length === 0) {
-    return <p className="settlement-empty">本局没有进入完整夜晚。</p>;
+    return <p className="settlement-empty">{uiCopy.settlement.nightEmpty}</p>;
   }
 
   return (
     <ol className="settlement-causality-list">
       {nights.map((night) => (
         <li key={night.dayCount}>
-          <span>第 {night.dayCount} 夜</span>
-          <p>狼人刀向：{seatOrNone(night.wolfTarget)}</p>
+          <span>{uiCopy.settlement.formatNightTitle(night.dayCount)}</span>
+          <p>{uiCopy.settlement.wolfTargetPrefix}：{seatOrNone(night.wolfTarget)}</p>
           <p>
-            预言家：
+            {uiCopy.settlement.seerPrefix}：
             {night.seerSeat === null || night.seerTarget === null
-              ? "未查验"
+              ? uiCopy.settlement.seerEmpty
               : `${formatSeat(night.seerSeat)} 查验 ${formatSeat(night.seerTarget)}，结果为${resultLabel(night.seerResult)}`}
           </p>
           <p>
-            女巫：
+            {uiCopy.settlement.witchPrefix}：
             {night.witchSeat === null
-              ? "未行动"
+              ? uiCopy.settlement.witchEmpty
               : [
                   night.witchSaveTarget === null
                     ? null
-                    : `救起 ${formatSeat(night.witchSaveTarget)}`,
+                    : uiCopy.settlement.formatWitchSave(night.witchSaveTarget),
                   night.witchPoisonTarget === null
                     ? null
-                    : `毒向 ${formatSeat(night.witchPoisonTarget)}`,
-                ].filter(Boolean).join("，") || "未用药"}
+                    : uiCopy.settlement.formatWitchPoison(night.witchPoisonTarget),
+                ].filter(Boolean).join("，") || uiCopy.settlement.witchNoUse}
           </p>
-          <p>夜晚结果：{night.deadSeats.length > 0 ? formatSeatList(night.deadSeats) : "平安夜"}</p>
+          <p>
+            {uiCopy.settlement.nightResultPrefix}：
+            {night.deadSeats.length > 0 ? formatSeatList(night.deadSeats) : uiCopy.settlement.peacefulNight}
+          </p>
         </li>
       ))}
     </ol>
@@ -119,14 +125,14 @@ function NightCausality({ nights }: { nights: SettlementReviewNight[] }) {
 
 function DayCausality({ days }: { days: SettlementReviewDay[] }) {
   if (days.length === 0) {
-    return <p className="settlement-empty">本局没有进入白天发言与投票。</p>;
+    return <p className="settlement-empty">{uiCopy.settlement.dayEmpty}</p>;
   }
 
   return (
     <ol className="settlement-causality-list">
       {days.map((day) => (
         <li key={day.dayCount}>
-          <span>第 {day.dayCount} 日</span>
+          <span>{uiCopy.settlement.formatDayTitle(day.dayCount)}</span>
           {day.speeches.length > 0 ? (
             <div className="settlement-speeches">
               {day.speeches.slice(0, 4).map((speech) => (
@@ -137,9 +143,12 @@ function DayCausality({ days }: { days: SettlementReviewDay[] }) {
               ))}
             </div>
           ) : (
-            <p>关键发言：无公开发言</p>
+            <p>{uiCopy.settlement.noPublicSpeech}</p>
           )}
-          <p>投票因果：{day.voteExplanation ?? "未进入放逐投票"}</p>
+          <p>
+            {uiCopy.settlement.voteCausePrefix}：
+            {day.voteExplanation ? formatGameMessage(day.voteExplanation) : uiCopy.settlement.voteCauseEmpty}
+          </p>
         </li>
       ))}
     </ol>
@@ -158,27 +167,33 @@ export function SettlementReview({ review }: SettlementReviewProps) {
   return (
     <section
       className={`settlement-review is-${review.winningSide.toLowerCase()}`}
-      aria-label="结算复盘"
+      aria-label={uiCopy.settlement.aria}
     >
       <header className="settlement-review__header">
         <div>
-          <h2>结算复盘</h2>
-          <p>{review.summary}</p>
+          <h2>{uiCopy.settlement.title}</h2>
+          <p>{formatGameMessage(review.summary)}</p>
         </div>
         <strong>{outcomeLabel(review.winningSide)}</strong>
       </header>
 
       <div className="settlement-review__stats">
-        <span>{review.dayCount === null ? "终局" : `第 ${review.dayCount} 日终局`}</span>
-        <span>原因：{review.outcomeReason}</span>
+        <span>{uiCopy.settlement.formatFinalDay(review.dayCount)}</span>
+        <span>{uiCopy.settlement.reasonPrefix}：{formatGameMessage(review.outcomeReason)}</span>
         <span>{review.roleRevealSummary}</span>
-        <span>存活：{survivors.length > 0 ? formatSeatList(survivors) : "无人"}</span>
-        <span>狼队：{wolves.length > 0 ? formatSeatList(wolves) : "无"}</span>
+        <span>
+          {uiCopy.settlement.survivorsPrefix}：
+          {survivors.length > 0 ? formatSeatList(survivors) : uiCopy.settlement.none}
+        </span>
+        <span>
+          {uiCopy.settlement.wolvesPrefix}：
+          {wolves.length > 0 ? formatSeatList(wolves) : uiCopy.settlement.none}
+        </span>
       </div>
 
       <div className="settlement-review__grid">
-        <section className="settlement-review__block" aria-label="阵营翻牌">
-          <h3>阵营翻牌</h3>
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.rosterAria}>
+          <h3>{uiCopy.settlement.rosterTitle}</h3>
           <ol className="settlement-roster">
             {review.players.map((player) => (
               <li
@@ -194,42 +209,42 @@ export function SettlementReview({ review }: SettlementReviewProps) {
                 <span>{formatSeat(player.seatId)}</span>
                 <strong>{player.roleLabel}</strong>
                 <em>
-                  {sideLabel(player.side)} · {player.isAlive ? "存活" : "出局"}
-                  {player.isHuman ? " · 真人" : ""}
+                  {sideLabel(player.side)} · {player.isAlive ? identityStateCopy.alive : identityStateCopy.dead}
+                  {player.isHuman ? ` · ${uiCopy.playerList.humanPrefix}` : ""}
                 </em>
               </li>
             ))}
           </ol>
         </section>
 
-        <section className="settlement-review__block" aria-label="夜间因果">
-          <h3>夜间因果</h3>
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.nightBlockAria}>
+          <h3>{uiCopy.settlement.nightBlockAria}</h3>
           <NightCausality nights={review.nights} />
         </section>
 
-        <section className="settlement-review__block" aria-label="白天因果">
-          <h3>白天因果</h3>
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.dayBlockAria}>
+          <h3>{uiCopy.settlement.dayBlockAria}</h3>
           <DayCausality days={review.days} />
         </section>
 
-        <section className="settlement-review__block" aria-label="完整时间线">
-          <h3>完整时间线</h3>
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.timelineAria}>
+          <h3>{uiCopy.settlement.timelineTitle}</h3>
           {timelineEvents.length > 0 ? (
             <ol className="settlement-timeline">
               {timelineEvents.map((event, index) => (
                 <li key={`${event.eventType}-${index}`}>
                   <span>{formatPhase(event.dayCount, event.phase)}</span>
-                  <p>{event.message}</p>
+                  <p>{event.eventType === "SPEECH" ? event.message : formatGameMessage(event.message)}</p>
                 </li>
               ))}
             </ol>
           ) : (
-            <p className="settlement-empty">本局没有记录到关键公开节点。</p>
+            <p className="settlement-empty">{uiCopy.settlement.timelineEmpty}</p>
           )}
         </section>
 
-        <section className="settlement-review__block" aria-label="终局票型">
-          <h3>终局票型</h3>
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.finalVoteBlockAria}>
+          <h3>{uiCopy.settlement.finalVoteBlockAria}</h3>
           <FinalVote vote={review.finalVote} />
         </section>
       </div>
