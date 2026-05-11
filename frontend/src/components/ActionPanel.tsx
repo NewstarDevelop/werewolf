@@ -18,6 +18,7 @@ type TargetSelection = number | "PASS" | null;
 
 interface ActionPanelProps {
   request: PendingAction;
+  nightActionFeedback?: string | null;
   onSubmit: (payload: SubmitActionPayload) => void;
   children?: ReactNode;
 }
@@ -48,7 +49,12 @@ function availableWitchActions(request: PendingAction): WitchActionType[] {
   return request.available_actions ?? ["WITCH_SAVE", "WITCH_POISON", "PASS"];
 }
 
-export function ActionPanel({ request, onSubmit, children }: ActionPanelProps) {
+export function ActionPanel({
+  request,
+  nightActionFeedback,
+  onSubmit,
+  children,
+}: ActionPanelProps) {
   const [speechText, setSpeechText] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<TargetSelection>(null);
   const [selectedWitchAction, setSelectedWitchAction] = useState<WitchActionType | null>(null);
@@ -60,6 +66,7 @@ export function ActionPanel({ request, onSubmit, children }: ActionPanelProps) {
   const canSubmitVote = selectedTarget === "PASS" || canSubmitTarget;
   const witchActions = availableWitchActions(request);
   const hasSupplementalContent = Boolean(children);
+  const hasNightActionFeedback = Boolean(nightActionFeedback);
   const selectedWitchActionIsAvailable = selectedWitchAction !== null
     && witchActions.includes(selectedWitchAction);
   const canSubmitWitchAction =
@@ -255,6 +262,7 @@ export function ActionPanel({ request, onSubmit, children }: ActionPanelProps) {
           {isPanelHidden ? (
             <p className="panel-collapsed-summary">
               {uiCopy.actionPanel.collapsedPrefix} · {copy.title}
+              {hasNightActionFeedback ? ` · ${uiCopy.app.nightFeedbackLabel}` : ""}
               {hasSupplementalContent ? ` · ${uiCopy.actionPanel.supplementalLabel}` : ""}
             </p>
           ) : null}
@@ -279,6 +287,13 @@ export function ActionPanel({ request, onSubmit, children }: ActionPanelProps) {
             <span className="action-status-label">{uiCopy.actionPanel.currentLabel}</span>
             <strong>{copy.title}</strong>
           </div>
+
+          {nightActionFeedback ? (
+            <section className="action-night-feedback" aria-label={uiCopy.app.nightFeedbackAria}>
+              <span>{uiCopy.app.nightFeedbackLabel}</span>
+              <strong>{nightActionFeedback}</strong>
+            </section>
+          ) : null}
 
           {!request && !hasSupplementalContent ? (
             <div className="action-idle">

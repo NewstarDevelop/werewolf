@@ -22,6 +22,26 @@ describe("ActionPanel", () => {
     expect(view.container.querySelector(".action-idle")).toBeNull();
   });
 
+  it("renders night action feedback inside the panel", () => {
+    const view = render(
+      <ActionPanel
+        request={{
+          request_id: "input-wolf",
+          action_type: "WOLF_KILL",
+          prompt: "请选择狼刀目标",
+          allowed_targets: [3, 9],
+        }}
+        nightActionFeedback="你选择今晚击杀 9号玩家。"
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const panel = view.container.querySelector(".action-panel");
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).getByLabelText("夜晚行动反馈")).toHaveTextContent("夜晚操作结果");
+    expect(within(panel as HTMLElement).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 9号玩家。");
+  });
+
   it("submits speech payload", () => {
     const onSubmit = vi.fn();
     render(

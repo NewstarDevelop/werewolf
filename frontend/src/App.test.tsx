@@ -348,8 +348,10 @@ describe("App", () => {
     });
 
     await waitFor(() => {
-      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent(uiCopy.app.nightFeedbackLabel);
-      expect(within(view.container).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 5号玩家。");
+      const actionPanel = view.container.querySelector(".action-panel");
+      expect(actionPanel).not.toBeNull();
+      expect(within(actionPanel as HTMLElement).getByLabelText("夜晚行动反馈")).toHaveTextContent(uiCopy.app.nightFeedbackLabel);
+      expect(within(actionPanel as HTMLElement).getByLabelText("夜晚行动反馈")).toHaveTextContent("你选择今晚击杀 5号玩家。");
     });
   });
 

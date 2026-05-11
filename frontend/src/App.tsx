@@ -379,13 +379,6 @@ export function App() {
             <span>{battleSignal.detail}</span>
           </section>
 
-          {lastNightActionFeedback ? (
-            <section className="night-feedback" aria-label={uiCopy.app.nightFeedbackAria}>
-              <span>{uiCopy.app.nightFeedbackLabel}</span>
-              <strong>{formatGameMessage(lastNightActionFeedback.message)}</strong>
-            </section>
-          ) : null}
-
           <PlayerList players={players} />
 
           <ChatHistory entries={entries} />
@@ -393,6 +386,11 @@ export function App() {
           <ActionPanel
             key={connectionAttempt}
             request={pendingAction}
+            nightActionFeedback={
+              lastNightActionFeedback
+                ? formatGameMessage(lastNightActionFeedback.message)
+                : null
+            }
             onSubmit={handleSubmitAction}
           >
             {settlementReview ? (
