@@ -4,12 +4,14 @@ import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 import random
+import re
 
 from app.domain.enums import Role
 from app.domain.game_context import GameContext, NightActionSnapshot, PublicChatEvent, VoteSnapshot
 from app.engine.check_win import check_win
 from app.engine.game_engine import GameEngine
 from app.engine.states.phase import GamePhase
+from app.llm.phrasebook import TABLE_TALK_TERMS, TACTIC_STYLE_HINTS
 
 DEFAULT_REPLAY_SEED_COUNT = 20
 DEFAULT_REPLAY_MAX_ROUNDS = 20
@@ -32,6 +34,67 @@ class ReplayEvaluationIssue:
 
 
 @dataclass(slots=True, kw_only=True)
+class ReplayQualityMetrics:
+    speech_count: int = 0
+    unique_speaker_count: int = 0
+    repeated_speech_count: int = 0
+    table_talk_term_hits: int = 0
+    tactic_label_hits: int = 0
+    vote_rounds: int = 0
+    ballot_count: int = 0
+    abstention_count: int = 0
+    no_banishment_count: int = 0
+    wolf_kill_attempts: int = 0
+    seer_checks: int = 0
+    witch_saves: int = 0
+    witch_poisons: int = 0
+
+    @property
+    def repetition_rate(self) -> float:
+        return _safe_rate(self.repeated_speech_count, self.speech_count)
+
+    @property
+    def abstention_rate(self) -> float:
+        return _safe_rate(self.abstention_count, self.ballot_count + self.abstention_count)
+
+
+@dataclass(slots=True, kw_only=True)
+class ReplayQualityAggregate:
+    total_games: int = 0
+    outcome_counts: dict[str, int] = field(default_factory=dict)
+    average_day_count: float = 0.0
+    average_rounds_recorded: float = 0.0
+    speech_count: int = 0
+    unique_speaker_count: int = 0
+    repeated_speech_count: int = 0
+    table_talk_term_hits: int = 0
+    tactic_label_hits: int = 0
+    vote_rounds: int = 0
+    ballot_count: int = 0
+    abstention_count: int = 0
+    no_banishment_count: int = 0
+    wolf_kill_attempts: int = 0
+    seer_checks: int = 0
+    witch_saves: int = 0
+    witch_poisons: int = 0
+
+    @property
+    def repetition_rate(self) -> float:
+        return _safe_rate(self.repeated_speech_count, self.speech_count)
+
+    @property
+    def abstention_rate(self) -> float:
+        return _safe_rate(self.abstention_count, self.ballot_count + self.abstention_count)
+
+
+@dataclass(slots=True, kw_only=True)
+class ReplayInsight:
+    seed: int
+    code: str
+    message: str
+
+
+@dataclass(slots=True, kw_only=True)
 class ReplayEvaluationResult:
     seed: int
     issues: list[ReplayEvaluationIssue] = field(default_factory=list)
@@ -39,6 +102,7 @@ class ReplayEvaluationResult:
     final_summary: str = ""
     day_count: int = 1
     rounds_recorded: int = 0
+    quality: ReplayQualityMetrics = field(default_factory=ReplayQualityMetrics)
     context: GameContext | None = field(default=None, repr=False)
 
     @property
@@ -61,6 +125,14 @@ class ReplayEvaluationSummary:
     @property
     def failed_count(self) -> int:
         return len(self.results) - self.passed_count
+
+    @property
+    def quality(self) -> ReplayQualityAggregate:
+        return summarize_replay_quality(self.results)
+
+    @property
+    def insights(self) -> list[ReplayInsight]:
+        return build_replay_insights(self.results)
 
 
 def default_replay_seeds(
@@ -105,6 +177,7 @@ async def evaluate_replay_seed(
         final_summary=final_summary,
         day_count=context.day_count,
         rounds_recorded=len(context.night_actions),
+        quality=analyze_replay_quality(context),
         context=context,
     )
 
@@ -136,6 +209,135 @@ def validate_replay_context(context: GameContext) -> list[ReplayEvaluationIssue]
     return issues
 
 
+def analyze_replay_quality(context: GameContext) -> ReplayQualityMetrics:
+    speeches = [
+        event
+        for event in context.public_chat_events
+        if event.message_kind == "speech" and event.actor_seat is not None
+    ]
+    speech_messages = [event.message for event in speeches]
+    normalized_speeches = [_normalize_speech(message) for message in speech_messages]
+    unique_speech_messages = set[str]()
+    repeated_speech_count = 0
+    for message in normalized_speeches:
+        if message in unique_speech_messages:
+            repeated_speech_count += 1
+        else:
+            unique_speech_messages.add(message)
+
+    table_talk_term_hits = _count_term_hits(speech_messages, TABLE_TALK_TERMS)
+    tactic_label_hits = _count_term_hits(speech_messages, TACTIC_STYLE_HINTS.keys())
+    ballot_count = sum(len(vote.ballots) for vote in context.vote_history)
+    abstention_count = sum(len(vote.abstentions) for vote in context.vote_history)
+
+    return ReplayQualityMetrics(
+        speech_count=len(speeches),
+        unique_speaker_count=len({event.actor_seat for event in speeches}),
+        repeated_speech_count=repeated_speech_count,
+        table_talk_term_hits=table_talk_term_hits,
+        tactic_label_hits=tactic_label_hits,
+        vote_rounds=len(context.vote_history),
+        ballot_count=ballot_count,
+        abstention_count=abstention_count,
+        no_banishment_count=sum(
+            1
+            for vote in context.vote_history
+            if vote.banished_seat is None
+        ),
+        wolf_kill_attempts=sum(
+            1
+            for night in context.night_actions
+            if night.wolf_target is not None
+        ),
+        seer_checks=sum(
+            1
+            for night in context.night_actions
+            if night.seer_target is not None
+        ),
+        witch_saves=sum(
+            1
+            for night in context.night_actions
+            if night.witch_save_target is not None
+        ),
+        witch_poisons=sum(
+            1
+            for night in context.night_actions
+            if night.witch_poison_target is not None
+        ),
+    )
+
+
+def summarize_replay_quality(
+    results: Iterable[ReplayEvaluationResult],
+) -> ReplayQualityAggregate:
+    result_list = list(results)
+    if not result_list:
+        return ReplayQualityAggregate()
+
+    outcome_counts: dict[str, int] = {}
+    for result in result_list:
+        outcome_counts[result.outcome] = outcome_counts.get(result.outcome, 0) + 1
+
+    return ReplayQualityAggregate(
+        total_games=len(result_list),
+        outcome_counts=outcome_counts,
+        average_day_count=sum(result.day_count for result in result_list) / len(result_list),
+        average_rounds_recorded=sum(result.rounds_recorded for result in result_list) / len(result_list),
+        speech_count=sum(result.quality.speech_count for result in result_list),
+        unique_speaker_count=sum(result.quality.unique_speaker_count for result in result_list),
+        repeated_speech_count=sum(result.quality.repeated_speech_count for result in result_list),
+        table_talk_term_hits=sum(result.quality.table_talk_term_hits for result in result_list),
+        tactic_label_hits=sum(result.quality.tactic_label_hits for result in result_list),
+        vote_rounds=sum(result.quality.vote_rounds for result in result_list),
+        ballot_count=sum(result.quality.ballot_count for result in result_list),
+        abstention_count=sum(result.quality.abstention_count for result in result_list),
+        no_banishment_count=sum(result.quality.no_banishment_count for result in result_list),
+        wolf_kill_attempts=sum(result.quality.wolf_kill_attempts for result in result_list),
+        seer_checks=sum(result.quality.seer_checks for result in result_list),
+        witch_saves=sum(result.quality.witch_saves for result in result_list),
+        witch_poisons=sum(result.quality.witch_poisons for result in result_list),
+    )
+
+
+def build_replay_insights(results: Iterable[ReplayEvaluationResult]) -> list[ReplayInsight]:
+    insights: list[ReplayInsight] = []
+    for result in results:
+        quality = result.quality
+        if result.outcome == "CAPPED":
+            insights.append(
+                ReplayInsight(
+                    seed=result.seed,
+                    code="CAPPED_GAME",
+                    message="replay reached max rounds without a winner",
+                )
+            )
+        if quality.abstention_rate >= 0.25 and quality.abstention_count >= 2:
+            insights.append(
+                ReplayInsight(
+                    seed=result.seed,
+                    code="HIGH_ABSTENTION",
+                    message=f"abstention rate {quality.abstention_rate:.0%}",
+                )
+            )
+        if quality.repetition_rate >= 0.25 and quality.repeated_speech_count >= 2:
+            insights.append(
+                ReplayInsight(
+                    seed=result.seed,
+                    code="HIGH_REPETITION",
+                    message=f"repeated speech rate {quality.repetition_rate:.0%}",
+                )
+            )
+        if quality.no_banishment_count > 0:
+            insights.append(
+                ReplayInsight(
+                    seed=result.seed,
+                    code="NO_BANISHMENT",
+                    message=f"{quality.no_banishment_count} vote round(s) had no banishment",
+                )
+            )
+    return insights
+
+
 def _add_issue(
     issues: list[ReplayEvaluationIssue],
     code: str,
@@ -150,6 +352,21 @@ def _add_issue(
             day_count=day_count,
         )
     )
+
+
+def _safe_rate(numerator: int, denominator: int) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _normalize_speech(message: str) -> str:
+    return re.sub(r"\s+", " ", message).strip().lower()
+
+
+def _count_term_hits(messages: Iterable[str], terms: Iterable[str]) -> int:
+    term_list = tuple(term for term in terms if term)
+    return sum(message.count(term) for message in messages for term in term_list)
 
 
 def _final_game_summary(context: GameContext) -> str:

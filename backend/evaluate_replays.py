@@ -69,11 +69,45 @@ def main() -> int:
     print(f"Seeds: {seeds[0]}..{seeds[-1]} · max rounds: {args.rounds}")
     print()
 
+    quality = summary.quality
+    outcome_counts = ", ".join(
+        f"{outcome}={count}"
+        for outcome, count in sorted(quality.outcome_counts.items())
+    ) or "none"
+    print("AI quality summary:")
+    print(f"  outcomes: {outcome_counts}")
+    print(
+        f"  averages: days={quality.average_day_count:.1f}, "
+        f"night_rounds={quality.average_rounds_recorded:.1f}"
+    )
+    print(
+        f"  speeches: total={quality.speech_count}, speakers={quality.unique_speaker_count}, "
+        f"repeated={quality.repeated_speech_count} ({quality.repetition_rate:.0%}), "
+        f"table_terms={quality.table_talk_term_hits}, tactic_labels={quality.tactic_label_hits}"
+    )
+    print(
+        f"  votes: rounds={quality.vote_rounds}, ballots={quality.ballot_count}, "
+        f"abstentions={quality.abstention_count} ({quality.abstention_rate:.0%}), "
+        f"no_banishment={quality.no_banishment_count}"
+    )
+    print(
+        f"  night actions: wolf_kills={quality.wolf_kill_attempts}, "
+        f"seer_checks={quality.seer_checks}, witch_saves={quality.witch_saves}, "
+        f"witch_poisons={quality.witch_poisons}"
+    )
+    if summary.insights:
+        print("  notable seeds:")
+        for insight in summary.insights:
+            print(f"    - seed={insight.seed} {insight.code}: {insight.message}")
+    print()
+
     for result in summary.results:
         status = "PASS" if result.passed else "FAIL"
         print(
             f"[{status}] seed={result.seed} outcome={result.outcome} "
             f"day={result.day_count} rounds={result.rounds_recorded} "
+            f"speeches={result.quality.speech_count} "
+            f"abstentions={result.quality.abstention_count} "
             f"summary={result.final_summary}"
         )
         for issue in result.issues:
