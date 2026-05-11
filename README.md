@@ -4,10 +4,6 @@
 
 后端默认使用本地规则型 AI provider，开箱即可跑通完整流程；配置完整的 OpenAI 兼容环境变量后，会切换到真实模型 provider。
 
-## 界面预览
-
-![测试对局_2026-05-09_12-49-35](screenshots/测试对局_2026-05-09_12-49-35.png)
-
 ## 功能概览
 
 - 固定 9 人板子：3 狼人、3 平民、预言家、女巫、猎人
@@ -123,4 +119,5 @@ python -m uvicorn app.main:app --app-dir backend --reload
 - `docs/需求.md`：产品需求与规则基线
 - `docs/技术.md`：技术方案草案
 - `docs/状态机架构.md`：核心状态机设计
-- `docs/werewolf_project.csv`：任务拆解表
+- `docs/ollama_setup.md`：本地 Ollama 接入指南
+- `docs/exa调研.md`：规则、AI 策略和 WebSocket 可靠性调研备忘
