@@ -69,7 +69,7 @@ npm install --prefix frontend
 npm run dev --prefix frontend
 ```
 
-打开 `http://localhost:5173` 开始对局。前端会根据当前页面的 hostname 连接 `ws://<hostname>:8000/ws/game`，因此开发时后端需要运行在 `8000` 端口。
+打开 `http://127.0.0.1:5573` 开始对局。前端会根据当前页面的 hostname 连接 `ws://<hostname>:8000/ws/game`，因此开发时后端需要运行在 `8000` 端口。
 
 ## 真实模型接入
 
