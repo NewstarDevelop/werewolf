@@ -7,6 +7,9 @@ __pycache__/
 *.egg-info/
 *.cover
 *,cover
+.mypy_cache/
+.ruff_cache/
+
 .env
 .env.*
 !.env.example
@@ -16,20 +19,45 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
+playwright-report/
+test-results/
 
 AGENTS.md
 CLAUDE.md
 .impeccable.md
 plan.md
-docs/第一次本地测试问题.md
+.agents/
+.codex/
+.trellis/
 
+.claude/
+.spec-workflow/
+.vscode/
+.idea/
+
+docs/第一次本地测试问题.md
 autoresearch-*.json
 autoresearch-*.log
 research-results.tsv
 autoresearch-lessons.md
 
-.claude/
-.spec-workflow/
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+*.swp
+*~
+*.local.ps1
+*.local.json
+*.local.md
+dev-launcher.local.ps1
+
+screenshots/PixPin_*.png
+screenshots/*.local.*
+screenshots/*.tmp.*
 
 .DS_Store
 Thumbs.db
+Desktop.ini
+ehthumbs.db
