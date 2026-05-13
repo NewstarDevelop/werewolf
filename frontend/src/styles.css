@@ -877,6 +877,30 @@ h1 {
   color: var(--color-ink-primary);
 }
 
+.settlement-final-vote li {
+  display: grid;
+  align-items: start;
+  gap: var(--space-1);
+}
+
+.settlement-final-vote__target {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settlement-final-vote__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  color: var(--color-ink-tertiary);
+  line-height: var(--line-height-tight);
+}
+
+.settlement-final-vote__sources span:not(:last-child)::after {
+  content: "、";
+}
+
 /* --------------------------------------------------------------------------
    Chat — 对局日志流（无卡片）
    -------------------------------------------------------------------------- */

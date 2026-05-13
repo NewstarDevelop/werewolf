@@ -129,6 +129,10 @@ describe("SettlementReview", () => {
     expect(within(screen.getByLabelText("全局票型")).getByText("第 2 天票型")).toBeInTheDocument();
     expect(within(screen.getByLabelText("全局票型")).getByText("2号玩家被放逐出局。")).toBeInTheDocument();
     expect(within(screen.getByLabelText("全局票型")).getByText("3票")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("第 1 天票型")).getByLabelText("2号玩家得票来源")).toHaveTextContent("1号玩家");
+    expect(within(screen.getByLabelText("第 1 天票型")).getByLabelText("2号玩家得票来源")).toHaveTextContent("3号玩家");
+    expect(within(screen.getByLabelText("第 1 天票型")).getByLabelText("2号玩家得票来源")).toHaveTextContent("4号玩家");
+    expect(within(screen.getByLabelText("第 2 天票型")).getByLabelText("1号玩家得票来源")).toHaveTextContent("2号玩家");
     expect(within(screen.getByLabelText("全局票型")).getByText("弃票：5号玩家")).toBeInTheDocument();
   });
 });

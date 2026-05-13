@@ -50,17 +50,37 @@ function numberEntries(record: Record<number, number>) {
 
 function VoteDetails({ vote }: { vote: VoteResultView }) {
   const rows = numberEntries(vote.votes)
-    .sort((left, right) => right[1] - left[1] || left[0] - right[0]);
+    .map(([targetSeat, count]) => ({
+      targetSeat,
+      count,
+      voters: numberEntries(vote.ballots)
+        .filter(([, votedTarget]) => votedTarget === targetSeat)
+        .map(([voterSeat]) => voterSeat)
+        .sort((left, right) => left - right),
+    }))
+    .sort((left, right) => right.count - left.count || left.targetSeat - right.targetSeat);
 
   return (
     <div className="settlement-final-vote">
       <p>{formatGameMessage(vote.summary)}</p>
       {rows.length > 0 ? (
         <ol>
-          {rows.map(([targetSeat, count]) => (
+          {rows.map(({ targetSeat, count, voters }) => (
             <li key={targetSeat}>
-              <strong>{formatSeat(targetSeat)}</strong>
-              <span>{uiCopy.voteBoard.formatCount(count)}</span>
+              <span className="settlement-final-vote__target">
+                <strong>{formatSeat(targetSeat)}</strong>
+                <span>{uiCopy.voteBoard.formatCount(count)}</span>
+              </span>
+              {voters.length > 0 ? (
+                <span
+                  className="settlement-final-vote__sources"
+                  aria-label={uiCopy.voteBoard.formatSourceAria(targetSeat)}
+                >
+                  {voters.map((voterSeat) => (
+                    <span key={voterSeat}>{formatSeat(voterSeat)}</span>
+                  ))}
+                </span>
+              ) : null}
             </li>
           ))}
         </ol>
@@ -106,7 +126,11 @@ function GlobalVotes({
   return (
     <div className="settlement-global-votes">
       {voteSections.map((section) => (
-        <section key={section.key} className="settlement-global-vote">
+        <section
+          key={section.key}
+          className="settlement-global-vote"
+          aria-label={section.title}
+        >
           <h4>{section.title}</h4>
           <VoteDetails vote={section.vote} />
         </section>
