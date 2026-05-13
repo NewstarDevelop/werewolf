@@ -55,13 +55,14 @@ describe("App", () => {
     document.documentElement.removeAttribute("data-theme");
   });
 
-  it("renders the shell heading and player list", () => {
+  it("renders the shell controls and player list", () => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
 
     const view = render(<App />);
 
-    expect(view.getByRole("heading", { name: "狼人杀对局面板" })).toBeInTheDocument();
+    expect(view.queryByRole("heading", { name: "狼人杀对局面板" })).toBeNull();
+    expect(view.getByRole("button", { name: "新局" })).toBeInTheDocument();
     expect(view.getByLabelText("玩家状态列表").children).toHaveLength(9);
     expect(MockWebSocket.instances[0]?.url).toContain("/ws/game");
   });
@@ -404,6 +405,10 @@ describe("App", () => {
     await waitFor(() => {
       expect(within(view.container).getByLabelText("5号玩家")).toHaveTextContent("真人 · 预言家");
       expect(within(view.container).getByLabelText("1号玩家")).toHaveTextContent("身份未知");
+      const actionPanel = view.container.querySelector(".action-panel");
+      expect(actionPanel).not.toBeNull();
+      expect(within(actionPanel as HTMLElement).getByLabelText("你的身份")).toHaveTextContent("5号玩家");
+      expect(within(actionPanel as HTMLElement).getByLabelText("你的身份")).toHaveTextContent("预言家");
     });
   });
 
@@ -677,12 +682,12 @@ describe("App", () => {
       expect(within(view.container).getByLabelText("2号玩家")).toHaveTextContent("预言家");
       expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("好人胜利");
       expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("原因：狼人全灭。");
-      expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).toHaveTextContent("狼人：1号；神职：2号；平民：无。");
+      expect(within(actionPanel as HTMLElement).getByLabelText("结算复盘")).not.toHaveTextContent("狼人：1号；神职：2号；平民：无。");
       expect(within(actionPanel as HTMLElement).getByLabelText("夜间因果")).toHaveTextContent("狼人击杀目标：2号玩家");
-      expect(within(actionPanel as HTMLElement).getByLabelText("白天因果")).toHaveTextContent("1号玩家以 3 票成为最高票，被放逐出局。");
-      expect(within(actionPanel as HTMLElement).getByLabelText("完整时间线")).toHaveTextContent("昨夜平安夜。");
-      expect(within(actionPanel as HTMLElement).getByLabelText("完整时间线")).toHaveTextContent("1号玩家被放逐出局。");
-      expect(within(actionPanel as HTMLElement).getByLabelText("终局票型")).toHaveTextContent("3票");
+      expect(within(actionPanel as HTMLElement).queryByLabelText("白天因果")).toBeNull();
+      expect(within(actionPanel as HTMLElement).queryByLabelText("完整时间线")).toBeNull();
+      expect(within(actionPanel as HTMLElement).getByLabelText("全局票型")).toHaveTextContent("第 2 天票型");
+      expect(within(actionPanel as HTMLElement).getByLabelText("全局票型")).toHaveTextContent("3票");
     });
   });
 

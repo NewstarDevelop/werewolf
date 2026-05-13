@@ -22,6 +22,18 @@ describe("ActionPanel", () => {
     expect(view.container.querySelector(".action-idle")).toBeNull();
   });
 
+  it("renders identity content inside the panel", () => {
+    render(
+      <ActionPanel
+        request={null}
+        identityContent={<span>2号玩家 平民 仍在局内</span>}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("你的身份")).toHaveTextContent("2号玩家 平民 仍在局内");
+  });
+
   it("renders night action feedback inside the panel", () => {
     const view = render(
       <ActionPanel

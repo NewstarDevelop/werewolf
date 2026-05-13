@@ -2,7 +2,6 @@ import {
   formatGameMessage,
   formatSeat,
   formatSeatList,
-  gamePhaseCopy,
   identityStateCopy,
   uiCopy,
 } from "../copy";
@@ -31,10 +30,6 @@ function sideLabel(side: "GOOD" | "WOLF") {
   return side === "WOLF" ? uiCopy.settlement.sideWolf : uiCopy.settlement.sideGood;
 }
 
-function formatPhase(dayCount: number, phase: string) {
-  return `第 ${dayCount} 天 · ${gamePhaseCopy[phase] ?? phase}`;
-}
-
 function resultLabel(result: "GOOD" | "WOLF" | null) {
   if (result === "WOLF") {
     return uiCopy.settlement.resultWolf;
@@ -53,11 +48,7 @@ function numberEntries(record: Record<number, number>) {
   return Object.entries(record).map(([key, value]) => [Number(key), value] as const);
 }
 
-function FinalVote({ vote }: { vote: VoteResultView | null }) {
-  if (!vote) {
-    return <p className="settlement-empty">{uiCopy.settlement.finalVoteEmpty}</p>;
-  }
-
+function VoteDetails({ vote }: { vote: VoteResultView }) {
   const rows = numberEntries(vote.votes)
     .sort((left, right) => right[1] - left[1] || left[0] - right[0]);
 
@@ -79,6 +70,47 @@ function FinalVote({ vote }: { vote: VoteResultView | null }) {
           {uiCopy.settlement.voteAbstainPrefix}：{formatSeatList(vote.abstentions)}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+function GlobalVotes({
+  days,
+  finalVote,
+}: {
+  days: SettlementReviewDay[];
+  finalVote: VoteResultView | null;
+}) {
+  const dayVoteSections = days
+    .filter((day): day is SettlementReviewDay & { vote: VoteResultView } => day.vote !== null)
+    .map((day) => ({
+      key: `day-${day.dayCount}`,
+      title: uiCopy.settlement.formatDayVoteTitle(day.dayCount),
+      vote: day.vote,
+    }));
+
+  const voteSections = dayVoteSections.length > 0
+    ? dayVoteSections
+    : finalVote
+      ? [{
+          key: "final",
+          title: uiCopy.settlement.finalVoteFallbackTitle,
+          vote: finalVote,
+        }]
+      : [];
+
+  if (voteSections.length === 0) {
+    return <p className="settlement-empty">{uiCopy.settlement.globalVoteEmpty}</p>;
+  }
+
+  return (
+    <div className="settlement-global-votes">
+      {voteSections.map((section) => (
+        <section key={section.key} className="settlement-global-vote">
+          <h4>{section.title}</h4>
+          <VoteDetails vote={section.vote} />
+        </section>
+      ))}
     </div>
   );
 }
@@ -123,47 +155,7 @@ function NightCausality({ nights }: { nights: SettlementReviewNight[] }) {
   );
 }
 
-function DayCausality({ days }: { days: SettlementReviewDay[] }) {
-  if (days.length === 0) {
-    return <p className="settlement-empty">{uiCopy.settlement.dayEmpty}</p>;
-  }
-
-  return (
-    <ol className="settlement-causality-list">
-      {days.map((day) => (
-        <li key={day.dayCount}>
-          <span>{uiCopy.settlement.formatDayTitle(day.dayCount)}</span>
-          {day.speeches.length > 0 ? (
-            <div className="settlement-speeches">
-              {day.speeches.slice(0, 4).map((speech) => (
-                <p key={`${speech.seatId}-${speech.message}`}>
-                  <strong>{formatSeat(speech.seatId)}</strong>
-                  {speech.message}
-                </p>
-              ))}
-            </div>
-          ) : (
-            <p>{uiCopy.settlement.noPublicSpeech}</p>
-          )}
-          <p>
-            {uiCopy.settlement.voteCausePrefix}：
-            {day.voteExplanation ? formatGameMessage(day.voteExplanation) : uiCopy.settlement.voteCauseEmpty}
-          </p>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export function SettlementReview({ review }: SettlementReviewProps) {
-  const survivors = review.players
-    .filter((player) => player.isAlive)
-    .map((player) => player.seatId);
-  const wolves = review.players
-    .filter((player) => player.side === "WOLF")
-    .map((player) => player.seatId);
-  const timelineEvents = review.timeline.length > 0 ? review.timeline : review.keyEvents;
-
   return (
     <section
       className={`settlement-review is-${review.winningSide.toLowerCase()}`}
@@ -180,15 +172,6 @@ export function SettlementReview({ review }: SettlementReviewProps) {
       <div className="settlement-review__stats">
         <span>{uiCopy.settlement.formatFinalDay(review.dayCount)}</span>
         <span>{uiCopy.settlement.reasonPrefix}：{formatGameMessage(review.outcomeReason)}</span>
-        <span>{review.roleRevealSummary}</span>
-        <span>
-          {uiCopy.settlement.survivorsPrefix}：
-          {survivors.length > 0 ? formatSeatList(survivors) : uiCopy.settlement.none}
-        </span>
-        <span>
-          {uiCopy.settlement.wolvesPrefix}：
-          {wolves.length > 0 ? formatSeatList(wolves) : uiCopy.settlement.none}
-        </span>
       </div>
 
       <div className="settlement-review__grid">
@@ -222,30 +205,9 @@ export function SettlementReview({ review }: SettlementReviewProps) {
           <NightCausality nights={review.nights} />
         </section>
 
-        <section className="settlement-review__block" aria-label={uiCopy.settlement.dayBlockAria}>
-          <h3>{uiCopy.settlement.dayBlockAria}</h3>
-          <DayCausality days={review.days} />
-        </section>
-
-        <section className="settlement-review__block" aria-label={uiCopy.settlement.timelineAria}>
-          <h3>{uiCopy.settlement.timelineTitle}</h3>
-          {timelineEvents.length > 0 ? (
-            <ol className="settlement-timeline">
-              {timelineEvents.map((event, index) => (
-                <li key={`${event.eventType}-${index}`}>
-                  <span>{formatPhase(event.dayCount, event.phase)}</span>
-                  <p>{event.eventType === "SPEECH" ? event.message : formatGameMessage(event.message)}</p>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="settlement-empty">{uiCopy.settlement.timelineEmpty}</p>
-          )}
-        </section>
-
-        <section className="settlement-review__block" aria-label={uiCopy.settlement.finalVoteBlockAria}>
-          <h3>{uiCopy.settlement.finalVoteBlockAria}</h3>
-          <FinalVote vote={review.finalVote} />
+        <section className="settlement-review__block" aria-label={uiCopy.settlement.globalVoteBlockAria}>
+          <h3>{uiCopy.settlement.globalVoteBlockAria}</h3>
+          <GlobalVotes days={review.days} finalVote={review.finalVote} />
         </section>
       </div>
     </section>

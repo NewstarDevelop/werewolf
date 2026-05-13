@@ -19,6 +19,7 @@ type TargetSelection = number | "PASS" | null;
 interface ActionPanelProps {
   request: PendingAction;
   nightActionFeedback?: string | null;
+  identityContent?: ReactNode;
   onSubmit: (payload: SubmitActionPayload) => void;
   children?: ReactNode;
 }
@@ -52,6 +53,7 @@ function availableWitchActions(request: PendingAction): WitchActionType[] {
 export function ActionPanel({
   request,
   nightActionFeedback,
+  identityContent,
   onSubmit,
   children,
 }: ActionPanelProps) {
@@ -287,6 +289,12 @@ export function ActionPanel({
             <span className="action-status-label">{uiCopy.actionPanel.currentLabel}</span>
             <strong>{copy.title}</strong>
           </div>
+
+          {identityContent ? (
+            <section className="action-identity" aria-label={uiCopy.actionPanel.identityAria}>
+              {identityContent}
+            </section>
+          ) : null}
 
           {nightActionFeedback ? (
             <section className="action-night-feedback" aria-label={uiCopy.app.nightFeedbackAria}>

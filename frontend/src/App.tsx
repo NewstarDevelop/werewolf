@@ -303,25 +303,7 @@ export function App() {
       >
         <div className="app-frame">
           <header className="app-header">
-            <h1>{uiCopy.app.title}</h1>
             <div className="app-header__actions">
-              {humanPlayer ? (
-                <span className="identity-badge">
-                  <span className="identity-badge__seat">
-                    {formatSeat(humanPlayer.seatId)}
-                  </span>
-                  <span className="identity-badge__role">
-                    {humanPlayer.roleLabel ?? identityStateCopy.unknownRole}
-                  </span>
-                  <span className="identity-badge__state">
-                    {humanPlayer.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
-                  </span>
-                  {humanRoleTip ? (
-                    <span className="identity-badge__tip">{humanRoleTip}</span>
-                  ) : null}
-                  <RoleGuide roleCode={humanPlayer.roleCode} />
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="new-game-button"
@@ -391,6 +373,23 @@ export function App() {
                 ? formatGameMessage(lastNightActionFeedback.message)
                 : null
             }
+            identityContent={humanPlayer ? (
+              <span className="identity-badge">
+                <span className="identity-badge__seat">
+                  {formatSeat(humanPlayer.seatId)}
+                </span>
+                <span className="identity-badge__role">
+                  {humanPlayer.roleLabel ?? identityStateCopy.unknownRole}
+                </span>
+                <span className="identity-badge__state">
+                  {humanPlayer.isAlive === false ? identityStateCopy.dead : identityStateCopy.alive}
+                </span>
+                {humanRoleTip ? (
+                  <span className="identity-badge__tip">{humanRoleTip}</span>
+                ) : null}
+                <RoleGuide roleCode={humanPlayer.roleCode} />
+              </span>
+            ) : null}
             onSubmit={handleSubmitAction}
           >
             {settlementReview ? (
