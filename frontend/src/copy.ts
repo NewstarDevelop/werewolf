@@ -406,7 +406,8 @@ export const uiCopy = {
     identityAria: "你的身份",
     supplementalLabel: "对局回看",
     collapsedPrefix: "当前",
-    currentLabel: "当前",
+    activeLabel: "待处理",
+    idleLabel: "待机",
     toggleCollapseAria: "隐藏操作面板",
     toggleExpandAria: "展开操作面板",
     toggleCollapseText: "隐藏",
@@ -424,6 +425,9 @@ export const uiCopy = {
     dangerIdleHint: "此操作不可撤销，需要再次确认。",
     targetedHint: "可按数字键 1-9 快速选择座位。",
     confirmAgain: (label: string) => `再次确认 · ${label}`,
+    formatTargetAria: (label: string, roleLabel: string, stateLabel: string) => (
+      `${label}，${roleLabel}，${stateLabel}`
+    ),
   },
   chat: {
     title: "对局日志",

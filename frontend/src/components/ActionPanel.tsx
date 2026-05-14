@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import {
   actionRuleHint,
   actionTypeCopy,
+  formatSeat,
   getIdleCopy,
   speechPlaceholder,
   submitActionCopy,
@@ -16,10 +17,19 @@ type PendingAction = RequireInputEnvelope["data"] | null;
 type WitchActionType = "WITCH_SAVE" | "WITCH_POISON" | "PASS";
 type TargetSelection = number | "PASS" | null;
 
+export interface ActionTargetSummary {
+  seatId: number;
+  label: string;
+  roleLabel: string;
+  stateLabel: string;
+  isAlive: boolean;
+}
+
 interface ActionPanelProps {
   request: PendingAction;
   nightActionFeedback?: string | null;
   identityContent?: ReactNode;
+  targetSummaries?: Record<number, ActionTargetSummary>;
   onSubmit: (payload: SubmitActionPayload) => void;
   children?: ReactNode;
 }
@@ -50,10 +60,24 @@ function availableWitchActions(request: PendingAction): WitchActionType[] {
   return request.available_actions ?? ["WITCH_SAVE", "WITCH_POISON", "PASS"];
 }
 
+function resolveTargetSummary(
+  seatId: number,
+  targetSummaries: Record<number, ActionTargetSummary> | undefined,
+): ActionTargetSummary {
+  return targetSummaries?.[seatId] ?? {
+    seatId,
+    label: formatSeat(seatId),
+    roleLabel: uiCopy.playerList.hiddenRole,
+    stateLabel: uiCopy.playerList.alive,
+    isAlive: true,
+  };
+}
+
 export function ActionPanel({
   request,
   nightActionFeedback,
   identityContent,
+  targetSummaries,
   onSubmit,
   children,
 }: ActionPanelProps) {
@@ -256,6 +280,42 @@ export function ActionPanel({
     </div>
   ) : null;
 
+  const renderTargetButton = (target: number, tone: "neutral" | "danger") => {
+    const summary = resolveTargetSummary(target, targetSummaries);
+    const targetClasses = [
+      "target-button",
+      "target-card",
+      target === selectedTarget ? "is-selected" : "",
+      tone === "danger" ? "danger" : "",
+      summary.isAlive ? "is-alive" : "is-dead",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      <button
+        key={target}
+        type="button"
+        data-seat={target}
+        className={targetClasses}
+        aria-label={uiCopy.actionPanel.formatTargetAria(
+          summary.label,
+          summary.roleLabel,
+          summary.stateLabel,
+        )}
+        aria-pressed={target === selectedTarget}
+        onClick={() => setSelectedTarget(target)}
+      >
+        <span className="target-card__seat" aria-hidden="true">{summary.seatId}</span>
+        <span className="target-card__body">
+          <strong>{summary.label}</strong>
+          <span>{summary.roleLabel}</span>
+        </span>
+        <span className="target-card__state">{summary.stateLabel}</span>
+      </button>
+    );
+  };
+
   return (
     <section className={panelClasses} aria-labelledby="action-panel-title">
       <header className="panel-header">
@@ -285,9 +345,12 @@ export function ActionPanel({
 
       {!isPanelHidden ? (
         <div id="action-panel-body" className="action-shell">
-          <div className="action-status-bar">
-            <span className="action-status-label">{uiCopy.actionPanel.currentLabel}</span>
-            <strong>{copy.title}</strong>
+          <div className="action-status-card">
+            <span className="action-status-label">
+              {request ? uiCopy.actionPanel.activeLabel : uiCopy.actionPanel.idleLabel}
+            </span>
+            <strong>{copy.heading}</strong>
+            <p>{copy.instruction}</p>
           </div>
 
           {identityContent ? (
@@ -305,8 +368,6 @@ export function ActionPanel({
 
           {!request && !hasSupplementalContent ? (
             <div className="action-idle">
-              <strong>{copy.heading}</strong>
-              <p>{copy.instruction}</p>
               <div className="idle-pulse" aria-hidden="true">
                 <span />
                 <span />
@@ -319,11 +380,12 @@ export function ActionPanel({
 
         {request ? (
           <>
-            <p className="action-prompt">{copy.instruction}</p>
-            <p className="action-rule">{request.prompt}</p>
-            {actionRuleHint[request.action_type] ? (
-              <p className="action-rule">{actionRuleHint[request.action_type]}</p>
-            ) : null}
+            <div className="action-rule-stack">
+              <p className="action-rule">{request.prompt}</p>
+              {actionRuleHint[request.action_type] ? (
+                <p className="action-rule">{actionRuleHint[request.action_type]}</p>
+              ) : null}
+            </div>
 
             {request.action_type === "SPEAK" ? (
               <label className="speech-form">
@@ -401,19 +463,8 @@ export function ActionPanel({
             ) : null}
 
             {request.action_type === "WITCH_ACTION" && selectedWitchAction === "WITCH_POISON" ? (
-              <div className="target-grid" role="group" aria-label={uiCopy.actionPanel.poisonTargetAria}>
-                {request.allowed_targets.map((target) => (
-                  <button
-                    key={target}
-                    type="button"
-                    data-seat={target}
-                    className={target === selectedTarget ? "target-button is-selected danger" : "target-button danger"}
-                    aria-pressed={target === selectedTarget}
-                    onClick={() => setSelectedTarget(target)}
-                  >
-                    {target}号
-                  </button>
-                ))}
+              <div className="target-grid target-grid--cards" role="group" aria-label={uiCopy.actionPanel.poisonTargetAria}>
+                {request.allowed_targets.map((target) => renderTargetButton(target, "danger"))}
               </div>
             ) : null}
 
@@ -431,22 +482,8 @@ export function ActionPanel({
             ) : null}
 
             {isTargetedAction(request.action_type) ? (
-              <div className="target-grid" role="group" aria-label={uiCopy.actionPanel.allowedTargetAria}>
-                {request.allowed_targets.map((target) => (
-                  <button
-                    key={target}
-                    type="button"
-                    data-seat={target}
-                    className={
-                      (target === selectedTarget ? "target-button is-selected" : "target-button")
-                      + (copy.tone === "danger" ? " danger" : "")
-                    }
-                    aria-pressed={target === selectedTarget}
-                    onClick={() => setSelectedTarget(target)}
-                  >
-                    {target}号
-                  </button>
-                ))}
+              <div className="target-grid target-grid--cards" role="group" aria-label={uiCopy.actionPanel.allowedTargetAria}>
+                {request.allowed_targets.map((target) => renderTargetButton(target, copy.tone))}
               </div>
             ) : null}
 

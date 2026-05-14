@@ -744,7 +744,7 @@ describe("App", () => {
       expect(within(view.container).getByText("请选择投票目标")).toBeInTheDocument();
     });
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "4号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /4号玩家/ }));
     fireEvent.click(
       within(view.container).getByRole("button", {
         name: submitActionCopy.VOTE.submitLabel,
@@ -795,7 +795,7 @@ describe("App", () => {
       expect(within(view.container).getByText("请选择开枪目标")).toBeInTheDocument();
     });
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /5号玩家/ }));
     // HUNTER_SHOOT requires two-step confirm.
     fireEvent.click(
       within(view.container).getByRole("button", {

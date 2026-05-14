@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
-import { ActionPanel } from "./components/ActionPanel";
+import { ActionPanel, type ActionTargetSummary } from "./components/ActionPanel";
 import { ChatHistory } from "./components/ChatHistory";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PlayerList } from "./components/PlayerList";
@@ -84,6 +84,27 @@ export function App() {
   } = gameState;
   const humanPlayer = players.find((player) => player.isHuman) ?? null;
   const humanRoleTip = humanPlayer?.roleCode ? roleQuickTips[humanPlayer.roleCode] : undefined;
+  const targetSummaries = useMemo<Record<number, ActionTargetSummary>>(() => (
+    players.reduce<Record<number, ActionTargetSummary>>((summaries, player) => {
+      const stateLabel = player.isAlive
+        ? player.isThinking
+          ? uiCopy.playerList.thinking
+          : uiCopy.playerList.alive
+        : uiCopy.playerList.dead;
+      const roleLabel = player.isHuman
+        ? `${uiCopy.playerList.humanPrefix} · ${player.roleLabel ?? identityStateCopy.unknownRole}`
+        : player.roleLabel ?? uiCopy.playerList.hiddenRole;
+
+      summaries[player.seatId] = {
+        seatId: player.seatId,
+        label: formatSeat(player.seatId),
+        roleLabel,
+        stateLabel,
+        isAlive: player.isAlive,
+      };
+      return summaries;
+    }, {})
+  ), [players]);
   const latestOutcome = findLatestOutcome(entries);
   const spotlightText = pendingAction
     ? uiCopy.app.spotlight.pending
@@ -390,6 +411,7 @@ export function App() {
                 <RoleGuide roleCode={humanPlayer.roleCode} />
               </div>
             ) : null}
+            targetSummaries={targetSummaries}
             onSubmit={handleSubmitAction}
           >
             {settlementReview ? (

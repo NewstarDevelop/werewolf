@@ -126,7 +126,7 @@ describe("ActionPanel", () => {
       />,
     );
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "4号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /4号玩家/ }));
     fireEvent.click(
       within(view.container).getByRole("button", {
         name: submitActionCopy.VOTE.submitLabel,
@@ -137,6 +137,44 @@ describe("ActionPanel", () => {
       action_type: "VOTE",
       target: 4,
     });
+  });
+
+  it("renders player context in target cards", () => {
+    const view = render(
+      <ActionPanel
+        request={{
+          request_id: "input-target-context",
+          action_type: "SEER_CHECK",
+          prompt: "请选择查验目标",
+          allowed_targets: [2, 4],
+        }}
+        targetSummaries={{
+          2: {
+            seatId: 2,
+            label: "2号玩家",
+            roleLabel: "身份未知",
+            stateLabel: "存活",
+            isAlive: true,
+          },
+          4: {
+            seatId: 4,
+            label: "4号玩家",
+            roleLabel: "女巫",
+            stateLabel: "已出局",
+            isAlive: false,
+          },
+        }}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const target = within(view.container).getByRole("button", {
+      name: "4号玩家，女巫，已出局",
+    });
+    expect(target).toHaveTextContent("4");
+    expect(target).toHaveTextContent("4号玩家");
+    expect(target).toHaveTextContent("女巫");
+    expect(target).toHaveTextContent("已出局");
   });
 
   it("submits hunter shoot payload with selected seat", () => {
@@ -153,7 +191,7 @@ describe("ActionPanel", () => {
       />,
     );
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /5号玩家/ }));
     // HUNTER_SHOOT is destructive → first click arms, second click fires.
     const submit = within(view.container).getByRole("button", {
       name: submitActionCopy.HUNTER_SHOOT.submitLabel,
@@ -220,7 +258,7 @@ describe("ActionPanel", () => {
     expect(onSubmit).toHaveBeenLastCalledWith({ action_type: "WITCH_SAVE" });
 
     fireEvent.click(within(view.container).getByRole("button", { name: "毒人" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /5号玩家/ }));
     fireEvent.click(
       within(view.container).getByRole("button", {
         name: submitActionCopy.WITCH_POISON.submitLabel,
@@ -264,7 +302,7 @@ describe("ActionPanel", () => {
 
     expect(within(view.container).queryByRole("button", { name: "救人" })).toBeNull();
     fireEvent.click(within(view.container).getByRole("button", { name: "毒人" }));
-    fireEvent.click(within(view.container).getByRole("button", { name: "5号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /5号玩家/ }));
     fireEvent.click(
       within(view.container).getByRole("button", {
         name: submitActionCopy.WITCH_POISON.submitLabel,
@@ -296,7 +334,7 @@ describe("ActionPanel", () => {
       />,
     );
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "6号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /6号玩家/ }));
 
     const submit = within(view.container).getByRole("button", {
       name: submitActionCopy.WOLF_KILL.submitLabel,
@@ -329,7 +367,7 @@ describe("ActionPanel", () => {
       />,
     );
 
-    fireEvent.click(within(view.container).getByRole("button", { name: "6号" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /6号玩家/ }));
     fireEvent.click(
       within(view.container).getByRole("button", {
         name: submitActionCopy.WOLF_KILL.submitLabel,
@@ -360,7 +398,7 @@ describe("ActionPanel", () => {
     );
 
     fireEvent.keyDown(document.body, { key: "4" });
-    const button = within(view.container).getByRole("button", { name: "4号" });
+    const button = within(view.container).getByRole("button", { name: /4号玩家/ });
     expect(button.getAttribute("aria-pressed")).toBe("true");
   });
 });
