@@ -374,7 +374,7 @@ export function App() {
                 : null
             }
             identityContent={humanPlayer ? (
-              <span className="identity-badge">
+              <div className="identity-badge">
                 <span className="identity-badge__seat">
                   {formatSeat(humanPlayer.seatId)}
                 </span>
@@ -388,7 +388,7 @@ export function App() {
                   <span className="identity-badge__tip">{humanRoleTip}</span>
                 ) : null}
                 <RoleGuide roleCode={humanPlayer.roleCode} />
-              </span>
+              </div>
             ) : null}
             onSubmit={handleSubmitAction}
           >

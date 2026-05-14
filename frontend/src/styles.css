@@ -279,10 +279,6 @@ h1 {
   text-align: center;
 }
 
-.identity-badge .role-guide-drawer {
-  margin-left: var(--space-2);
-}
-
 /* --------------------------------------------------------------------------
    Battle signal — 游戏状态提示（无卡片）
    -------------------------------------------------------------------------- */
@@ -1195,19 +1191,38 @@ h1 {
 }
 
 .action-identity {
-  display: flex;
-  justify-content: flex-start;
+  display: block;
   margin: 0 0 var(--space-4);
 }
 
 .action-identity .identity-badge {
-  max-width: 100%;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 100%;
+  max-width: none;
+  align-items: baseline;
+  justify-content: stretch;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
 }
 
+.action-identity .identity-badge__role,
 .action-identity .identity-badge__tip {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.action-identity .identity-badge__tip {
+  grid-column: 1 / -1;
   text-align: left;
+}
+
+.action-identity .role-guide {
+  grid-column: 1 / -1;
+  flex-basis: 100%;
+  width: 100%;
+  min-width: 0;
 }
 
 .action-night-feedback {
@@ -1491,21 +1506,56 @@ h1 {
    Role guide — 可折叠身份说明
    -------------------------------------------------------------------------- */
 
-.role-guide-drawer details {
-  cursor: pointer;
+.role-guide {
+  color: var(--color-ink-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
 }
 
-.role-guide-drawer summary {
-  font-size: var(--font-size-xs);
-  color: var(--color-ink-tertiary);
+.role-guide__summary {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: var(--space-1);
+  list-style: none;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
   user-select: none;
 }
 
-.role-guide-drawer .role-guide-body {
-  font-size: var(--font-size-xs);
+.role-guide__summary::marker {
+  content: "";
+}
+
+.role-guide__summary::-webkit-details-marker {
+  display: none;
+}
+
+.role-guide__summary:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+.role-guide__label {
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.role-guide__chevron {
+  color: var(--color-ink-tertiary);
+}
+
+.role-guide__one-liner {
+  margin: var(--space-2) 0 0;
   color: var(--color-ink-secondary);
-  line-height: var(--line-height-relaxed);
-  padding: var(--space-2) 0 0;
+}
+
+.role-guide__abilities {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+  color: var(--color-ink-tertiary);
 }
 
 /* --------------------------------------------------------------------------
