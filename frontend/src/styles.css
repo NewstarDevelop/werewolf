@@ -75,8 +75,8 @@ body::before {
     "header"
     "signal"
     "desk"
-    "action"
-    "log";
+    "log"
+    "action";
   align-items: center;
   gap: var(--space-6);
 }
@@ -1879,8 +1879,8 @@ h1 {
       "header"
       "signal"
       "desk"
-      "action"
-      "log";
+      "log"
+      "action";
     align-items: center;
     gap: var(--space-6);
   }
