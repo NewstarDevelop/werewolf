@@ -378,6 +378,7 @@ export function App() {
             className={`battle-signal is-${battleSignal.tone}`}
             aria-label={latestOutcome ? uiCopy.app.terminalAria : uiCopy.app.battleAria}
           >
+            <span className="battle-signal__eyebrow">{uiCopy.app.battle.label}</span>
             <strong>{battleSignal.title}</strong>
             <span>{battleSignal.detail}</span>
           </section>

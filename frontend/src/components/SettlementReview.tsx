@@ -76,6 +76,7 @@ function VoteDetails({ vote }: { vote: VoteResultView }) {
                   className="settlement-final-vote__sources"
                   aria-label={uiCopy.voteBoard.formatSourceAria(targetSeat)}
                 >
+                  <span className="settlement-final-vote__sources-label">{uiCopy.voteBoard.sourcesLabel}</span>
                   {voters.map((voterSeat) => (
                     <span key={voterSeat}>{formatSeat(voterSeat)}</span>
                   ))}

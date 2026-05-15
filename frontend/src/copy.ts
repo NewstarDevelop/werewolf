@@ -381,6 +381,7 @@ export const uiCopy = {
       reconnecting: "连接已断，正在重连",
     },
     battle: {
+      label: "当前局势",
       terminalDetail: "身份已全部公开。",
       pendingTitle: "轮到你操作",
       pendingDetail: "请在下方完成当前操作。",
@@ -439,6 +440,7 @@ export const uiCopy = {
     formatStats: (visible: number, total: number) => `${visible}/${total} 条`,
   },
   playerList: {
+    title: "玩家席位",
     deskAria: "桌面座位",
     listAria: "玩家状态列表",
     alive: "存活",
@@ -459,6 +461,7 @@ export const uiCopy = {
   voteBoard: {
     aria: "投票票型",
     title: "投票结果",
+    sourcesLabel: "来源",
     abstain: "弃票",
     abstainAria: "弃票玩家",
     formatCount: (count: number) => `${count}票`,

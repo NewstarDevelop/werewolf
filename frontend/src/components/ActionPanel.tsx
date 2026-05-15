@@ -268,6 +268,10 @@ export function ActionPanel({
   const panelClasses = [
     "action-panel",
     request ? "is-active" : "is-idle",
+    request ? `is-${request.action_type.toLowerCase().replace(/_/g, "-")}` : "",
+    copy.tone === "danger" ? "is-danger-action" : "",
+    confirmingDanger ? "is-confirming-danger" : "",
+    hasNightActionFeedback ? "has-night-feedback" : "",
     hasSupplementalContent ? "has-supplemental" : "",
     isPanelHidden ? "is-collapsed" : "",
   ]

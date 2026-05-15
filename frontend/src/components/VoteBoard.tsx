@@ -73,6 +73,7 @@ export function VoteBoard({ result }: VoteBoardProps) {
                 <span className="vote-meter__fill" style={{ width }} />
               </div>
               <div className="vote-voters" aria-label={uiCopy.voteBoard.formatSourceAria(row.targetSeat)}>
+                <span className="vote-voters__label">{uiCopy.voteBoard.sourcesLabel}</span>
                 {row.voters.map((voterSeat) => (
                   <span key={voterSeat}>{formatSeat(voterSeat)}</span>
                 ))}
@@ -88,6 +89,7 @@ export function VoteBoard({ result }: VoteBoardProps) {
               <span>{formatVoteCount(result.abstentions.length)}</span>
             </div>
             <div className="vote-voters" aria-label={uiCopy.voteBoard.abstainAria}>
+              <span className="vote-voters__label">{uiCopy.voteBoard.sourcesLabel}</span>
               {result.abstentions.map((seatId) => (
                 <span key={seatId}>{formatSeat(seatId)}</span>
               ))}

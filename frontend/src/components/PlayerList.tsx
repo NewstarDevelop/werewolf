@@ -19,6 +19,12 @@ export function PlayerList({ players }: PlayerListProps) {
 
   return (
     <section className="desk" aria-label={uiCopy.playerList.deskAria}>
+      <header className="desk-header">
+        <h2>{uiCopy.playerList.title}</h2>
+        <p className="desk-stats" aria-live="polite">
+          {uiCopy.playerList.formatStats(aliveCount, thinkingCount)}
+        </p>
+      </header>
       <ol className="player-ring" aria-label={uiCopy.playerList.listAria}>
         {players.map((player) => {
           const statusText = player.isAlive
@@ -26,6 +32,9 @@ export function PlayerList({ players }: PlayerListProps) {
               ? uiCopy.playerList.thinking
               : uiCopy.playerList.alive
             : uiCopy.playerList.dead;
+          const roleText = player.isHuman
+            ? `${uiCopy.playerList.humanPrefix} · ${player.roleLabel ?? identityStateCopy.unknownRole}`
+            : player.roleLabel ?? uiCopy.playerList.hiddenRole;
 
           return (
             <li
@@ -36,6 +45,7 @@ export function PlayerList({ players }: PlayerListProps) {
                 player.isHuman ? "is-human" : "",
                 player.isAlive ? "is-alive" : "is-dead",
                 player.isThinking ? "is-thinking" : "",
+                player.roleLabel ? "has-known-role" : "has-hidden-role",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -44,9 +54,7 @@ export function PlayerList({ players }: PlayerListProps) {
               <div className="seat-chip">{player.seatId}</div>
               <span className="seat-name">{formatSeat(player.seatId)}</span>
               <span className="seat-role">
-                {player.isHuman
-                  ? `${uiCopy.playerList.humanPrefix} · ${player.roleLabel ?? identityStateCopy.unknownRole}`
-                  : player.roleLabel ?? uiCopy.playerList.hiddenRole}
+                {roleText}
               </span>
               <span className="seat-status" aria-label={uiCopy.playerList.formatSeatStatusAria(player.seatId)}>
                 {statusText}
@@ -55,9 +63,6 @@ export function PlayerList({ players }: PlayerListProps) {
           );
         })}
       </ol>
-      <p className="desk-stats" aria-live="polite">
-        {uiCopy.playerList.formatStats(aliveCount, thinkingCount)}
-      </p>
     </section>
   );
 }

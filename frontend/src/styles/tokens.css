@@ -12,10 +12,12 @@
      -------------------------------------------------------------------------- */
 
   /* Surface — 背景层级 */
-  --color-surface-page: oklch(97% 0.008 85);        /* 页面底 */
-  --color-surface-raised: oklch(95% 0.012 85);      /* 浮层 */
-  --color-surface-subtle: oklch(92% 0.014 85);      /* 弱对比区 */
-  --color-surface-sunken: oklch(89% 0.016 85);      /* 凹陷/输入框 */
+  --color-surface-page: oklch(97% 0.006 96);        /* 页面底 */
+  --color-surface-raised: oklch(96% 0.008 96);      /* 浮层 */
+  --color-surface-subtle: oklch(92% 0.01 100);      /* 弱对比区 */
+  --color-surface-sunken: oklch(88% 0.012 100);     /* 凹陷/输入框 */
+  --color-surface-table: oklch(91% 0.014 108);      /* 桌面中区 */
+  --color-surface-table-edge: oklch(74% 0.028 96 / 0.42);
 
   /* Text — 字色层级 */
   --color-ink-primary: oklch(22% 0.02 250);         /* 主文本 */
@@ -54,8 +56,8 @@
 
   /* Decorative — 纸纹底纹 (subtle) */
   --paper-texture:
-    radial-gradient(ellipse at 20% 20%, oklch(86% 0.02 75 / 0.18), transparent 45%),
-    radial-gradient(ellipse at 80% 8%, oklch(22% 0.02 250 / 0.04), transparent 40%);
+    linear-gradient(135deg, oklch(22% 0.02 250 / 0.025) 0 1px, transparent 1px 12px),
+    linear-gradient(0deg, transparent, oklch(100% 0 0 / 0.26));
 
   /* --------------------------------------------------------------------------
      Spacing — 4pt base scale
@@ -179,10 +181,12 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --color-surface-page: #000;
-    --color-surface-raised: oklch(12% 0 0);
-    --color-surface-subtle: oklch(18% 0 0);
-    --color-surface-sunken: oklch(7% 0 0);
+    --color-surface-page: oklch(8% 0.006 80);
+    --color-surface-raised: oklch(13% 0.006 80);
+    --color-surface-subtle: oklch(18% 0.008 82);
+    --color-surface-sunken: oklch(7% 0.004 80);
+    --color-surface-table: oklch(16% 0.01 92);
+    --color-surface-table-edge: oklch(70% 0.018 82 / 0.18);
 
     --color-ink-primary: oklch(92% 0.014 82);
     --color-ink-secondary: oklch(78% 0.016 78);
@@ -212,17 +216,20 @@
     --shadow-lg: 0 18px 40px oklch(0% 0 0 / 0.42);
     --shadow-focus: 0 0 0 3px var(--color-border-focus);
 
-    --paper-texture: none;
+    --paper-texture:
+      linear-gradient(135deg, oklch(92% 0.014 82 / 0.035) 0 1px, transparent 1px 14px);
   }
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-surface-page: #000;
-  --color-surface-raised: oklch(12% 0 0);
-  --color-surface-subtle: oklch(18% 0 0);
-  --color-surface-sunken: oklch(7% 0 0);
+  --color-surface-page: oklch(8% 0.006 80);
+  --color-surface-raised: oklch(13% 0.006 80);
+  --color-surface-subtle: oklch(18% 0.008 82);
+  --color-surface-sunken: oklch(7% 0.004 80);
+  --color-surface-table: oklch(16% 0.01 92);
+  --color-surface-table-edge: oklch(70% 0.018 82 / 0.18);
 
   --color-ink-primary: oklch(92% 0.014 82);
   --color-ink-secondary: oklch(78% 0.016 78);
@@ -252,17 +259,18 @@
   --shadow-lg: 0 18px 40px oklch(0% 0 0 / 0.42);
   --shadow-focus: 0 0 0 3px var(--color-border-focus);
 
-  --paper-texture: none;
+  --paper-texture:
+    linear-gradient(135deg, oklch(92% 0.014 82 / 0.035) 0 1px, transparent 1px 14px);
 }
 
 /* --------------------------------------------------------------------------
    Component-specific tokens — 具体组件尺寸，不含硬编码
    -------------------------------------------------------------------------- */
 :root {
-  --seat-size: 3.5rem;              /* 56px — 座位筹码 */
+  --seat-size: 3.75rem;             /* 60px — 座位筹码 */
   --seat-size-compact: 3rem;        /* 48px */
   --seat-size-mobile: 2.5rem;       /* 40px */
-  --seat-card-width: 5.5rem;        /* 88px — 座位文字稳定宽度 */
+  --seat-card-width: 6.75rem;       /* 108px — 座位文字稳定宽度 */
   --seat-card-width-compact: 4.75rem;
   --seat-card-width-mobile: 4rem;
   --arc-offset-1: 0.75rem;          /* 12px — 弧线第一阶 */
